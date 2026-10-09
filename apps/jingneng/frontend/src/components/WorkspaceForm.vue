@@ -24,10 +24,10 @@ defineProps({ w:Object })
         </template>
         <template v-else-if="w.modal==='task'"><label>任务标题 <span class="required">*</span><input v-model="w.form.title" required maxlength="140" placeholder="需要对方处理什么"></label><label>处理人<select v-model="w.form.assigned_to"><option :value="w.selected.responsible">{{ w.userName(w.selected.responsible) }}</option><option v-if="w.selected.collaborator" :value="w.selected.collaborator">{{ w.userName(w.selected.collaborator) }}</option></select></label><label>任务说明<textarea v-model="w.form.description" rows="5" maxlength="4000" placeholder="问题背景与需要的回复"></textarea></label></template>
         <template v-else-if="['reply','return','hold'].includes(w.modal)"><p class="form-context">{{ w.form.task_title }}</p><label>{{ w.modal==='reply'?'处理回复':'原因说明' }} <span class="required">*</span><textarea v-model="w.form.reply" rows="6" required maxlength="4000"></textarea></label></template>
-        <template v-else-if="w.modal==='archive'"><p class="form-context">{{ w.selected.title }}</p><p>{{ w.isOpen?'归档后保留资料和历史，停止编辑与协作；可随时恢复。未完成的任务或 AI 运行需先处理。':'恢复后可继续编辑、上传资料和处理任务。' }}</p></template>
+        <template v-else-if="w.modal==='archive'"><p class="form-context">{{ w.selected.title }}</p><p>{{ w.form.status==='已归档'?'归档后保留资料和历史，停止编辑与协作；可随时恢复。未完成的任务或 AI 运行需先处理。':'恢复后可继续编辑、上传资料和处理任务。' }}</p></template>
       </div>
       <footer v-if="w.discardPrompt" class="modal-footer discard-confirm" role="alert"><span>放弃尚未保存的修改？</span><UiButton @click="w.discardPrompt=false">继续编辑</UiButton><UiButton variant="danger" @click="w.closeModal(true)">放弃修改</UiButton></footer>
-      <footer v-else class="modal-footer"><span class="muted">{{ w.busy?'正在保存…':w.formDirty?'尚未保存':'' }}</span><UiButton :disabled="w.busy" @click="w.closeModal()">取消</UiButton><UiButton type="submit" variant="primary" :loading="w.busy" :disabled="!!w.conflict">{{ w.modal==='create'?'创建询价':w.modal==='upload'?'保存资料':w.modal==='task'?'分派任务':w.modal==='reply'?'提交回复':w.modal==='archive'?(w.isOpen?'确认归档':'恢复协作'):'保存' }}</UiButton></footer>
+      <footer v-else class="modal-footer"><span class="muted">{{ w.busy?'正在保存…':w.formDirty?'尚未保存':'' }}</span><UiButton :disabled="w.busy" @click="w.closeModal()">取消</UiButton><UiButton type="submit" variant="primary" :loading="w.busy" :disabled="!!w.conflict">{{ w.modal==='create'?'创建询价':w.modal==='upload'?'保存资料':w.modal==='task'?'分派任务':w.modal==='reply'?'提交回复':w.modal==='archive'?(w.form.status==='已归档'?'确认归档':'恢复协作'):'保存' }}</UiButton></footer>
     </form>
   </dialog>
 </template>

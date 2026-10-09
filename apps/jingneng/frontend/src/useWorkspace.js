@@ -22,7 +22,7 @@ export function useWorkspace() {
   const department=id=>boot.value?.departments.find(d=>d.name===id)?.department_name || id
   const formDirty=computed(()=>!!modal.value && (JSON.stringify(form)!==originalForm.value || !!file.value))
   const storageKey=()=>`jn.ui.v1.${user.value}`
-  const modalTitle=computed(()=>({create:'新建询价',edit:'编辑询价',upload:form.document?'上传新版本':'上传资料',task:'分派任务',reply:'回复任务',return:'退回补充',hold:'挂起任务',archive:isOpen.value?'归档询价':'恢复协作'}[modal.value]||''))
+  const modalTitle=computed(()=>({create:'新建询价',edit:'编辑询价',upload:form.document?'上传新版本':'上传资料',task:'分派任务',reply:'回复任务',return:'退回补充',hold:'挂起任务',archive:form.status==='已归档'?'归档询价':'恢复协作'}[modal.value]||''))
   const conflictRows=computed(()=>conflict.value && form.data ? changeRows(form.data,conflict.value) : [])
   const remaining=computed(()=>selected.value?.tasks.filter(t=>t.status!=='已完成').length||0)
   function notify(message) { notice.value=message; clearTimeout(noticeTimer); noticeTimer=setTimeout(()=>notice.value='',5500) }
@@ -102,7 +102,7 @@ export function useWorkspace() {
   function chooseFile(value){const chosen=value?.target?.files?.[0]||value;if(!chosen)return;if(chosen.size>10*1024*1024||!chosen.size){formError.value='文件不能为空且单个不超过 10 MB。';file.value=null;return}file.value=chosen;formError.value='';requestKey.value=key();if(!form.title)form.title=chosen.name}
   function taskModal(){openModal('task',{title:'',description:'',assigned_to:selected.value.collaborator||selected.value.responsible,expected_revision:selected.value.revision})}
   function actionModal(task,action){openModal(action,{task_name:task.name,task_title:task.title,reply:'',expected_revision:selected.value.revision})}
-  async function inspectConflict(){try{conflict.value=await api('detail',{name:selected.value.name})}catch(e){formError.value=e.message}}
+  async function inspectConflict(){try{const latest=await api('detail',{name:selected.value.name});conflict.value=latest.revision!==form.expected_revision?latest:null}catch(e){formError.value=e.message}}
   async function retryConflict(){form.expected_revision=conflict.value.revision;selected.value=conflict.value;conflict.value=null;requestKey.value=key();await submit()}
   async function submit(){
     if(busy.value)return;busy.value=true;formError.value='';const type=modal.value;const name=selected.value?.name;let result
@@ -115,7 +115,7 @@ export function useWorkspace() {
         const body=new FormData();for(const[k,v]of Object.entries({...common,document:form.document,title:form.title,change_note:form.change_note}))body.append(k,v??'');body.append('file',file.value)
         result=await uploadFile(body,value=>uploadProgress.value=value)
       }else if(type==='task')result=await api('create_task',{...common,title:form.title,description:form.description,assigned_to:form.assigned_to},true)
-      else if(type==='archive')result=await api('change_status',{...common,status:isOpen.value?'已归档':'协作中'},true)
+      else if(type==='archive')result=await api('change_status',{...common,status:form.status},true)
       else result=await api('task_action',{...common,task_name:form.task_name,action:type,reply:form.reply},true)
     }catch(e){formError.value=e.message;if(e.status===409)await inspectConflict();return}finally{busy.value=false}
     closeModal(true);notify(type==='upload'?(result.duplicate?'文件内容未变化，继续保留当前版本。':`资料已保存为第 ${result.version} 版。`):type==='reply'?'回复已提交，等待负责人确认。':type==='task'?'任务已分派。':'已保存。')
