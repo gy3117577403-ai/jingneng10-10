@@ -24,8 +24,9 @@ class Client:
         self.csrf = ''
         self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
 
-    def request(self, path, method='GET', payload=None, content_type='application/json'):
+    def request(self, path, method='GET', payload=None, content_type='application/json', extra_headers=None):
         headers = {'Accept': 'application/json', 'Content-Type': content_type}
+        headers.update(extra_headers or {})
         if self.csrf:
             headers['X-Frappe-CSRF-Token'] = self.csrf
         body = json.dumps(payload).encode() if isinstance(payload, dict) else payload
@@ -49,6 +50,29 @@ class Client:
         if status != 200 or not match:
             raise RuntimeError('Authenticated foundation page or CSRF token is unavailable.')
         self.csrf = html.unescape(match.group(1))
+
+
+def realtime_connection(client, site, origin):
+    """Authenticate the real Socket.IO namespace via its Engine.IO HTTP transport."""
+    path = '/socket.io/?EIO=4&transport=polling'
+    headers = {'Origin': origin}
+    status, packet = client.request(path, extra_headers=headers)
+    if status == 403:
+        return 'Rejected: HTTP 403'
+    if status != 200 or not packet.startswith(b'0'):
+        raise RuntimeError('Realtime transport handshake failed.')
+    connection = json.loads(packet[1:])['sid']
+    path += '&sid=' + urllib.parse.quote(connection, safe='')
+    try:
+        status, _ = client.request(path, 'POST', ('40/' + site + ',').encode(), 'text/plain', headers)
+        if status != 200:
+            raise RuntimeError('Realtime namespace request failed.')
+        status, packet = client.request(path, extra_headers=headers)
+        if status != 200:
+            raise RuntimeError('Realtime namespace response failed.')
+        return packet.decode()
+    finally:
+        client.request(path, 'POST', b'1', 'text/plain', headers)
 
 
 def resource(doctype, name=''):
@@ -87,6 +111,12 @@ def main():
     case_path = resource('JN Demo Case', 'DEMO-CT-001')
     status, _ = sales.request(case_path, 'PUT', {'description': 'This forbidden write must not be saved.'})
     check(status == 403, 'Read-only demo user cannot modify records through REST', results)
+    packet = realtime_connection(sales, env['SITE_NAME'], base)
+    check(packet.startswith('40/' + env['SITE_NAME'] + ','),
+          'Authenticated realtime namespace connects through the local reverse proxy', results)
+    packet = realtime_connection(sales, env['SITE_NAME'], 'http://untrusted.example.invalid')
+    check(packet == 'Rejected: HTTP 403',
+          'Realtime proxy rejects a mismatched browser Origin', results)
 
     tech = Client(base)
     tech.login('tech.demo@example.invalid', env['DEMO_PASSWORD'])

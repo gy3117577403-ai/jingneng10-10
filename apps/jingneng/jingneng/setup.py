@@ -16,10 +16,17 @@ def ensure_role():
 
 
 def seed_demo():
-    ensure_role()
     password = os.environ.get('DEMO_PASSWORD', '')
     if len(password) < 16:
         raise ValueError('Missing generated DEMO_PASSWORD; no default password is installed.')
+    # Set the site's clock before inserting demo records on a fresh site.
+    settings = frappe.get_single('System Settings')
+    for field, value in (('language', 'zh'), ('time_zone', 'Asia/Shanghai'), ('setup_complete', 1)):
+        if settings.meta.has_field(field):
+            settings.set(field, value)
+    settings.save()
+    frappe.clear_cache()
+    ensure_role()
     for code, label in DEPARTMENTS:
         if not frappe.db.exists('JN Department', code):
             frappe.get_doc({'doctype': 'JN Department', 'code': code,
@@ -42,10 +49,9 @@ def seed_demo():
                             'enabled': 1, 'user_type': 'System User', 'language': 'zh',
                             'send_welcome_email': 0, 'new_password': password,
                             'roles': [{'role': 'JN Demo User'}]}).insert()
-    settings = frappe.get_single('System Settings')
-    for field, value in (('language', 'zh'), ('time_zone', 'Asia/Shanghai'), ('setup_complete', 1)):
-        if settings.meta.has_field(field):
-            settings.set(field, value)
-    settings.save()
+    website = frappe.get_single('Website Settings')
+    if not website.favicon:
+        website.favicon = '/assets/jingneng/images/favicon.svg'
+        website.save()
     frappe.db.commit()
     print('Demo initialization complete; existing records and passwords preserved.')

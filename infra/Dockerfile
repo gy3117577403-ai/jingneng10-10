@@ -25,6 +25,8 @@ LABEL org.opencontainers.image.description="Jingneng local demonstration foundat
 COPY --from=builder --chown=frappe:0 /home/frappe/frappe-bench /home/frappe/frappe-bench
 COPY --chown=frappe:0 infra/runtime /opt/jingneng
 COPY --chmod=755 infra/start.sh /usr/local/bin/start.sh
+USER root
+RUN python /opt/jingneng/patch_nginx_template.py
 USER frappe
 WORKDIR /home/frappe/frappe-bench
 ENTRYPOINT ["python", "/opt/jingneng/entrypoint.py"]
