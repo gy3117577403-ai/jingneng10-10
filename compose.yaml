@@ -1,0 +1,136 @@
+name: ${COMPOSE_PROJECT_NAME:-jingneng-dev}
+
+x-app: &app
+  image: jingneng/foundation:jn-0002
+  build:
+    context: .
+    dockerfile: infra/Dockerfile
+  platform: linux/amd64
+  restart: unless-stopped
+  environment: &app-env
+    TZ: Asia/Shanghai
+    SITE_NAME: ${SITE_NAME:-jingneng.localhost}
+  volumes:
+    - sites:/home/frappe/frappe-bench/sites
+    - logs:/home/frappe/frappe-bench/logs
+
+x-initialized: &initialized
+  init-site:
+    condition: service_completed_successfully
+
+services:
+  db:
+    image: mariadb:11.8.9@sha256:6422478cb8e159f080fb1d8ccf65101e26fe51385787fde7d16c3b165a331f15
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Run python scripts/dev.py init-env}
+      TZ: Asia/Shanghai
+    command: [--character-set-server=utf8mb4, --collation-server=utf8mb4_unicode_ci, --skip-character-set-client-handshake]
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      interval: 5s
+      timeout: 5s
+      start_period: 30s
+      retries: 30
+
+  redis-cache:
+    image: redis:7.4.11-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+    restart: unless-stopped
+    command: [redis-server, --save, '', --appendonly, 'no']
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis-queue:
+    image: redis:7.4.11-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+    restart: unless-stopped
+    command: [redis-server, --appendonly, 'yes', --appendfsync, everysec]
+    volumes:
+      - queue-data:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  init-site:
+    <<: *app
+    restart: 'no'
+    command: [python, /opt/jingneng/initialize.py]
+    environment:
+      <<: *app-env
+      HTTP_PORT: ${HTTP_PORT:-8088}
+      DB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Run python scripts/dev.py init-env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Run python scripts/dev.py init-env}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:?Run python scripts/dev.py init-env}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      redis-queue:
+        condition: service_healthy
+
+  backend:
+    <<: *app
+    command: [start.sh]
+    depends_on: *initialized
+    healthcheck:
+      test: [CMD, python, /opt/jingneng/healthcheck.py]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 20
+
+  websocket:
+    <<: *app
+    command: [node, /home/frappe/frappe-bench/apps/frappe/socketio.js]
+    depends_on: *initialized
+
+  worker:
+    <<: *app
+    command: [bench, worker, --queue, 'short,default,long']
+    depends_on: *initialized
+
+  scheduler:
+    <<: *app
+    command: [bench, schedule]
+    depends_on: *initialized
+
+  frontend:
+    <<: *app
+    command: [nginx-entrypoint.sh]
+    environment:
+      <<: *app-env
+      BACKEND: backend:8000
+      SOCKETIO: websocket:9000
+      FRAPPE_SITE_NAME_HEADER: ${SITE_NAME:-jingneng.localhost}
+      NGINX_LISTEN_PORT: '8080'
+      CLIENT_MAX_BODY_SIZE: 20m
+      UPSTREAM_REAL_IP_ADDRESS: 127.0.0.1
+      UPSTREAM_REAL_IP_HEADER: X-Forwarded-For
+      UPSTREAM_REAL_IP_RECURSIVE: 'off'
+      PROXY_READ_TIMEOUT: '120'
+    ports:
+      - '127.0.0.1:${HTTP_PORT:-8088}:8080'
+    depends_on:
+      backend:
+        condition: service_healthy
+      websocket:
+        condition: service_started
+
+volumes:
+  db-data:
+  sites:
+  logs:
+  queue-data:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${DOCKER_SUBNET:-10.250.10.0/24}

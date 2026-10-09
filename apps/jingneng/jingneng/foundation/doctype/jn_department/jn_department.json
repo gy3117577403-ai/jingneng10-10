@@ -1,0 +1,20 @@
+{
+  "doctype": "DocType",
+  "name": "JN Department",
+  "module": "Foundation",
+  "autoname": "field:code",
+  "engine": "InnoDB",
+  "title_field": "department_name",
+  "search_fields": "code,department_name",
+  "track_changes": 1,
+  "field_order": ["code", "department_name", "is_demo"],
+  "fields": [
+    {"fieldname": "code", "fieldtype": "Data", "label": "部门编码", "reqd": 1, "unique": 1, "in_list_view": 1},
+    {"fieldname": "department_name", "fieldtype": "Data", "label": "部门名称", "reqd": 1, "in_list_view": 1},
+    {"fieldname": "is_demo", "fieldtype": "Check", "label": "演示配置", "default": "1", "read_only": 1}
+  ],
+  "permissions": [
+    {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "export": 1},
+    {"role": "JN Demo User", "read": 1}
+  ]
+}

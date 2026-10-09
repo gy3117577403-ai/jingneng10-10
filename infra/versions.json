@@ -1,0 +1,11 @@
+{
+  "checked_on": "2026-10-09",
+  "platform": "linux/amd64",
+  "frappe": {"version": "16.51.0", "commit": "6b450a166e076dd842e4db7ea0843f62881e62ac"},
+  "frappe_docker_reference": "ca1826c21f7fa5c5b0ace69fd2ab297585154a52",
+  "build_image": "frappe/build@sha256:b3a1d4ac869b8f723c1ad1fc085f585b2caa3874b756a07b1f6112b7ac3ecafc",
+  "base_image": "frappe/base@sha256:22de66c37a2a8258924049ca4feda50b2c5a3d9c6c50e60de2c660ff9d8824a2",
+  "database_image": "mariadb:11.8.9@sha256:6422478cb8e159f080fb1d8ccf65101e26fe51385787fde7d16c3b165a331f15",
+  "redis_image": "redis:7.4.11-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499",
+  "note": "Base images and Frappe source are pinned. Upstream Python dependency ranges are not a complete reproducible lock; record installed versions and preserve the built image for transfer."
+}

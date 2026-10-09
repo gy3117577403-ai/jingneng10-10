@@ -56,6 +56,8 @@ test-results/
 /GitHub底座候选与选型建议.md
 /流程调研包_*/
 /.local/
+/output/playwright/
+/.playwright-cli/
 
 # Editor and OS state
 .idea/

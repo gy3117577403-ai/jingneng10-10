@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>京能协作 · 基础环境</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/jingneng/images/favicon.svg">
+  <link rel="stylesheet" href="/assets/jingneng/css/foundation.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="/foundation"><span class="brand-mark">京</span><span>京能协作<small>制造协作 · AI 辅助</small></span></a>
+    <div class="nav-label">项目工作台</div>
+    <a class="nav-item selected" href="/foundation"><span>◈</span> 基础环境</a>
+    <a class="nav-item" href="/app/jn-demo-case"><span>▤</span> 演示资料</a>
+    <a class="nav-item" href="/app/jn-department"><span>⊞</span> 部门目录</a>
+    <div class="sidebar-note"><span class="dot"></span> 本机演示环境<p>所有示例均为虚构资料。<br>未连接正式生产。</p></div>
+  </aside>
+  <main>
+    <header><div class="breadcrumb">项目建设 <span>/</span> 第一批交付</div><div class="account">{{ full_name }}<button id="logout" class="text-button">退出登录</button></div></header>
+    <section class="hero">
+      <div><div class="eyebrow">F0 · 运行环境与基础结构</div><h1>从一个可靠的起点开始。</h1><p>账号、资料和服务已连接到同一套应用。<br>在这里核对运行状态，为后续业务与 AI 能力提供基础。</p></div>
+      <div class="phase-badge"><span>当前阶段</span><strong>环境验收</strong><small>JN-0002</small></div>
+    </section>
+    <div id="notice" class="notice" role="status">正在读取实时状态…</div>
+    <section class="section">
+      <div class="section-heading"><div><span class="eyebrow">01 / 服务连接</span><h2>基础服务</h2></div><button id="refresh" class="button">刷新状态</button></div>
+      <div class="services" id="services" aria-live="polite"></div>
+      <div class="worker-check"><div><strong>后台任务</strong><p>提交一次无业务影响的检查，验证任务能被后台进程实际处理。</p></div><button id="probe" class="button dark">检查后台任务</button></div>
+      <p id="probe-result" class="result" role="status"></p>
+    </section>
+    <section class="section">
+      <div class="section-heading"><div><span class="eyebrow">02 / 数据基础</span><h2>两类演示资料</h2></div><span class="hint">来自数据库 · 非真实订单</span></div>
+      <div class="cases" id="cases"></div>
+    </section>
+    <section class="section department-section"><div><span class="eyebrow">03 / 组织基础</span><h2>部门目录 <span id="department-count"></span></h2><p class="muted">目录已建立，实际人员、岗位与跨部门权限在后续阶段配置。</p></div><div id="departments" class="departments"></div></section>
+    <section class="next-step"><div class="next-marker">下一步</div><div><h3>可操作地基与协作流程</h3><p>逐步接入私有文件、资料版本、业务任务和员工工作台。AI 当前未接入，不产生模型调用或费用。</p></div></section>
+    <footer><span>京能协作 · 演示基础环境</span><span id="versions">正在读取版本…</span></footer>
+  </main>
+  <script src="/assets/jingneng/js/foundation.js" defer></script>
+</body>
+</html>
