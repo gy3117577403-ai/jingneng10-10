@@ -1,7 +1,7 @@
 """One record boundary shared by our API, Frappe REST/list and file download."""
 import frappe
 
-TYPES = ('JN Inquiry', 'JN Document', 'JN File Revision', 'JN Work Task', 'JN Activity', 'JN Export')
+TYPES = ('JN Inquiry', 'JN Document', 'JN File Revision', 'JN Work Task', 'JN Activity', 'JN Export', 'JN AI Run', 'JN AI Review')
 
 
 def manager(user=None):
@@ -45,6 +45,8 @@ def revision_query(user=None): return query_for('JN File Revision', user)
 def task_query(user=None): return query_for('JN Work Task', user)
 def activity_query(user=None): return query_for('JN Activity', user)
 def export_query(user=None): return query_for('JN Export', user)
+def ai_run_query(user=None): return query_for('JN AI Run', user)
+def ai_review_query(user=None): return query_for('JN AI Review', user)
 
 
 def file_query(user=None):

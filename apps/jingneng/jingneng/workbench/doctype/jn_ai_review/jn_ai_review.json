@@ -1,0 +1,86 @@
+{
+  "doctype": "DocType",
+  "name": "JN AI Review",
+  "module": "Workbench",
+  "engine": "InnoDB",
+  "field_order": [
+    "record_id",
+    "inquiry",
+    "run",
+    "reviewed_by",
+    "decision",
+    "reason",
+    "changes_json"
+  ],
+  "fields": [
+    {
+      "fieldname": "record_id",
+      "label": "稳定编号",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1,
+      "read_only": 1
+    },
+    {
+      "fieldname": "inquiry",
+      "label": "关联询价",
+      "fieldtype": "Link",
+      "options": "JN Inquiry",
+      "reqd": 1
+    },
+    {
+      "fieldname": "run",
+      "label": "run",
+      "fieldtype": "Link",
+      "options": "JN AI Run",
+      "unique": 1,
+      "reqd": 1
+    },
+    {
+      "fieldname": "reviewed_by",
+      "label": "reviewed_by",
+      "fieldtype": "Link",
+      "options": "User",
+      "reqd": 1
+    },
+    {
+      "fieldname": "decision",
+      "label": "decision",
+      "fieldtype": "Select",
+      "options": "accept\nreject",
+      "reqd": 1
+    },
+    {
+      "fieldname": "reason",
+      "label": "reason",
+      "fieldtype": "Text",
+      "reqd": 1
+    },
+    {
+      "fieldname": "changes_json",
+      "label": "changes_json",
+      "fieldtype": "Long Text"
+    }
+  ],
+  "allow_rename": 0,
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "select": 1
+    },
+    {
+      "role": "JN Sales",
+      "read": 1,
+      "select": 1
+    },
+    {
+      "role": "JN Technical",
+      "read": 1,
+      "select": 1
+    }
+  ],
+  "autoname": "field:record_id",
+  "sort_field": "modified",
+  "sort_order": "DESC"
+}

@@ -13,7 +13,7 @@ def bootstrap():
     return {'user': frappe.session.user, 'full_name': frappe.db.get_value('User', frappe.session.user, 'full_name'),
             'can_create': svc.can_create(), 'people': people,
             'departments': frappe.get_list('JN Department', fields=['name', 'department_name'], order_by='name'),
-            'ai_mode': 'disabled', 'is_demo': True, 'version': '0.1.0'}
+            'ai_mode': 'simulation', 'is_demo': True, 'version': '0.2.0'}
 
 
 @frappe.whitelist(methods=['GET'])

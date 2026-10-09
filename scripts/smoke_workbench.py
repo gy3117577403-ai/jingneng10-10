@@ -96,8 +96,8 @@ def main():
     for client, user, password in ((sales, SALES, env['DEMO_PASSWORD']), (tech, TECH, env['DEMO_PASSWORD']), (admin, 'Administrator', env['ADMIN_PASSWORD'])):
         client.login(user, password)
     state = call(sales, 'bootstrap')
-    verify(state['can_create'] and not call(tech, 'bootstrap')['can_create'] and state['ai_mode'] == 'disabled',
-           'Server distinguishes sales and technical roles; AI remains disabled')
+    verify(state['can_create'] and not call(tech, 'bootstrap')['can_create'] and state['ai_mode'] == 'simulation',
+           'Server distinguishes sales and technical roles; AI is labelled simulation')
     path = ROOT / '.local/f1-restart-probe.json'
     if args.verify_restart:
         snapshot = json.loads(path.read_text(encoding='utf-8'))

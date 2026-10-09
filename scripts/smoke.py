@@ -104,7 +104,7 @@ def main():
     sales.login('sales.demo@example.invalid', env['DEMO_PASSWORD'])
     state = sales.json('/api/method/jingneng.api.runtime.state')['message']
     check(all(state['checks'].values()), 'Live database, cache and queue connections succeed', results)
-    check(state['ai_mode'] == 'disabled', 'AI is explicitly disabled; no model calls', results)
+    check(state['ai_mode'] == 'simulation', 'AI is explicitly simulation only; no model calls', results)
     check(len(state['departments']) == 9, 'Nine departments are initialized once', results)
     check({item['name'] for item in state['cases']} == {'DEMO-CT-001', 'DEMO-BJ-001'},
           'Both demonstration types exist without duplicate seeds', results)

@@ -1,0 +1,163 @@
+{
+  "doctype": "DocType",
+  "name": "JN AI Run",
+  "module": "Workbench",
+  "engine": "InnoDB",
+  "field_order": [
+    "record_id",
+    "inquiry",
+    "requested_by",
+    "status",
+    "mode",
+    "adapter_version",
+    "prompt_version",
+    "scenario",
+    "dedupe_key",
+    "inquiry_revision",
+    "attempt",
+    "worker_token",
+    "started_at",
+    "finished_at",
+    "elapsed_ms",
+    "input_json",
+    "sources_json",
+    "result_json",
+    "error_code",
+    "error_message"
+  ],
+  "fields": [
+    {
+      "fieldname": "record_id",
+      "label": "稳定编号",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1,
+      "read_only": 1
+    },
+    {
+      "fieldname": "inquiry",
+      "label": "关联询价",
+      "fieldtype": "Link",
+      "options": "JN Inquiry",
+      "reqd": 1
+    },
+    {
+      "fieldname": "requested_by",
+      "label": "requested_by",
+      "fieldtype": "Link",
+      "options": "User",
+      "reqd": 1
+    },
+    {
+      "fieldname": "status",
+      "label": "status",
+      "fieldtype": "Select",
+      "options": "排队中\n运行中\n待审核\n已采纳\n已驳回\n失败\n已取消\n结果待核对",
+      "reqd": 1
+    },
+    {
+      "fieldname": "mode",
+      "label": "mode",
+      "fieldtype": "Data",
+      "reqd": 1
+    },
+    {
+      "fieldname": "adapter_version",
+      "label": "adapter_version",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "prompt_version",
+      "label": "prompt_version",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "scenario",
+      "label": "scenario",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "dedupe_key",
+      "label": "dedupe_key",
+      "fieldtype": "Data",
+      "unique": 1,
+      "reqd": 1
+    },
+    {
+      "fieldname": "inquiry_revision",
+      "label": "inquiry_revision",
+      "fieldtype": "Int"
+    },
+    {
+      "fieldname": "attempt",
+      "label": "attempt",
+      "fieldtype": "Int"
+    },
+    {
+      "fieldname": "worker_token",
+      "label": "worker_token",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "started_at",
+      "label": "started_at",
+      "fieldtype": "Datetime"
+    },
+    {
+      "fieldname": "finished_at",
+      "label": "finished_at",
+      "fieldtype": "Datetime"
+    },
+    {
+      "fieldname": "elapsed_ms",
+      "label": "elapsed_ms",
+      "fieldtype": "Int"
+    },
+    {
+      "fieldname": "input_json",
+      "label": "input_json",
+      "fieldtype": "Long Text"
+    },
+    {
+      "fieldname": "sources_json",
+      "label": "sources_json",
+      "fieldtype": "Long Text"
+    },
+    {
+      "fieldname": "result_json",
+      "label": "result_json",
+      "fieldtype": "Long Text"
+    },
+    {
+      "fieldname": "error_code",
+      "label": "error_code",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "error_message",
+      "label": "error_message",
+      "fieldtype": "Text"
+    }
+  ],
+  "allow_rename": 0,
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "select": 1
+    },
+    {
+      "role": "JN Sales",
+      "read": 1,
+      "select": 1
+    },
+    {
+      "role": "JN Technical",
+      "read": 1,
+      "select": 1
+    }
+  ],
+  "autoname": "field:record_id",
+  "sort_field": "modified",
+  "sort_order": "DESC"
+}
