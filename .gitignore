@@ -1,0 +1,64 @@
+# Local secrets and machine-specific configuration
+.env
+.env.*
+!.env.example
+!.env.template
+*.pem
+*.key
+/secrets/
+
+# Dependencies and generated build/test output
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+coverage/
+playwright-report/
+test-results/
+*.log
+
+# Frappe/runtime state and private uploads; use separate demo fixtures in source
+/sites/
+/logs/
+/data/
+/uploads/
+/storage/
+/backups/
+*.sql.gz
+*.dump
+*.sqlite
+*.sqlite3
+
+# Local business-data analysis, source materials and document QA output
+/_order_review/
+/业务原始资料/
+/客户资料/
+/现场资料/
+/流程调研包_*/_qa/
+
+# Internal planning stays local while origin is public.
+# Publish reviewed, sanitized context under docs/ instead of these originals.
+/部门数据目录.md
+/技术实施约定与起步方案.md
+/软件地基与AI辅助框架方案.md
+/售前协同FDE实施方案.md
+/售前行为与动作清单.md
+/数据基础建设准备与验收方案.md
+/项目接续说明.md
+/整体建设与运行流程.md
+/最小Demo方案.md
+/GitHub底座候选与选型建议.md
+/流程调研包_*/
+/.local/
+
+# Editor and OS state
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
