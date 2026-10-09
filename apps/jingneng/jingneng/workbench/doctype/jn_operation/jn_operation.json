@@ -1,0 +1,52 @@
+{
+  "doctype": "DocType",
+  "name": "JN Operation",
+  "module": "Workbench",
+  "engine": "InnoDB",
+  "field_order": [
+    "record_id",
+    "actor",
+    "kind",
+    "payload_hash",
+    "result_json"
+  ],
+  "fields": [
+    {
+      "fieldname": "record_id",
+      "label": "稳定编号",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1,
+      "read_only": 1
+    },
+    {
+      "fieldname": "actor",
+      "label": "发起人",
+      "fieldtype": "Link",
+      "options": "User",
+      "reqd": 1
+    },
+    {
+      "fieldname": "kind",
+      "label": "动作",
+      "fieldtype": "Data",
+      "reqd": 1
+    },
+    {
+      "fieldname": "payload_hash",
+      "label": "参数摘要",
+      "fieldtype": "Data",
+      "reqd": 1
+    },
+    {
+      "fieldname": "result_json",
+      "label": "已完成结果",
+      "fieldtype": "Long Text"
+    }
+  ],
+  "allow_rename": 0,
+  "permissions": [],
+  "autoname": "field:record_id",
+  "sort_field": "modified",
+  "sort_order": "DESC"
+}

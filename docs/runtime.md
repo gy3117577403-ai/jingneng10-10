@@ -1,8 +1,8 @@
-# 第一批：运行环境与基础结构
+# 运行环境与基础结构
 
 本批次使用 Frappe 独立自定义应用，在本机 Docker Linux 容器中运行。应用代码位于 `apps/jingneng`；不修改 Frappe 上游核心，不安装 ERPNext 业务模块。全部示例均为 DEMO。
 
-实际验收状态见 [JN-0002](changes/JN-0002.md)，不要只凭存在启动配置就认定本机已运行。
+F0 验收见 [JN-0002](changes/JN-0002.md)，F1 升级见 [JN-0003](changes/JN-0003.md)。不要只凭存在启动配置就认定本机已运行。
 
 ## 需要的环境
 
@@ -24,15 +24,15 @@ python scripts/dev.py start
 
 启动脚本生成本地 `.env` 与随机初始密码，构建镜像、等待数据库/缓存就绪、创建站点并安装应用，然后启动服务。初始化失败会停止并保留现场，不自动重装站点或删除数据卷。
 
-默认入口：<http://127.0.0.1:8088/foundation>。未登录时跳转登录页。账号与首次生成的密码在本机 `.local/demo-credentials.txt`，该文件不得提交。
+默认入口：[询价工作台](http://127.0.0.1:8088/workbench)；[基础环境页](http://127.0.0.1:8088/foundation) 保留。未登录时跳转登录页。账号与首次生成的密码在本机 `.local/demo-credentials.txt`，该文件不得提交。
 
 | 账号 | 当前用途 |
 | --- | --- |
 | Administrator | 站点管理与演示数据维护 |
-| sales.demo@example.invalid | 销售演示账号；当前只读演示记录，可执行环境检查 |
-| tech.demo@example.invalid | 技术演示账号；当前只读演示记录，可执行环境检查 |
+| sales.demo@example.invalid | 销售演示账号；新建/编辑本人负责的询价、分派和确认任务 |
+| tech.demo@example.invalid | 技术演示账号；读取被指定的询价、上传资料版本和回复任务 |
 
-两个演示账号当前使用相同的演示角色，不能视为已经实施企业真实岗位权限。9 个部门目录、成套/钣金各一条演示记录用于连接与持久化验证，不是真实订单模型或已实现的售前流程。
+两个演示账号保留 F0 基础环境权限，F1 分别新增销售/技术角色。访问范围按询价负责人和协作者控制，不按部门目录自动授权；企业完整岗位矩阵仍待适配。9 个部门与两类种子记录均为虚构资料，详情见 [工作台说明](workbench.md)。
 
 如果 8088 被占用，复制 `.env.example` 为本机 `.env`，选择空闲 `HTTP_PORT` 并填写三个不同的随机密码（至少 16 字符）；或者先释放明确属于自己的端口，再由脚本生成配置。不要删除其他项目的容器来腾端口。
 
@@ -46,6 +46,7 @@ python scripts/dev.py stop
 python scripts/dev.py start
 python scripts/dev.py restart
 python scripts/smoke.py
+python scripts/smoke_workbench.py
 docker compose logs --tail 100 backend worker init-site
 ```
 
@@ -90,6 +91,8 @@ Frappe 16.51 的实时服务根据 `Origin` 回调 HTTP 验证登录，而容器
 ```text
 apps/jingneng/           独立 Frappe 应用
   jingneng/foundation/  部门和演示资料 DocType
+  jingneng/workbench/   询价、文件版本、持久任务、权限与动作服务
+  frontend/            Vue / Frappe UI 工作台与 npm 锁文件
   jingneng/api/         登录后调用的基础接口
   jingneng/ai/          明确禁用的模型入口，F2 再实施
   jingneng/www/         当前基础环境验收页
@@ -100,7 +103,7 @@ docs/                   方案摘要、运行与更新记录
 .env / .local/          本机凭据、报告与备份；不提交
 ```
 
-F0 验收页使用 Frappe 原生页面机制。Vue/Frappe UI 员工工作台、正式业务对象、资料版本、业务任务和 AI 运行记录属于后续批次。AI 当前返回明确的“未配置”状态，不能伪造模型输出或把队列连通等同于 AI 已完成。
+F0 验收页使用 Frappe 原生页面机制；F1 工作台通过同源 Frappe 会话调用独立动作服务。镜像构建包含 `npm ci` 和 Vue 构建，部署无需在宿主机额外安装 Node。AI 当前返回明确的“未配置”状态，不能把队列连通或资料保存等同于 AI 已完成。
 
 ## 验收与证据
 

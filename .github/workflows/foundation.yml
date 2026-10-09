@@ -7,6 +7,7 @@ on:
       - 'infra/**'
       - 'scripts/dev.py'
       - 'scripts/smoke.py'
+      - 'scripts/smoke_workbench.py'
       - 'compose.yaml'
       - '.dockerignore'
       - '.env.example'
@@ -37,13 +38,17 @@ jobs:
       - name: Build and start an isolated demonstration site
         run: python3 scripts/dev.py start
       - name: Verify APIs, permissions, worker and private file upload
-        run: python3 scripts/smoke.py --prepare-restart
+        run: |
+          python3 scripts/smoke.py --prepare-restart
+          python3 scripts/smoke_workbench.py --prepare-restart
       - name: Repeat initialization and restart services
         run: |
           docker compose run --rm init-site
           python3 scripts/dev.py restart
       - name: Verify retained data and file hashes
-        run: python3 scripts/smoke.py --verify-restart
+        run: |
+          python3 scripts/smoke.py --verify-restart
+          python3 scripts/smoke_workbench.py --verify-restart
       - name: Verify repeatable database and file backups
         run: |
           python3 scripts/dev.py backup

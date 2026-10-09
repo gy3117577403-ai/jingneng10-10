@@ -1,0 +1,131 @@
+{
+  "doctype": "DocType",
+  "name": "JN Inquiry",
+  "module": "Workbench",
+  "engine": "InnoDB",
+  "field_order": [
+    "record_id",
+    "title",
+    "business_type",
+    "customer_name",
+    "department",
+    "responsible",
+    "collaborator",
+    "status",
+    "revision",
+    "expected_date",
+    "notes",
+    "items",
+    "is_demo"
+  ],
+  "fields": [
+    {
+      "fieldname": "record_id",
+      "label": "稳定编号",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1,
+      "read_only": 1
+    },
+    {
+      "fieldname": "title",
+      "label": "询价名称",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "business_type",
+      "label": "业务类型",
+      "fieldtype": "Select",
+      "options": "成套\n钣金",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "customer_name",
+      "label": "客户名称",
+      "fieldtype": "Data",
+      "reqd": 1
+    },
+    {
+      "fieldname": "department",
+      "label": "负责部门",
+      "fieldtype": "Link",
+      "options": "JN Department",
+      "reqd": 1
+    },
+    {
+      "fieldname": "responsible",
+      "label": "负责人",
+      "fieldtype": "Link",
+      "options": "User",
+      "reqd": 1
+    },
+    {
+      "fieldname": "collaborator",
+      "label": "技术协作者",
+      "fieldtype": "Link",
+      "options": "User"
+    },
+    {
+      "fieldname": "status",
+      "label": "状态",
+      "fieldtype": "Select",
+      "options": "协作中\n已归档",
+      "reqd": 1,
+      "default": "协作中"
+    },
+    {
+      "fieldname": "revision",
+      "label": "记录版本",
+      "fieldtype": "Int",
+      "default": "1",
+      "read_only": 1
+    },
+    {
+      "fieldname": "expected_date",
+      "label": "期望交期",
+      "fieldtype": "Date"
+    },
+    {
+      "fieldname": "notes",
+      "label": "需求说明",
+      "fieldtype": "Text"
+    },
+    {
+      "fieldname": "items",
+      "label": "产品行",
+      "fieldtype": "Table",
+      "options": "JN Inquiry Item"
+    },
+    {
+      "fieldname": "is_demo",
+      "label": "虚构演示资料",
+      "fieldtype": "Check",
+      "default": "1",
+      "read_only": 1
+    }
+  ],
+  "allow_rename": 0,
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "select": 1
+    },
+    {
+      "role": "JN Sales",
+      "read": 1,
+      "select": 1
+    },
+    {
+      "role": "JN Technical",
+      "read": 1,
+      "select": 1
+    }
+  ],
+  "autoname": "field:record_id",
+  "sort_field": "modified",
+  "sort_order": "DESC"
+}

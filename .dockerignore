@@ -8,3 +8,4 @@
 **/*.pyc
 **/node_modules/
 **/.env*
+apps/jingneng/jingneng/public/workbench/

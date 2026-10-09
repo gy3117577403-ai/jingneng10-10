@@ -55,7 +55,7 @@ def init_env():
         file.write('\n'.join(f'{key}={value}' for key, value in values.items()) + '\n')
     (ROOT / '.local').mkdir(exist_ok=True)
     with (ROOT / '.local/demo-credentials.txt').open('x', encoding='utf-8') as file:
-        file.write('仅本机演示使用，禁止提交或分享此文件。\n登录：http://127.0.0.1:8088/login?redirect-to=/foundation\n\n')
+        file.write('仅本机演示使用，禁止提交或分享此文件。\n登录：http://127.0.0.1:8088/login?redirect-to=/workbench\n\n')
         file.write('Administrator\n' + values['ADMIN_PASSWORD'] + '\n\n')
         file.write('sales.demo@example.invalid / tech.demo@example.invalid\n' + values['DEMO_PASSWORD'] + '\n')
         file.write('\n再次初始化不会重置已有账号密码；此处是首次创建凭据。\n')
@@ -76,7 +76,7 @@ def wait_ready():
         try:
             with urllib.request.urlopen(url, timeout=3) as result:
                 if result.status == 200:
-                    print(url.replace('/api/method/ping', '/foundation') + ' is ready.')
+                    print(url.replace('/api/method/ping', '/workbench') + ' is ready.')
                     return
         except (OSError, urllib.error.URLError):
             pass
