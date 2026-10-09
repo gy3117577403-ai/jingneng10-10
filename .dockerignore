@@ -1,0 +1,10 @@
+**
+!apps/
+!apps/jingneng/
+!apps/jingneng/**
+!infra/
+!infra/**
+**/__pycache__/
+**/*.pyc
+**/node_modules/
+**/.env*

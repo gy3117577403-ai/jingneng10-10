@@ -1,0 +1,22 @@
+{
+  "doctype": "DocType",
+  "name": "JN Demo Case",
+  "module": "Foundation",
+  "autoname": "field:code",
+  "engine": "InnoDB",
+  "title_field": "title",
+  "track_changes": 1,
+  "field_order": ["code", "title", "business_type", "department", "description", "is_demo"],
+  "fields": [
+    {"fieldname": "code", "fieldtype": "Data", "label": "演示编号", "reqd": 1, "unique": 1, "in_list_view": 1},
+    {"fieldname": "title", "fieldtype": "Data", "label": "名称", "reqd": 1, "in_list_view": 1},
+    {"fieldname": "business_type", "fieldtype": "Select", "label": "业务类型", "options": "成套\n钣金", "reqd": 1, "in_list_view": 1},
+    {"fieldname": "department", "fieldtype": "Link", "label": "关联部门", "options": "JN Department", "reqd": 1},
+    {"fieldname": "description", "fieldtype": "Small Text", "label": "说明"},
+    {"fieldname": "is_demo", "fieldtype": "Check", "label": "虚构演示数据", "default": "1", "read_only": 1}
+  ],
+  "permissions": [
+    {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "export": 1},
+    {"role": "JN Demo User", "read": 1}
+  ]
+}
