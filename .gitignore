@@ -58,6 +58,7 @@ test-results/
 /.local/
 /output/playwright/
 /.playwright-cli/
+/apps/jingneng/jingneng/public/workbench/
 
 # Editor and OS state
 .idea/

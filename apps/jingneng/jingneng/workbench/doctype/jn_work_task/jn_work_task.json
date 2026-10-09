@@ -1,0 +1,98 @@
+{
+  "doctype": "DocType",
+  "name": "JN Work Task",
+  "module": "Workbench",
+  "engine": "InnoDB",
+  "field_order": [
+    "record_id",
+    "inquiry",
+    "title",
+    "description",
+    "assigned_to",
+    "status",
+    "reply",
+    "held_from",
+    "revision"
+  ],
+  "fields": [
+    {
+      "fieldname": "record_id",
+      "label": "稳定编号",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1,
+      "read_only": 1
+    },
+    {
+      "fieldname": "inquiry",
+      "label": "关联询价",
+      "fieldtype": "Link",
+      "options": "JN Inquiry",
+      "reqd": 1
+    },
+    {
+      "fieldname": "title",
+      "label": "问题或任务",
+      "fieldtype": "Data",
+      "reqd": 1
+    },
+    {
+      "fieldname": "description",
+      "label": "说明",
+      "fieldtype": "Text"
+    },
+    {
+      "fieldname": "assigned_to",
+      "label": "处理人",
+      "fieldtype": "Link",
+      "options": "User",
+      "reqd": 1
+    },
+    {
+      "fieldname": "status",
+      "label": "状态",
+      "fieldtype": "Select",
+      "options": "待处理\n待确认\n已完成\n已挂起",
+      "default": "待处理",
+      "reqd": 1
+    },
+    {
+      "fieldname": "reply",
+      "label": "最近回复",
+      "fieldtype": "Text"
+    },
+    {
+      "fieldname": "held_from",
+      "label": "挂起前状态",
+      "fieldtype": "Data"
+    },
+    {
+      "fieldname": "revision",
+      "label": "任务版本",
+      "fieldtype": "Int",
+      "default": "1",
+      "read_only": 1
+    }
+  ],
+  "allow_rename": 0,
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "select": 1
+    },
+    {
+      "role": "JN Sales",
+      "read": 1,
+      "select": 1
+    },
+    {
+      "role": "JN Technical",
+      "read": 1,
+      "select": 1
+    }
+  ],
+  "autoname": "field:record_id",
+  "sort_field": "modified",
+  "sort_order": "DESC"
+}

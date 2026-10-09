@@ -49,6 +49,10 @@ if probe.returncode:
     raise SystemExit('Cannot read existing site app list; initialization stopped without resetting data.')
 if 'jingneng' not in json.loads(probe.stdout).get(site, []):
     run('--site', site, 'install-app', 'jingneng')
+run('--site', site, 'execute', 'jingneng.setup.ensure_role')
+# The persistent cache may still contain the old application's module map.
+# Invalidate it in a separate process before migration loads new module folders.
+run('--site', site, 'clear-cache')
 run('--site', site, 'migrate')
 run('--site', site, 'execute', 'jingneng.setup.seed_demo')
 run('--site', site, 'enable-scheduler')

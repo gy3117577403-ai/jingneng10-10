@@ -1,0 +1,49 @@
+{
+  "doctype": "DocType",
+  "name": "JN Inquiry Item",
+  "module": "Workbench",
+  "engine": "InnoDB",
+  "field_order": [
+    "line_id",
+    "product_name",
+    "quantity",
+    "unit",
+    "specification"
+  ],
+  "fields": [
+    {
+      "fieldname": "line_id",
+      "label": "产品行标识",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "read_only": 1
+    },
+    {
+      "fieldname": "product_name",
+      "label": "产品名称",
+      "fieldtype": "Data",
+      "reqd": 1
+    },
+    {
+      "fieldname": "quantity",
+      "label": "数量",
+      "fieldtype": "Float",
+      "reqd": 1,
+      "precision": "3"
+    },
+    {
+      "fieldname": "unit",
+      "label": "单位",
+      "fieldtype": "Data",
+      "reqd": 1
+    },
+    {
+      "fieldname": "specification",
+      "label": "规格说明",
+      "fieldtype": "Small Text"
+    }
+  ],
+  "allow_rename": 0,
+  "permissions": [],
+  "istable": 1
+}

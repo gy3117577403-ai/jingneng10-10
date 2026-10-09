@@ -11,8 +11,9 @@ DEPARTMENTS = (
 
 
 def ensure_role():
-    if not frappe.db.exists('Role', 'JN Demo User'):
-        frappe.get_doc({'doctype': 'Role', 'role_name': 'JN Demo User', 'desk_access': 1}).insert()
+    for name in ('JN Demo User', 'JN Sales', 'JN Technical'):
+        if not frappe.db.exists('Role', name):
+            frappe.get_doc({'doctype': 'Role', 'role_name': name, 'desk_access': 1}).insert()
 
 
 def seed_demo():
@@ -53,5 +54,7 @@ def seed_demo():
     if not website.favicon:
         website.favicon = '/assets/jingneng/images/favicon.svg'
         website.save()
+    from jingneng.workbench.seed import seed_workbench
+    seed_workbench()
     frappe.db.commit()
     print('Demo initialization complete; existing records and passwords preserved.')

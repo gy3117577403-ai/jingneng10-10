@@ -1,0 +1,63 @@
+{
+  "doctype": "DocType",
+  "name": "JN Document",
+  "module": "Workbench",
+  "engine": "InnoDB",
+  "field_order": [
+    "record_id",
+    "inquiry",
+    "title",
+    "current_version"
+  ],
+  "fields": [
+    {
+      "fieldname": "record_id",
+      "label": "稳定编号",
+      "fieldtype": "Data",
+      "reqd": 1,
+      "unique": 1,
+      "read_only": 1
+    },
+    {
+      "fieldname": "inquiry",
+      "label": "关联询价",
+      "fieldtype": "Link",
+      "options": "JN Inquiry",
+      "reqd": 1
+    },
+    {
+      "fieldname": "title",
+      "label": "资料名称",
+      "fieldtype": "Data",
+      "reqd": 1
+    },
+    {
+      "fieldname": "current_version",
+      "label": "当前版本号",
+      "fieldtype": "Int",
+      "default": "0",
+      "read_only": 1
+    }
+  ],
+  "allow_rename": 0,
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "select": 1
+    },
+    {
+      "role": "JN Sales",
+      "read": 1,
+      "select": 1
+    },
+    {
+      "role": "JN Technical",
+      "read": 1,
+      "select": 1
+    }
+  ],
+  "autoname": "field:record_id",
+  "sort_field": "modified",
+  "sort_order": "DESC"
+}

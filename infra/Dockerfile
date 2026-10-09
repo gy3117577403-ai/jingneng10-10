@@ -12,6 +12,7 @@ RUN bench init \
 
 WORKDIR /home/frappe/frappe-bench
 COPY --chown=frappe:0 apps/jingneng ./apps/jingneng
+RUN cd apps/jingneng/frontend && npm ci --no-audit --no-fund && npm run build
 RUN env/bin/pip install --no-deps -e apps/jingneng \
     && printf '\njingneng\n' >> sites/apps.txt \
     && bench build --app jingneng \
