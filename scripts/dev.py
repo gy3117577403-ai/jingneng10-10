@@ -48,6 +48,7 @@ def init_env():
         except OSError as exc:
             raise RuntimeError('Port 8088 is occupied; choose HTTP_PORT in a local .env before starting.') from exc
     values = {'COMPOSE_PROJECT_NAME': 'jingneng-dev', 'SITE_NAME': 'jingneng.localhost', 'HTTP_PORT': '8088',
+              'DOCKER_SUBNET': '10.250.10.0/24',
               'DB_ROOT_PASSWORD': secrets.token_urlsafe(24), 'ADMIN_PASSWORD': secrets.token_urlsafe(24),
               'DEMO_PASSWORD': secrets.token_urlsafe(24)}
     with (ROOT / '.env').open('x', encoding='utf-8') as file:
