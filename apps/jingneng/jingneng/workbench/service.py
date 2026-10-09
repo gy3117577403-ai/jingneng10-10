@@ -394,6 +394,8 @@ def detail(name):
     doc = read_inquiry(name)
     result = inquiry_snapshot(doc)
     result['can_edit'] = editable(doc)
+    result['people'] = {user: frappe.db.get_value('User', user, 'full_name') for user in
+                        (doc.responsible, doc.collaborator) if user}
     result['documents'] = frappe.get_all('JN Document', filters={'inquiry': name}, fields=['name', 'title', 'current_version'], order_by='creation asc')
     revisions = frappe.get_all('JN File Revision', filters={'inquiry': name},
                               fields=['name', 'document', 'version_number', 'filename', 'sha256', 'file_size', 'uploaded_by', 'change_note', 'creation'], order_by='version_number desc')

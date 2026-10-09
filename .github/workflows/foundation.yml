@@ -9,6 +9,7 @@ on:
       - 'scripts/smoke.py'
       - 'scripts/smoke_workbench.py'
       - 'scripts/smoke_ai.py'
+      - 'scripts/smoke_workspace.py'
       - 'scripts/test_ai_contract.py'
       - 'compose.yaml'
       - '.dockerignore'
@@ -36,6 +37,7 @@ jobs:
           python3 -m compileall -q apps infra/runtime scripts
           python3 scripts/test_ai_contract.py
           node --check apps/jingneng/jingneng/public/js/foundation.js
+          node --check apps/jingneng/jingneng/public/js/signin.js
           python3 scripts/dev.py init-env
           docker compose config --quiet
       - name: Build and start an isolated demonstration site
@@ -54,6 +56,8 @@ jobs:
           python3 scripts/smoke.py --verify-restart
           python3 scripts/smoke_workbench.py --verify-restart
           python3 scripts/smoke_ai.py --verify-restart
+      - name: Verify actionable inbox and workspace queries
+        run: python3 scripts/smoke_workspace.py
       - name: Verify repeatable database and file backups
         run: |
           python3 scripts/dev.py backup

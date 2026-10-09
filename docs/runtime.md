@@ -24,7 +24,7 @@ python scripts/dev.py start
 
 启动脚本生成本地 `.env` 与随机初始密码，构建镜像、等待数据库/缓存就绪、创建站点并安装应用，然后启动服务。初始化失败会停止并保留现场，不自动重装站点或删除数据卷。
 
-默认入口：[询价工作台](http://127.0.0.1:8088/workbench)；[基础环境页](http://127.0.0.1:8088/foundation) 保留。未登录时跳转登录页。账号与首次生成的密码在本机 `.local/demo-credentials.txt`，该文件不得提交。
+默认入口：[询价工作台](http://127.0.0.1:8088/workbench)；[基础环境页](http://127.0.0.1:8088/foundation) 保留。未登录时跳转 `/signin` 中文登录页；Frappe 管理入口保留原管理界面。账号与首次生成的密码在本机 `.local/demo-credentials.txt`，该文件不得提交。
 
 | 账号 | 当前用途 |
 | --- | --- |
@@ -48,6 +48,7 @@ python scripts/dev.py restart
 python scripts/smoke.py
 python scripts/smoke_workbench.py
 python scripts/smoke_ai.py
+python scripts/smoke_workspace.py
 python scripts/test_ai_contract.py
 docker compose logs --tail 100 backend worker init-site
 ```

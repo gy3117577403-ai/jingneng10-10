@@ -17,6 +17,8 @@ python scripts/dev.py start
 
 销售账号可以建单、分派任务和确认；技术账号在指定记录中上传版本并回复。操作说明和权限见 [工作台说明](docs/workbench.md)，模拟完整路径见 [AI 候选审核](docs/ai-review.md)。[基础环境页](http://127.0.0.1:8088/foundation) 保留服务与队列检查。启动、停止和备份见 [运行说明](docs/runtime.md)，实际验收见 [JN-0004](docs/changes/JN-0004.md)、[JN-0003](docs/changes/JN-0003.md) 与 [JN-0002](docs/changes/JN-0002.md)。
 
+本分支正在完成 JN-0005 工作区 UI 重设计：紧凑导航、待办、来源核对、文件预览、中文登录与交互状态。实际进度见 [JN-0005](docs/changes/JN-0005.md)。
+
 ## 从这里继续
 
 1. 阅读 [AGENTS.md](AGENTS.md)，遵守项目接续与更新规则。
