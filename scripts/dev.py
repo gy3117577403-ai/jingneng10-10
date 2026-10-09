@@ -96,10 +96,12 @@ def start(build=True):
 
 def backup():
     env = read_env()
-    stamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+    stamp = datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     destination = ROOT / '.local/backups' / stamp
     destination.mkdir(parents=True, exist_ok=False)
-    container_dir = '/home/frappe/frappe-bench/sites/' + env['SITE_NAME'] + '/private/backups/manual-' + stamp
+    # Frappe's automatic cleanup expects files, not subdirectories, inside
+    # private/backups. Keep manual export batches outside that managed folder.
+    container_dir = '/home/frappe/frappe-bench/sites/' + env['SITE_NAME'] + '/private/jingneng-backup-staging/' + stamp
     compose('exec', '-T', 'backend', 'bench', '--site', env['SITE_NAME'], 'backup',
             '--with-files', '--compress', '--backup-path', container_dir)
     container = compose('ps', '-q', 'backend', capture=True)

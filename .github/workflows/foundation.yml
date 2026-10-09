@@ -44,6 +44,10 @@ jobs:
           python3 scripts/dev.py restart
       - name: Verify retained data and file hashes
         run: python3 scripts/smoke.py --verify-restart
+      - name: Verify repeatable database and file backups
+        run: |
+          python3 scripts/dev.py backup
+          python3 scripts/dev.py backup
       - name: Diagnostic logs on failure
         if: failure()
         run: docker compose logs --no-color --tail 100
