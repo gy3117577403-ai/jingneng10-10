@@ -47,6 +47,8 @@ python scripts/dev.py start
 python scripts/dev.py restart
 python scripts/smoke.py
 python scripts/smoke_workbench.py
+python scripts/smoke_ai.py
+python scripts/test_ai_contract.py
 docker compose logs --tail 100 backend worker init-site
 ```
 
@@ -77,7 +79,7 @@ flowchart LR
 | `worker`、`scheduler` | 后台任务执行与定时调度 |
 | `db-data` | 结构化数据，包括账号、权限及演示记录 |
 | `sites` | 站点配置、加密密钥、私有/公开文件及站点备份 |
-| `queue-data` | 队列持久化；它不替代未来正式业务任务账本 |
+| `queue-data` | 队列持久化；它不替代数据库中的持久协作任务与 AI 运行账本 |
 | `logs` | 应用日志；不能当作业务数据备份 |
 
 服务通过本项目的 Compose 网络连接。只把网页端口绑定到 `127.0.0.1`；数据库、Redis 和后台服务不对宿主机开放端口。当前部署是本机开发演示配置，未验收互联网发布或正式生产。
@@ -94,7 +96,7 @@ apps/jingneng/           独立 Frappe 应用
   jingneng/workbench/   询价、文件版本、持久任务、权限与动作服务
   frontend/            Vue / Frappe UI 工作台与 npm 锁文件
   jingneng/api/         登录后调用的基础接口
-  jingneng/ai/          明确禁用的模型入口，F2 再实施
+  jingneng/ai/          模拟适配器、持久运行、恢复器与审核服务
   jingneng/www/         当前基础环境验收页
   jingneng/public/      验收页样式与交互
 infra/                  镜像、版本与容器初始化
@@ -103,7 +105,7 @@ docs/                   方案摘要、运行与更新记录
 .env / .local/          本机凭据、报告与备份；不提交
 ```
 
-F0 验收页使用 Frappe 原生页面机制；F1 工作台通过同源 Frappe 会话调用独立动作服务。镜像构建包含 `npm ci` 和 Vue 构建，部署无需在宿主机额外安装 Node。AI 当前返回明确的“未配置”状态，不能把队列连通或资料保存等同于 AI 已完成。
+F0 验收页使用 Frappe 原生页面机制；F1 工作台通过同源 Frappe 会话调用独立动作服务。镜像构建包含 `npm ci` 和 Vue 构建，部署无需在宿主机额外安装 Node。AI 当前明确为 simulation：固定标签模拟提取与人工审核，不调用真实模型；模拟流程通过不代表模型准确率已验收。每分钟恢复器依据数据库账本重新投递未完成运行，具体规则见 ai-review.md。
 
 ## 验收与证据
 

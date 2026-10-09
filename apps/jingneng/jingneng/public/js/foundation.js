@@ -18,7 +18,7 @@ async function refresh() {
   try {
     const data = await call("jingneng.api.runtime.state");
     el("services").replaceChildren();
-    const services = [["应用与数据库", data.checks.database, "Frappe + MariaDB"], ["缓存服务", data.checks.cache, "会话与临时数据"], ["任务队列", data.checks.queue, "等待后台处理的任务"], ["AI 模型", false, "本批次未配置"]];
+    const services = [["应用与数据库", data.checks.database, "Frappe + MariaDB"], ["缓存服务", data.checks.cache, "会话与临时数据"], ["任务队列", data.checks.queue, "等待后台处理的任务"], ["AI 模型", false, "模拟流程已可验证，真实模型未配置"]];
     for (const [label, online, detail] of services) {
       const panel = node("div", "service", "");
       panel.append(node("span", "label", label), node("strong", online ? "" : "offline", online ? "连接正常" : label === "AI 模型" ? "尚未接入" : "连接异常"), node("small", "", detail));
@@ -35,7 +35,7 @@ async function refresh() {
     el("versions").textContent = `应用 ${data.app_version} · Frappe ${data.frappe_version}`;
     const ready = Object.values(data.checks).every(Boolean);
     el("notice").className = ready ? "notice" : "notice error";
-    el("notice").textContent = ready ? `基础服务连接正常。已读取 ${data.cases.length} 条演示记录；业务流程与 AI 能力将在后续批次建设。` : "部分服务连接异常，请检查运行日志。";
+    el("notice").textContent = ready ? `基础服务连接正常。已读取 ${data.cases.length} 条演示记录；工作台已支持协作与明确标识的模拟提取审核。` : "部分服务连接异常，请检查运行日志。";
   } catch (error) {el("notice").className = "notice error"; el("notice").textContent = error.message;}
   finally {el("refresh").disabled = false;}
 }

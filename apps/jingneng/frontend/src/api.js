@@ -1,8 +1,8 @@
 const prefix = '/api/method/jingneng.api.workbench.'
 
-export async function api(method, data = {}, write = false) {
+export async function api(method, data = {}, write = false, namespace = prefix) {
   const options = { credentials: 'same-origin', headers: { Accept: 'application/json' } }
-  let url = prefix + method
+  let url = namespace + method
   if (write) {
     options.method = 'POST'
     options.headers['X-Frappe-CSRF-Token'] = document.querySelector('meta[name="csrf-token"]').content
@@ -25,3 +25,4 @@ export async function api(method, data = {}, write = false) {
 
 export const downloadURL = (kind, name) => prefix + 'download?' + new URLSearchParams({ kind, name })
 export const key = () => crypto.randomUUID()
+export const ai = (method, data = {}, write = false) => api(method, data, write, '/api/method/jingneng.api.ai.')

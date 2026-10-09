@@ -15,9 +15,13 @@ permission_query_conditions = {
     'JN Work Task': 'jingneng.workbench.permissions.task_query',
     'JN Activity': 'jingneng.workbench.permissions.activity_query',
     'JN Export': 'jingneng.workbench.permissions.export_query',
+    'JN AI Run': 'jingneng.workbench.permissions.ai_run_query',
+    'JN AI Review': 'jingneng.workbench.permissions.ai_review_query',
     'File': 'jingneng.workbench.permissions.file_query',
 }
 has_permission = {name: 'jingneng.workbench.permissions.has_permission' for name in permission_query_conditions}
 has_permission['File'] = 'jingneng.workbench.files.permission'
 override_doctype_class = {'File': 'jingneng.workbench.files.WorkbenchFile'}
 doc_events = {'DocShare': {'before_insert': 'jingneng.workbench.permissions.guard_share'}}
+
+scheduler_events = {'cron': {'* * * * *': ['jingneng.ai.service.recover']}}

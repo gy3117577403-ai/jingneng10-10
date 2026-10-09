@@ -8,6 +8,8 @@ on:
       - 'scripts/dev.py'
       - 'scripts/smoke.py'
       - 'scripts/smoke_workbench.py'
+      - 'scripts/smoke_ai.py'
+      - 'scripts/test_ai_contract.py'
       - 'compose.yaml'
       - '.dockerignore'
       - '.env.example'
@@ -32,6 +34,7 @@ jobs:
       - name: Validate source and configuration
         run: |
           python3 -m compileall -q apps infra/runtime scripts
+          python3 scripts/test_ai_contract.py
           node --check apps/jingneng/jingneng/public/js/foundation.js
           python3 scripts/dev.py init-env
           docker compose config --quiet
@@ -41,6 +44,7 @@ jobs:
         run: |
           python3 scripts/smoke.py --prepare-restart
           python3 scripts/smoke_workbench.py --prepare-restart
+          python3 scripts/smoke_ai.py --prepare-restart
       - name: Repeat initialization and restart services
         run: |
           docker compose run --rm init-site
@@ -49,6 +53,7 @@ jobs:
         run: |
           python3 scripts/smoke.py --verify-restart
           python3 scripts/smoke_workbench.py --verify-restart
+          python3 scripts/smoke_ai.py --verify-restart
       - name: Verify repeatable database and file backups
         run: |
           python3 scripts/dev.py backup

@@ -250,6 +250,8 @@ def change_status(name, expected_revision, status, request_id):
             return {'name': name, 'revision': doc.revision}
         if status == '已归档' and frappe.db.exists('JN Work Task', {'inquiry': name, 'status': ['!=', '已完成']}):
             frappe.throw('仍有未完成任务，不能归档。', Conflict)
+        if status == '已归档' and frappe.db.exists('JN AI Run', {'inquiry': name, 'status': ['in', ['排队中', '运行中', '待审核', '结果待核对']]}):
+            frappe.throw('仍有未处理的模拟运行，请先审核或取消后归档。', Conflict)
         doc.status = status
         bump(doc)
         event(doc, 'inquiry.status', '归档询价' if status == '已归档' else '恢复协作')
@@ -377,6 +379,17 @@ def inquiry_snapshot(doc):
     return result
 
 
+def apply_reviewed_fields(doc, changes):
+    """Called only inside the AI review transaction after version/evidence checks."""
+    if not editable(doc) or set(changes) - {'customer_name', 'expected_date', 'notes'}:
+        frappe.throw('不允许写入这些字段。', frappe.PermissionError)
+    data = {key: doc.get(key) for key in ('title', 'business_type', 'customer_name', 'department', 'collaborator', 'expected_date', 'notes')}
+    data['items'] = inquiry_snapshot(doc)['items']
+    data.update(changes)
+    doc.update(inquiry_data(data, current=doc))
+    bump(doc)
+
+
 def detail(name):
     doc = read_inquiry(name)
     result = inquiry_snapshot(doc)
@@ -398,6 +411,8 @@ def export_bundle(name, expected_revision, request_id):
         doc = read_inquiry(name, lock=True)
         check_revision(doc, expected_revision)
         snapshot = detail(name)
+        from jingneng.ai import service as ai
+        snapshot['ai_runs'] = [ai.detail(run_name) for run_name in frappe.get_all('JN AI Run', filters={'inquiry': name}, pluck='name', order_by='creation desc')]
         rows = frappe.get_all('JN File Revision', filters={'inquiry': name}, fields=['name', 'document', 'version_number', 'filename', 'sha256', 'file_size', 'file'], order_by='creation asc')
         if sum(row.file_size for row in rows) > MAX_EXPORT:
             frappe.throw('当前本机演示导出限制为 50 MB 原件，请减少资料量后重试。')

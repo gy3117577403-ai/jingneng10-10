@@ -31,6 +31,7 @@ config.update({
     'redis_socketio': 'redis://redis-queue:6379',
     'socketio_port': 9000, 'default_site': site,
     'serve_default_site': True, 'developer_mode': 0,
+    'scheduler_tick_interval': 30,
     'chromium_path': '/usr/bin/chromium-headless-shell',
 })
 config_path.write_text(json.dumps(config, indent=2) + '\n')
