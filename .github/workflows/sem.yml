@@ -29,6 +29,8 @@ jobs:
           docker run --rm --network none jingneng/sem-assets:ci npm test
       - name: Verify real HTTP modules and fictional business flow
         run: python3 scripts/sem_acceptance.py
+      - name: Verify pre-sales documents, real workers and concurrent reviews
+        run: python3 scripts/sem_presales_acceptance.py
       - name: Run upstream backend suite without network or live database access
         run: python3 scripts/sem.py test
       - name: Verify restart persistence

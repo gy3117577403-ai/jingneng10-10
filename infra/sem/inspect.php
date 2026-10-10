@@ -19,13 +19,14 @@ if (($argv[1] ?? '') === 'queue-result') {
 }
 $tables = ['users', 'companies', 'quotes', 'quote_lines', 'orders', 'order_lines', 'tasks', 'products', 'stocks',
            'purchases', 'purchase_lines', 'purchase_receipts', 'deliverys', 'delivery_lines', 'invoices', 'invoice_lines', 'files',
-           'stock_moves', 'stock_location_products'];
+           'stock_moves', 'stock_location_products', 'jn_inquiries', 'jn_inquiry_members', 'jn_documents',
+           'jn_file_versions', 'jn_ai_runs', 'jn_presales_events', 'jn_presales_receipts'];
 $counts = [];
 foreach ($tables as $table) {
     if (Illuminate\Support\Facades\Schema::hasTable($table)) { $counts[$table] = DB::table($table)->count(); }
 }
 $routes = [];
-foreach (['home', 'today', 'companies', 'leads', 'opportunities', 'quotes', 'orders', 'products', 'products.stock',
+foreach (['presales.index', 'home', 'today', 'companies', 'leads', 'opportunities', 'quotes', 'orders', 'products', 'products.stock',
           'purchases', 'purchases.receipt', 'deliverys', 'invoices', 'production.kanban', 'production.gantt',
           'workshop', 'quality', 'reports', 'documents.index', 'spreadsheet.index', 'human.resources',
           'admin.kanban.settings', 'admin.integrations.ai.index'] as $name) {
