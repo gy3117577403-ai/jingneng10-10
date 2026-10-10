@@ -19,6 +19,8 @@ python scripts/dev.py start
 
 本分支已完成 JN-0005 工作区 UI 重设计：紧凑导航、待办、来源核对、文件预览、中文登录与交互状态。设计规范见 [工作区设计](docs/ui-workspace.md)，实现与实际验证见 [JN-0005](docs/changes/JN-0005.md)。
 
+JN-0006 新增 [开源适配评估](docs/architecture/open-source-fit.md) 与 [下一批最小验证方案](docs/architecture/next-validation.md)：明确现有自定义能力、ERPNext 候选模块和专业工程工具的分工，并记录固定源码依据。本批为文档交付；尚未安装 ERPNext、ΣEM 或 SheetNest，应用运行能力没有因此增加。
+
 ## 从这里继续
 
 1. 阅读 [AGENTS.md](AGENTS.md)，遵守项目接续与更新规则。

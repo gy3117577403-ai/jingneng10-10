@@ -1,0 +1,310 @@
+{
+  "schema_version": 1,
+  "change_id": "JN-0006",
+  "checked_on": "2026-10-10",
+  "baseline_commit": "0901ea8854e3c5dc3b7d9236cac418e1aded66b4",
+  "scope": "Read-only technical fit assessment. No candidate installation, upstream test execution or real-order acceptance.",
+  "local_runtime_observations": {
+    "frappe": "16.51.0",
+    "frappe_commit": "6b450a166e076dd842e4db7ea0843f62881e62ac",
+    "jingneng": "0.3.0",
+    "python": "3.14.8",
+    "commands": [
+      "docker compose exec -T backend bench version",
+      "docker compose exec -T backend python --version"
+    ]
+  },
+  "repositories": [
+    {
+      "id": "erpnext",
+      "repository": "frappe/erpnext",
+      "reference": "v16.50.0",
+      "commit": "7474d9e786277383de1242ab882f16856d17a9c9",
+      "evidence": "Fixed source retrieved; selected declarations and code paths reviewed, not installed or executed. File list is retrieval provenance, not a full code audit.",
+      "retrieved_files": [
+        {
+          "path": "erpnext/buying/doctype/purchase_order/purchase_order.json",
+          "sha256": "1d039b93029d141d6a68fba94de7c63b3e1492b76487dce69a11a28c4c35e551",
+          "bytes": 31084,
+          "url": "https://github.com/frappe/erpnext/blob/7474d9e786277383de1242ab882f16856d17a9c9/erpnext/buying/doctype/purchase_order/purchase_order.json"
+        },
+        {
+          "path": "erpnext/hooks.py",
+          "sha256": "28c286e338e7e28cdc8d23cc2168d52251da49c012c21de64d839d484be5c310",
+          "bytes": 25226,
+          "url": "https://github.com/frappe/erpnext/blob/7474d9e786277383de1242ab882f16856d17a9c9/erpnext/hooks.py"
+        },
+        {
+          "path": "erpnext/manufacturing/doctype/bom/bom.json",
+          "sha256": "d3587e6749c715beb0a17dd851893b2d4e4ec8d8edbcb2601c4c391b3c15a30c",
+          "bytes": 18909,
+          "url": "https://github.com/frappe/erpnext/blob/7474d9e786277383de1242ab882f16856d17a9c9/erpnext/manufacturing/doctype/bom/bom.json"
+        },
+        {
+          "path": "erpnext/manufacturing/doctype/job_card/job_card.json",
+          "sha256": "7b04f40f6c2f666541233c46830091df6a17a5be9b16fb231e8eabbdbf39f052",
+          "bytes": 16438,
+          "url": "https://github.com/frappe/erpnext/blob/7474d9e786277383de1242ab882f16856d17a9c9/erpnext/manufacturing/doctype/job_card/job_card.json"
+        },
+        {
+          "path": "erpnext/manufacturing/doctype/work_order/work_order.json",
+          "sha256": "0d594265a8e3a811fcf728ca3a4efd759f12e6ff5b39d99d87e3c9669ebe4579",
+          "bytes": 19578,
+          "url": "https://github.com/frappe/erpnext/blob/7474d9e786277383de1242ab882f16856d17a9c9/erpnext/manufacturing/doctype/work_order/work_order.json"
+        },
+        {
+          "path": "erpnext/selling/doctype/quotation/quotation.json",
+          "sha256": "98504027b9eaa1bfce587d6d97c7aded169244bc1e5c9c340bc06e5d0d81c4ce",
+          "bytes": 27157,
+          "url": "https://github.com/frappe/erpnext/blob/7474d9e786277383de1242ab882f16856d17a9c9/erpnext/selling/doctype/quotation/quotation.json"
+        },
+        {
+          "path": "erpnext/selling/doctype/sales_order/sales_order.json",
+          "sha256": "71a7ab38ae4b8dbf0aae9421561856bcb49cfd58712e1bca0115616393d69d5c",
+          "bytes": 41270,
+          "url": "https://github.com/frappe/erpnext/blob/7474d9e786277383de1242ab882f16856d17a9c9/erpnext/selling/doctype/sales_order/sales_order.json"
+        },
+        {
+          "path": "erpnext/setup/install.py",
+          "sha256": "aea1a8c9d5931521e7cb6fc9864146dae96808b9867bc363628ba06d6e5010d3",
+          "bytes": 14157,
+          "url": "https://github.com/frappe/erpnext/blob/7474d9e786277383de1242ab882f16856d17a9c9/erpnext/setup/install.py"
+        },
+        {
+          "path": "erpnext/stock/doctype/delivery_note/delivery_note.json",
+          "sha256": "868ff0908c1e3053d2730c96af8014dcaea838d51c40ac8f436d124b94e141d5",
+          "bytes": 34588,
+          "url": "https://github.com/frappe/erpnext/blob/7474d9e786277383de1242ab882f16856d17a9c9/erpnext/stock/doctype/delivery_note/delivery_note.json"
+        },
+        {
+          "path": "erpnext/stock/doctype/item/item.json",
+          "sha256": "c5b05c56115325b8ab1347f0ef78cfca3e411d8a040ce9dd351d1275e2fe6f59",
+          "bytes": 32372,
+          "url": "https://github.com/frappe/erpnext/blob/7474d9e786277383de1242ab882f16856d17a9c9/erpnext/stock/doctype/item/item.json"
+        },
+        {
+          "path": "erpnext/stock/doctype/quality_inspection/quality_inspection.json",
+          "sha256": "e6454531899c1d3fa89ebb6e35326dc71766346c98c6fdcfc09d74228fc9fcd9",
+          "bytes": 7380,
+          "url": "https://github.com/frappe/erpnext/blob/7474d9e786277383de1242ab882f16856d17a9c9/erpnext/stock/doctype/quality_inspection/quality_inspection.json"
+        },
+        {
+          "path": "erpnext/stock/doctype/stock_entry/stock_entry.json",
+          "sha256": "7d0e5e4cbc3961fa2f4d6c4606fc106b2550c83e38859e50db3d6852972301f5",
+          "bytes": 20295,
+          "url": "https://github.com/frappe/erpnext/blob/7474d9e786277383de1242ab882f16856d17a9c9/erpnext/stock/doctype/stock_entry/stock_entry.json"
+        },
+        {
+          "path": "erpnext/subcontracting/doctype/subcontracting_order/subcontracting_order.json",
+          "sha256": "d978811d1da1d2e6fba839476bb588f40954b3dbab37eb14c0701b2e30d5bd8b",
+          "bytes": 12378,
+          "url": "https://github.com/frappe/erpnext/blob/7474d9e786277383de1242ab882f16856d17a9c9/erpnext/subcontracting/doctype/subcontracting_order/subcontracting_order.json"
+        },
+        {
+          "path": "erpnext/subcontracting/doctype/subcontracting_receipt/subcontracting_receipt.json",
+          "sha256": "25b84a7eb2deb10c86ee5fb1e15b125c6d48f6a61a98ed6bc117b947f7acd1da",
+          "bytes": 16262,
+          "url": "https://github.com/frappe/erpnext/blob/7474d9e786277383de1242ab882f16856d17a9c9/erpnext/subcontracting/doctype/subcontracting_receipt/subcontracting_receipt.json"
+        },
+        {
+          "path": "license.txt",
+          "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+          "bytes": 35149,
+          "url": "https://github.com/frappe/erpnext/blob/7474d9e786277383de1242ab882f16856d17a9c9/license.txt"
+        },
+        {
+          "path": "pyproject.toml",
+          "sha256": "3ddc835e995322c4952413613be8695e198bbd9ebd2f6fcf46556eb8b6d72bc3",
+          "bytes": 2527,
+          "url": "https://github.com/frappe/erpnext/blob/7474d9e786277383de1242ab882f16856d17a9c9/pyproject.toml"
+        },
+        {
+          "path": "erpnext/selling/doctype/quotation/quotation.py",
+          "sha256": "2c6bd6098e29f4188ae1ae6a716717d83f539539abfafad7c493468be592940f",
+          "bytes": 21451,
+          "url": "https://github.com/frappe/erpnext/blob/7474d9e786277383de1242ab882f16856d17a9c9/erpnext/selling/doctype/quotation/quotation.py"
+        },
+        {
+          "path": "erpnext/manufacturing/doctype/bom/bom.py",
+          "sha256": "7b167626840a5a97120be9b13c860f34e91756451008a9327ec941989c10a49f",
+          "bytes": 69330,
+          "url": "https://github.com/frappe/erpnext/blob/7474d9e786277383de1242ab882f16856d17a9c9/erpnext/manufacturing/doctype/bom/bom.py"
+        },
+        {
+          "path": "erpnext/manufacturing/doctype/work_order/work_order.py",
+          "sha256": "018c206f0ed25652cc235fcae84b6111eef9e41d23a0ea211beb4a77ea12aec9",
+          "bytes": 103690,
+          "url": "https://github.com/frappe/erpnext/blob/7474d9e786277383de1242ab882f16856d17a9c9/erpnext/manufacturing/doctype/work_order/work_order.py"
+        }
+      ]
+    },
+    {
+      "id": "sem",
+      "repository": "SMEWebify/WebErpMesv2",
+      "reference": "WEM-2.0",
+      "commit": "6cd15090949f0a66ea28380c7e0751ab63aea94c",
+      "evidence": "Fixed source retrieved; selected declarations and code paths reviewed, not installed or executed. File list is retrieval provenance, not a full code audit.",
+      "retrieved_files": [
+        {
+          "path": "ARCHITECTURE.md",
+          "sha256": "32fe65eaed01014e135a866531de48005ad43fc38fdda05563e5fdeec112d8c6",
+          "bytes": 8485,
+          "url": "https://github.com/SMEWebify/WebErpMesv2/blob/6cd15090949f0a66ea28380c7e0751ab63aea94c/ARCHITECTURE.md"
+        },
+        {
+          "path": "LICENSE",
+          "sha256": "0f49acc48af856995820e7d14016a9bcd9f69119098b3b55af029020bfd0ed26",
+          "bytes": 1066,
+          "url": "https://github.com/SMEWebify/WebErpMesv2/blob/6cd15090949f0a66ea28380c7e0751ab63aea94c/LICENSE"
+        },
+        {
+          "path": "README.md",
+          "sha256": "c31ef1a9ae0d3dedbcc14ae4b4bfed79bdbea5b717cad4071d16cba5cd277dff",
+          "bytes": 24240,
+          "url": "https://github.com/SMEWebify/WebErpMesv2/blob/6cd15090949f0a66ea28380c7e0751ab63aea94c/README.md"
+        },
+        {
+          "path": "composer.json",
+          "sha256": "ffb178f96c16937230bb8441ba737b1e94fc121a8fefce2d891f63a7b144fa84",
+          "bytes": 7153,
+          "url": "https://github.com/SMEWebify/WebErpMesv2/blob/6cd15090949f0a66ea28380c7e0751ab63aea94c/composer.json"
+        },
+        {
+          "path": "routes/api.php",
+          "sha256": "91c31a428cf3d6cfd3f3d16c9730d2e7febd59345e7c7f7f322a082f38cddcd0",
+          "bytes": 7557,
+          "url": "https://github.com/SMEWebify/WebErpMesv2/blob/6cd15090949f0a66ea28380c7e0751ab63aea94c/routes/api.php"
+        },
+        {
+          "path": "app/Http/Controllers/Planning/NestingController.php",
+          "sha256": "687335e7357dcb386c17f1febba96f8493cdd31abf41c34603229fc1e5122f3a",
+          "bytes": 39370,
+          "url": "https://github.com/SMEWebify/WebErpMesv2/blob/6cd15090949f0a66ea28380c7e0751ab63aea94c/app/Http/Controllers/Planning/NestingController.php"
+        },
+        {
+          "path": "tests/Feature/NestingComputeTest.php",
+          "sha256": "8141e66833f5c2940fb85fa49f14d71b93b74e91d0e4c39504e2375cd3aaac92",
+          "bytes": 2146,
+          "url": "https://github.com/SMEWebify/WebErpMesv2/blob/6cd15090949f0a66ea28380c7e0751ab63aea94c/tests/Feature/NestingComputeTest.php"
+        },
+        {
+          "path": "app/Models/Planning/Task.php",
+          "sha256": "f1e5cf3792f3a0888e913a1f1772c7a18ba79be64049b0127f4ad73abbe214d5",
+          "bytes": 29234,
+          "url": "https://github.com/SMEWebify/WebErpMesv2/blob/6cd15090949f0a66ea28380c7e0751ab63aea94c/app/Models/Planning/Task.php"
+        },
+        {
+          "path": "app/Http/Controllers/Api/TaskController.php",
+          "sha256": "9c457156abde8b8fdfbc4cefd903de4d1e84fc8d4248bbba5cd2d8f2aa78a9c0",
+          "bytes": 491,
+          "url": "https://github.com/SMEWebify/WebErpMesv2/blob/6cd15090949f0a66ea28380c7e0751ab63aea94c/app/Http/Controllers/Api/TaskController.php"
+        }
+      ]
+    },
+    {
+      "id": "sheetnest",
+      "repository": "ManuelMRosa/SheetNest",
+      "reference": "v1.1.11",
+      "commit": "4f2db7f661376c89eb87704421380969a5801213",
+      "evidence": "Fixed source retrieved; selected declarations and code paths reviewed, not installed or executed. File list is retrieval provenance, not a full code audit.",
+      "retrieved_files": [
+        {
+          "path": "DeepNestLib.Core/IO/StepUnfoldService.cs",
+          "sha256": "fd9a0ca6502ff3215dc40923a4e3c57e4b8378cd2b7785434b0f9c6832df4638",
+          "bytes": 16548,
+          "url": "https://github.com/ManuelMRosa/SheetNest/blob/4f2db7f661376c89eb87704421380969a5801213/DeepNestLib.Core/IO/StepUnfoldService.cs"
+        },
+        {
+          "path": "DeepNestSharp/DeepNestSharp.csproj",
+          "sha256": "e795da71d5920f6edfd9693ead5481fd54073a3dc0ffcc754a471a265547e9ac",
+          "bytes": 5534,
+          "url": "https://github.com/ManuelMRosa/SheetNest/blob/4f2db7f661376c89eb87704421380969a5801213/DeepNestSharp/DeepNestSharp.csproj"
+        },
+        {
+          "path": "LICENSE",
+          "sha256": "08378b18de80a27db2e29a289dd4dedeee23b0f472c374b1b6a400a156cb9488",
+          "bytes": 1157,
+          "url": "https://github.com/ManuelMRosa/SheetNest/blob/4f2db7f661376c89eb87704421380969a5801213/LICENSE"
+        },
+        {
+          "path": "README.md",
+          "sha256": "6c9b54d8ef59b1ebb0dd94b7cd470414916f0161217519999af992fcb4892591",
+          "bytes": 5405,
+          "url": "https://github.com/ManuelMRosa/SheetNest/blob/4f2db7f661376c89eb87704421380969a5801213/README.md"
+        },
+        {
+          "path": "THIRD_PARTY_NOTICES.md",
+          "sha256": "44a671697eed1b65a436225aea8c3fbaffa64763209f7ba6161ec9f34faaefc3",
+          "bytes": 2760,
+          "url": "https://github.com/ManuelMRosa/SheetNest/blob/4f2db7f661376c89eb87704421380969a5801213/THIRD_PARTY_NOTICES.md"
+        },
+        {
+          "path": "DeepNestSharp/RasterNest/SparrowNestService.cs",
+          "sha256": "8193fad1ef05ef81f96bf056c5783c92547f0dddb87b1d3ccd83a5ff03a221e0",
+          "bytes": 222307,
+          "url": "https://github.com/ManuelMRosa/SheetNest/blob/4f2db7f661376c89eb87704421380969a5801213/DeepNestSharp/RasterNest/SparrowNestService.cs"
+        }
+      ]
+    }
+  ],
+  "web_sources": [
+    {
+      "id": "erpnext-quotation",
+      "url": "https://docs.frappe.io/erpnext/quotation",
+      "purpose": "Standard quotation data and prerequisites",
+      "evidence": "Official documentation or vendor statement; not runtime acceptance"
+    },
+    {
+      "id": "erpnext-work-order",
+      "url": "https://docs.frappe.io/erpnext/work-order",
+      "purpose": "Manufacturing work order and links to BOM, stock and sales order",
+      "evidence": "Official documentation or vendor statement; not runtime acceptance"
+    },
+    {
+      "id": "erpnext-subcontracting",
+      "url": "https://docs.frappe.io/erpnext/subcontracting",
+      "purpose": "Subcontract purchase, order, supplied materials and receipt",
+      "evidence": "Official documentation or vendor statement; not runtime acceptance"
+    },
+    {
+      "id": "frappe-hooks",
+      "url": "https://docs.frappe.io/framework/user/en/python-api/hooks",
+      "purpose": "App hooks and class extension mechanisms",
+      "evidence": "Official documentation or vendor statement; not runtime acceptance"
+    },
+    {
+      "id": "lantek-quoting",
+      "url": "https://www.lantek.com/industrial-erp-software/advanced-manufacturing-crm",
+      "purpose": "Vendor statement: geometry, process and assembly-based quoting",
+      "evidence": "Official documentation or vendor statement; not runtime acceptance"
+    },
+    {
+      "id": "sigmamrp",
+      "url": "https://www.sigmanest.com/en/sigmamrp",
+      "purpose": "Vendor statement: business data and SigmaNEST integration",
+      "evidence": "Official documentation or vendor statement; not runtime acceptance"
+    },
+    {
+      "id": "goodmate",
+      "url": "https://www.szgoodmate.com/ERPMES/89.html",
+      "purpose": "Vendor statement: ERP/MES, routing and assembly completeness",
+      "evidence": "Official documentation or vendor statement; not runtime acceptance"
+    },
+    {
+      "id": "sheetnest-cam",
+      "url": "https://sheetnest.io/plasma-cutting-nesting-software/",
+      "purpose": "Tool/CAM division; nesting is not machine programming",
+      "evidence": "Official documentation or vendor statement; not runtime acceptance"
+    }
+  ],
+  "not_used_for_new_claims": [
+    {
+      "url": "https://www.trumpf.com/en_US/products/software/oseon/",
+      "reason": "Fetch timed out in this assessment"
+    },
+    {
+      "url": "https://www.gnu.org/licenses/gpl-faq.en.html#GPLRequireSourcePostedPublic",
+      "reason": "Fetch failed; no internal-use legal conclusion derived from this response"
+    }
+  ]
+}
