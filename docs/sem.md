@@ -86,6 +86,6 @@ python scripts/sem.py restore-new --backup .local/sem/transfer
 
 当前网络发生过 HTTP/2 截断，本机额外使用 `SEM_COMPOSER_HTTP1=1`：仅在构建时让 Composer 使用 HTTP/1.1，继续验证 TLS、沿用原始依赖锁文件。缓存和有限重试避免重复下载；此开关默认关闭。
 
-## JN-0013 公司资料入口
+## JN-0014 公司资料与阅读入口
 
-本机当前镜像为 `jingneng/sem:jn-0013`。公司资料入口 `/zh-CN/company-data`，包含资料与台账、协作待办、导入记录、分类与权限；使用与权限说明见 [公司资料](sem-company-data.md)。新模块只使用虚构演示资料，未连接企业正式数据库。备份检查包含全部 `jn_data_*` 表和私有原件；配套恢复结果见 [JN-0013](changes/JN-0013.md)。
+本机当前镜像为 `jingneng/sem:jn-0014`。公司资料入口 `/zh-CN/company-data`，包含资料与台账、正文检索、协作待办、导入记录、分类与权限；使用与权限说明见 [公司资料](sem-company-data.md)。新增内部文档转换服务，私有文件支持 Word 分页阅读与 Excel 工作表阅读。试用记录全部为虚构，未连接企业正式数据库。备份检查包含全部 `jn_data_*` 表、私有原件和派生预览；配套恢复结果见 [JN-0014](changes/JN-0014.md)。
