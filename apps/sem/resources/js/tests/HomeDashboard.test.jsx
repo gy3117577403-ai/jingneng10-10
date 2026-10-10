@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import HomeDashboard from '../components/HomeDashboard';
 vi.mock('../components/dashboard/DashboardGrid.jsx', () => ({ default: () => <div>原分析看板</div> }));
@@ -11,7 +11,8 @@ describe('work overview', () => {
     it('links accessible inquiries to their actual review and hides ungranted business menus', async () => {
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ok:true,json:async()=>({total:1,items:[{id:'sample-a',title:'测试询价',kind:'sheet',document_count:2,review_count:1}]})}));
         render(<HomeDashboard urls={urls} recentQuotes={[{id:5,label:'不可见报价'}]} />);
-        expect(await screen.findByText('测试询价')).toBeVisible();
+        // Mounting precedes the entrance animation's first visible frame on slower runners.
+        await waitFor(() => expect(screen.getByText('测试询价')).toBeVisible());
         expect(screen.getByText('测试询价').closest('a')).toHaveAttribute('href','/presales/inquiries/sample-a?tab=ai');
         expect(screen.queryByText('不可见报价')).toBeNull();
         expect(screen.queryByText('报价管理')).toBeNull();
@@ -23,6 +24,6 @@ describe('work overview', () => {
         vi.stubGlobal('fetch', fetch); render(<HomeDashboard urls={urls} />);
         expect(await screen.findByRole('alert')).toHaveTextContent('无法读取询价');
         fireEvent.click(screen.getByRole('button',{name:'重试'}));
-        expect(await screen.findByText('新建询价 →')).toBeVisible(); expect(fetch).toHaveBeenCalledTimes(2);
+        await waitFor(() => expect(screen.getByText('新建询价 →')).toBeVisible()); expect(fetch).toHaveBeenCalledTimes(2);
     });
 });
