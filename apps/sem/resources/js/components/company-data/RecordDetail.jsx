@@ -9,10 +9,10 @@ function Preview({api,detail,file,onClose}){
     const [page,setPage]=useState(1),[pages,setPages]=useState(1),[content,setContent]=useState(null),[error,setError]=useState('');
     useEffect(()=>{const abort=new AbortController();let objectUrl;setContent(null);setError('');
         fetch(`${api.base}/records/${detail.record.id}/versions/${detail.version.id}/files/${file.id}?page=${page}`,{credentials:'same-origin',headers:{Accept:'application/json'},signal:abort.signal}).then(async r=>{
-            if(!r.ok){const j=await r.json().catch(()=>null);throw new Error(j?.message||'预览不可用，权限或文件状态可能已经变化。');}
+            if(!r.ok){const j=await r.json().catch(()=>null);throw new Error(r.status<500&&/[\u3400-\u9fff]/.test(j?.message||'')?j.message:'预览不可用，请刷新权限或稍后重试。');}
             if(r.headers.get('Content-Type')?.includes('application/json'))return r.json();
             const blob=await r.blob();objectUrl=URL.createObjectURL(blob);setPages(Number(r.headers.get('X-Preview-Pages'))||1);return {type:'image',url:objectUrl};
-        }).then(c=>{if(!abort.signal.aborted)setContent(c);}).catch(e=>{if(!abort.signal.aborted)setError(e.message);});
+        }).then(c=>{if(!abort.signal.aborted)setContent(c);}).catch(e=>{if(!abort.signal.aborted)setError(/[\u3400-\u9fff]/.test(e.message)?e.message:'无法读取预览，请检查网络后重试。');});
         return()=>{abort.abort();if(objectUrl)URL.revokeObjectURL(objectUrl);};
     },[api,detail.record.id,detail.version.id,file.id,page]);
     return <SurfaceDialog title={file.filename} onClose={onClose} className="dc-dialog dc-preview"><div className="dc-dialog-body"><div className="dc-preview-tools"><span>版本 {detail.version.number} · 仅供授权查看</span>{pages>1&&<div className="dc-inline"><button className="btn btn-default" disabled={page===1} onClick={()=>setPage(v=>v-1)}>上一页</button><span>{page} / {pages}</span><button className="btn btn-default" disabled={page>=Math.min(pages,200)} onClick={()=>setPage(v=>v+1)}>下一页</button></div>}</div><ErrorBox error={error}/>{!content&&!error?<p className="dc-empty">正在生成预览…</p>:content?.type==='image'?<img src={content.url} alt={`${file.filename} 第${page}页`}/>:content?.type==='text'?<><pre>{content.text}</pre>{content.truncated&&<p className="dc-help">仅预览前部分内容。</p>}</>:content&&<p className="dc-empty">{content.message}</p>}</div></SurfaceDialog>;
