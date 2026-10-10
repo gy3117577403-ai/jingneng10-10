@@ -78,15 +78,16 @@ class HumanResourcesControllerTest extends TestCase
     public function it_locks_a_user()
     {
         $user = User::factory()->create();
+        $bannedUntil = now()->addDays(10)->toDateTimeString();
 
         $response = $this->post(route('human.resources.lock.user', $user->id), [
-            'banned_until' => now()->addDays(10)->toDateTimeString(),
+            'banned_until' => $bannedUntil,
         ]);
 
         $response->assertRedirect(route('human.resources.show.user', ['id' => $user->id]));
         $this->assertDatabaseHas('users', [
             'id' => $user->id,
-            'banned_until' => now()->addDays(10),
+            'banned_until' => $bannedUntil,
         ]);
     }
 
