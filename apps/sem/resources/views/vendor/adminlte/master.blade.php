@@ -16,6 +16,7 @@
     {{-- User permissions for JS components --}}
     @auth
     <meta name="user-permissions" content="{{ json_encode(auth()->user()->getAllPermissions()->pluck('name')->values()) }}">
+    <meta name="workspace-user" content="{{ auth()->id() }}">
     <meta name="ai-assistant-configured" content="{{ filled(app(\App\Services\AI\AISettingsResolver::class)->active()['api_key'] ?? null) ? '1' : '0' }}">
     @endauth
 

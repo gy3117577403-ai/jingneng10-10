@@ -18,8 +18,8 @@
 </li>
 
 <li class="nav-item d-none d-lg-flex jn-command-nav">
-    <button type="button" class="jn-command-trigger" data-jn-command-open aria-label="快捷查找页面">
-        <i class="fas fa-search" aria-hidden="true"></i><span>快捷查找</span><kbd>Ctrl K</kbd>
+    <button type="button" class="jn-command-trigger" data-jn-command-open aria-label="查找页面与业务">
+        <i class="fas fa-search" aria-hidden="true"></i><span>查找与前往</span><kbd>Ctrl K</kbd>
     </button>
 </li>
 

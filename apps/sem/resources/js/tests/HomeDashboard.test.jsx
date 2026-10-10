@@ -1,10 +1,11 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import HomeDashboard from '../components/HomeDashboard';
 vi.mock('../components/dashboard/DashboardGrid.jsx', () => ({ default: () => <div>原分析看板</div> }));
 vi.mock('../components/TodayView.jsx', () => ({ default: () => <div>今日待办</div> }));
 const urls = { presales:'/presales', quotes_index:'/quotes', quotes_show:'/quotes/', orders_index:'/orders', orders_show:'/orders/' };
+beforeEach(() => { history.replaceState({}, '', '/dashboard?view=overview'); });
 afterEach(() => { vi.unstubAllGlobals(); document.querySelector('meta[name="user-permissions"]')?.remove(); });
 describe('work overview', () => {
     it('links accessible inquiries to their actual review and hides ungranted business menus', async () => {

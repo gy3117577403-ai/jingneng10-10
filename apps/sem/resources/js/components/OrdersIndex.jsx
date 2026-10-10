@@ -923,7 +923,7 @@ function ListTab({ endpoints, trans, currency, locale, companieId }) {
                         <button key={v.key}
                             className={`btn ${viewType === v.key ? 'btn-primary' : 'btn-secondary'}`}
                             onClick={() => setViewType(v.key)}
-                            title={v.key}
+                            title={{table:'列表视图',card:'卡片视图',kanban:'看板视图'}[v.key] || v.key} aria-label={{table:'列表视图',card:'卡片视图',kanban:'看板视图'}[v.key] || v.key}
                         >
                             <i className={`fas ${v.icon}`} />
                         </button>

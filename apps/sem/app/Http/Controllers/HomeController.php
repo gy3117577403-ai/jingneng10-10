@@ -272,6 +272,7 @@ class HomeController extends Controller
             ],
 
             'endpoints' => [
+                'workspace_inbox' => route('workspace.inbox'),
                 'quote_rate'     => route('kpi.quotes.rate'),
                 'orders_monthly' => route('kpi.orders.monthly'),
                 'delivery_board' => route('kpi.delivery.board'),

@@ -1,6 +1,7 @@
 """Exercise the real local SEM HTTP flow with fictional records; writes evidence locally."""
 import argparse
 import hashlib
+from html.parser import HTMLParser
 from datetime import datetime
 import http.cookiejar
 import json
@@ -16,7 +17,7 @@ import urllib.request
 
 from sem import LOCAL, ROOT, compose
 
-OUT = ROOT / '.local' / 'acceptance' / 'jn-0009'
+OUT = ROOT / '.local' / 'acceptance' / 'jn-0010'
 
 
 def snapshot(project=None):
@@ -120,6 +121,43 @@ def main():
         assert before['locale'] == 'zh-CN' and before['timezone'] == 'Asia/Shanghai'
         assert before['debug'] is False and before['default_admin_exists'] is False
         check('chinese_config_and_unique_admin', lambda: True)
+        def navigation():
+            class MenuParser(HTMLParser):
+                menu = None
+                def handle_starttag(self, tag, attributes):
+                    attributes = dict(attributes)
+                    if attributes.get('id') == 'jn-workspace-shell':
+                        self.menu = json.loads(attributes['data-menu'])
+            parser = MenuParser(); parser.feed(client.ok('/zh-CN/home'))
+            assert parser.menu, 'Authorized navigation payload missing'
+            destinations = set()
+            def walk(items):
+                for item in items.values() if isinstance(items, dict) else items:
+                    if item.get('restricted') is True:
+                        continue
+                    if item.get('submenu'):
+                        walk(item['submenu'])
+                    elif item.get('href') and item['href'] != '#':
+                        url = urllib.parse.urljoin(client.base, item['href'])
+                        if urllib.parse.urlsplit(url).netloc == urllib.parse.urlsplit(client.base).netloc:
+                            destinations.add(url)
+            walk(parser.menu)
+            for destination in sorted(destinations):
+                status, _, landed = client.request(destination)
+                assert status == 200 and '/login' not in landed and '/setup' not in landed, f'{destination}: {status} {landed}'
+            return {'destinations_checked': len(destinations)}
+        check('authorized_menu_destinations', navigation)
+        def pdf_assets():
+            manifest = client.ok('/build/manifest.json')
+            worker = manifest['node_modules/pdfjs-dist/build/pdf.worker.min.mjs']['file']
+            paths = [('/build/' + worker, 'javascript'), ('/build/pdfjs/wasm/qcms_bg.wasm', 'wasm'), ('/build/pdfjs/standard_fonts/FoxitDingbats.pfb', None)]
+            for path, mime in paths:
+                with client.opener.open(client.base + path, timeout=30) as response:
+                    assert response.status == 200 and response.read(20), path
+                    if mime:
+                        assert mime in response.headers.get('Content-Type', ''), f'{path}: wrong module MIME type'
+            return {'local_assets_checked': len(paths)}
+        check('pdf_worker_and_local_assets', pdf_assets)
         for name, path in before['routes'].items():
             def page(p=path):
                 status, payload, url = client.request(p)
