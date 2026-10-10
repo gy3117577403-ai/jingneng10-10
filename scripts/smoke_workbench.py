@@ -13,7 +13,7 @@ import io
 import json
 import os
 import sys
-from urllib.parse import urlencode
+from urllib.parse import urlencode, unquote, quote
 import uuid
 import zipfile
 
@@ -155,13 +155,19 @@ def main():
                    kind + ': even generic administrator REST writes cannot bypass the service')
             token, rev = uid(), detail(sales, name)['revision']
             content1 = ('DEMO first original ' + uid()).encode()
-            v1 = upload(tech, name, content1, request_id=token, revision=rev)
-            verify(upload(tech, name, content1, request_id=token, revision=rev) == v1, kind + ': upload retry creates no duplicate version')
+            filename = 'DEMO-需求资料.txt'
+            v1 = upload(tech, name, content1, filename=filename, request_id=token, revision=rev)
+            verify(upload(tech, name, content1, filename=filename, request_id=token, revision=rev) == v1, kind + ': upload retry creates no duplicate version')
             content2 = content1 + b'\nDEMO revision two'
             v2 = upload(sales, name, content2, document=v1['document'])
             duplicate = upload(sales, name, content2, document=v1['document'])
             verify(v2['version'] == 2 and duplicate['duplicate'] and duplicate['revision'] == v2['revision'], kind + ': changed content creates V2; identical content is reused')
             verify(download(sales, 'revision', v1['revision']) == (200, content1), kind + ': V1 remains byte-identical after V2')
+            with sales.opener.open(base + PREFIX + 'download?' + urlencode({'kind': 'revision', 'name': v1['revision']})) as response:
+                disposition = response.headers['Content-Disposition']
+                verify(disposition.startswith("attachment; filename*=UTF-8''") and
+                       unquote(disposition.split("''", 1)[1]) == filename and response.read() == content1,
+                       kind + ': Chinese download filename and original bytes round trip correctly')
             upload(sales, name, b'forbidden cross-parent', document=private_file['document'], expected=403)
             upload(sales, name, b'<script>not accepted</script>', filename='demo.html', expected=417)
             verify(len(detail(sales, name)['documents'][0]['versions']) == 2, kind + ': invalid file and cross-inquiry write roll back completely')
@@ -202,7 +208,7 @@ def main():
                 task_action(sales, name, task, 'confirm')
                 values = {k: detail(sales, name)[k] for k in FIELDS}; values['collaborator'] = ''
                 action(sales, 'update_inquiry', name, data=values)
-                verify(tech.request(info['file_url'])[0] == 403 and download(tech, 'revision', v1['revision'])[0] == 403 and
+                verify(tech.request(quote(info['file_url'], safe='/'))[0] == 403 and download(tech, 'revision', v1['revision'])[0] == 403 and
                        download(tech, 'export', exported['name'])[0] == 403 and
                        tech.json(resource('File') + '?' + urlencode({'filters': json.dumps({'name': info['name']})}))['data'] == [],
                        kind + ': revoking collaborator removes access to their own uploads and existing exports')

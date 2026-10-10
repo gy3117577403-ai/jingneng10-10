@@ -1,7 +1,7 @@
 name: ${COMPOSE_PROJECT_NAME:-jingneng-dev}
 
 x-app: &app
-  image: jingneng/foundation:jn-0004
+  image: jingneng/foundation:jn-0005
   build:
     context: .
     dockerfile: infra/Dockerfile

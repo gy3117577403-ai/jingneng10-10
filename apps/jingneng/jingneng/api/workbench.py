@@ -1,6 +1,9 @@
 """HTTP adapters; authorization and mutations live in the shared service."""
 import hashlib
 import json
+import mimetypes
+from urllib.parse import quote
+from werkzeug.wrappers import Response
 import frappe
 from jingneng.workbench import service as svc
 
@@ -13,11 +16,11 @@ def bootstrap():
     return {'user': frappe.session.user, 'full_name': frappe.db.get_value('User', frappe.session.user, 'full_name'),
             'can_create': svc.can_create(), 'people': people,
             'departments': frappe.get_list('JN Department', fields=['name', 'department_name'], order_by='name'),
-            'ai_mode': 'simulation', 'is_demo': True, 'version': '0.2.0'}
+            'ai_mode': 'simulation', 'is_demo': True, 'can_manage': svc.manager(), 'version': '0.3.0'}
 
 
 @frappe.whitelist(methods=['GET'])
-def inquiries(q='', business_type='', status='协作中', page=1):
+def inquiries(q='', business_type='', status='协作中', page=1, sort='updated', scope='all'):
     svc.require_user()
     q = svc.text(q, '搜索内容', 100)
     try:
@@ -25,6 +28,14 @@ def inquiries(q='', business_type='', status='协作中', page=1):
     except (ValueError, TypeError):
         frappe.throw('页码无效。')
     filters = {}
+    orders = {'updated': 'modified desc, name asc', 'delivery': 'expected_date asc, modified desc',
+              'name': 'title asc, name asc'}
+    if sort not in orders or scope not in ('all', 'mine', 'collaborating'):
+        frappe.throw('筛选或排序方式无效。')
+    if scope == 'mine':
+        filters['responsible'] = frappe.session.user
+    elif scope == 'collaborating':
+        filters['collaborator'] = frappe.session.user
     if business_type:
         if business_type not in ('成套', '钣金'):
             frappe.throw('业务类型无效。')
@@ -36,9 +47,57 @@ def inquiries(q='', business_type='', status='协作中', page=1):
     or_filters = {key: ['like', '%' + q + '%'] for key in ('title', 'customer_name', 'name')} if q else None
     args = dict(filters=filters, or_filters=or_filters)
     rows = frappe.get_list('JN Inquiry', **args, fields=['name', 'title', 'business_type', 'customer_name', 'responsible', 'collaborator', 'status', 'revision', 'expected_date', 'modified'],
-                           order_by='modified desc', start=(page - 1) * 20, page_length=20)
+                           order_by=orders[sort], start=(page - 1) * 20, page_length=20)
     counts = frappe.get_list('JN Inquiry', **args, fields=[{'COUNT': 'name', 'as': 'total'}], order_by='', page_length=1)
+    participants = list({row[field] for row in rows for field in ('responsible', 'collaborator') if row[field]})
+    names = dict(frappe.get_all('User', filters={'name': ['in', participants]}, fields=['name', 'full_name'], as_list=True)) if participants else {}
+    for row in rows:
+        row['responsible_name'] = names.get(row.responsible, row.responsible)
+        row['collaborator_name'] = names.get(row.collaborator, row.collaborator)
     return {'rows': rows, 'page': page, 'total': counts[0].total if counts else 0}
+
+
+@frappe.whitelist(methods=['GET'])
+def work_items(kind='all', page=1):
+    """Action inbox. Every row and count joins the same accessible inquiry root."""
+    svc.require_user()
+    if kind not in ('all', 'reply', 'confirm', 'ai', 'held'):
+        frappe.throw('待办类型无效。')
+    try:
+        page = max(1, min(int(page), 10000))
+    except (ValueError, TypeError):
+        frappe.throw('页码无效。')
+    params = {'user': frappe.session.user, 'manager': int(svc.manager()), 'limit': 30,
+              'offset': (page - 1) * 30, 'kind': kind}
+    access = '( %(manager)s = 1 OR i.responsible = %(user)s OR i.collaborator = %(user)s )'
+    owner = '( %(manager)s = 1 OR i.responsible = %(user)s )'
+    assignee = '( %(manager)s = 1 OR t.assigned_to = %(user)s )'
+    source = f"""
+        SELECT t.name, t.inquiry, t.title, t.status, t.modified,
+               i.title AS inquiry_title, i.customer_name, i.business_type,
+               CASE WHEN t.status = '待处理' THEN 'reply' WHEN t.status = '待确认' THEN 'confirm' ELSE 'held' END AS kind,
+               'task' AS target_type, 0 AS stale
+        FROM `tabJN Work Task` t JOIN `tabJN Inquiry` i ON i.name = t.inquiry
+        WHERE i.status = '协作中' AND {access} AND (
+            (t.status = '待处理' AND {assignee}) OR
+            (t.status = '待确认' AND {owner}) OR
+            (t.status = '已挂起' AND ({assignee} OR {owner})))
+        UNION ALL
+        SELECT r.name, r.inquiry, '核对资料候选' AS title, r.status, r.modified,
+               i.title AS inquiry_title, i.customer_name, i.business_type,
+               'ai' AS kind, 'ai' AS target_type, (r.inquiry_revision != i.revision) AS stale
+        FROM `tabJN AI Run` r JOIN `tabJN Inquiry` i ON i.name = r.inquiry
+        WHERE i.status = '协作中' AND {access} AND (
+            (r.status = '待审核' AND {owner}) OR
+            (r.status IN ('失败', '结果待核对') AND ({owner} OR r.requested_by = %(user)s)))
+    """
+    counts = dict.fromkeys(('reply', 'confirm', 'ai', 'held'), 0)
+    for row in frappe.db.sql(f'SELECT kind, COUNT(*) AS total FROM ({source}) work GROUP BY kind', params, as_dict=True):
+        counts[row.kind] = row.total
+    counts['all'] = sum(counts.values())
+    condition = '' if kind == 'all' else 'WHERE kind = %(kind)s'
+    rows = frappe.db.sql(f'SELECT * FROM ({source}) work {condition} ORDER BY modified DESC, name ASC LIMIT %(limit)s OFFSET %(offset)s', params, as_dict=True)
+    return {'rows': rows, 'counts': counts, 'total': counts[kind], 'page': page}
 
 
 @frappe.whitelist(methods=['GET'])
@@ -111,9 +170,10 @@ def authorized_file(kind, name):
 
 @frappe.whitelist(methods=['GET'])
 def download(kind, name):
-    _, file, content = authorized_file(kind, name)
-    frappe.local.response.update(type='download', filename=svc.safe_filename(file.file_name),
-                                 filecontent=content, display_content_as='attachment')
+    record, file, content = authorized_file(kind, name)
+    filename = svc.safe_filename(record.filename if kind == 'revision' else file.file_name)
+    return Response(content, mimetype=mimetypes.guess_type(filename)[0] or 'application/octet-stream',
+                    headers={'Content-Disposition': "attachment; filename*=UTF-8''" + quote(filename, safe='')})
 
 
 @frappe.whitelist(methods=['GET'])
