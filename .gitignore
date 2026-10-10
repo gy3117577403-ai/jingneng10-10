@@ -60,6 +60,12 @@ test-results/
 /.playwright-cli/
 /apps/jingneng/jingneng/public/workbench/
 
+# Public upstream test configuration and bundled browser assets (not runtime deps).
+!/apps/sem/.env.testing
+!/apps/sem/public/vendor/adminlte/dist/
+!/apps/sem/public/vendor/adminlte/dist/**
+!/apps/sem/tests/Fixtures/esignature/test-rsa-key.pem
+
 # Editor and OS state
 .idea/
 .DS_Store

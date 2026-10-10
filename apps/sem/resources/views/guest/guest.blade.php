@@ -1,0 +1,19 @@
+<!doctype html>
+<title>{{ __('Link error') }}</title>
+<style>
+    body { text-align: center; padding: 150px; }
+    h1 { font-size: 50px; }
+    body { font: 20px Helvetica, sans-serif; color: #333; }
+    article { display: block; text-align: left; width: 650px; margin: 0 auto; }
+    a { color: #dc8100; text-decoration: none; }
+    a:hover { color: #333; text-decoration: none; }
+</style>
+
+<article>
+    <img src="/{{ config('branding.logo_img') }}" alt="{{ config('branding.logo_alt') }}">
+    <h1>{{ __('Oops, wrong address') }}</h1>
+    <div>
+        <p>{{ __('Sorry for the inconvenience, it seems that the link you are trying seems incorrect. If you need to you can always go to') }} <a href="https://github.com/SMEWebify/WebErpMesv2">{{ __('GIT') }}</a> !</p>
+        <p>&mdash; The Team</p>
+    </div>
+</article>

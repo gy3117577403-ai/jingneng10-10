@@ -1,0 +1,53 @@
+<?php
+
+namespace Database\Seeders;
+
+
+use Illuminate\Database\Seeder;
+use Spatie\Permission\Models\Permission;
+
+class PermissionTableSeeder  extends Seeder
+{
+    /**
+     * Run the database seeds.
+     *
+     * @return void
+     */
+    public function run()
+    {
+        $permissions = [
+                        'companies-menu',
+                        'leads-menu',
+                        'opportunities-menu',
+                        'quotes-menu',
+                        'orders-menu',
+                        'order-confirmations-menu',
+                        'scheduling-menu',
+                        'deliverys-menu',
+                        'invoices-menu',
+                        'products-menu',
+                        'stock-lot-serial-management',
+                        'purchases-menu',
+                        'quality-menu',
+                        'settings-time-menu',
+                        'methods-menu',
+                        'accounting-menu',
+                        'human-resources-menu',
+                        'documents-menu',
+                        'reports-menu',
+                        'spreadsheet-menu',
+                        'osh-menu',
+                        'your-company-menu',
+                        'asset_manager',
+                        'asset-menu',
+                        'audit-menu',
+                        'returns-menu',
+                        ];
+    
+                        foreach ($permissions as $permission) {
+                            if (!Permission::where('name', $permission)->exists()) {
+                                Permission::create(['name' => $permission]);
+                            }
+                        }
+    }
+}

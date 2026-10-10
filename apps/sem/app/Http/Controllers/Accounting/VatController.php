@@ -1,0 +1,46 @@
+<?php
+
+namespace App\Http\Controllers\Accounting;
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use App\Models\Accounting\AccountingVat;
+use App\Http\Requests\Accounting\StoreVatRequest;
+use App\Http\Requests\Accounting\UpdateVatRequest;
+
+class VatController extends Controller
+{
+    /**
+     * Store a newly created VAT type in storage.
+     *
+     * @param \App\Http\Requests\Accounting\StoreVatRequest $request
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function store(StoreVatRequest $request)
+    {
+        $vat = AccountingVat::create($request->validated());
+        Cache::forget('select_data_vat_v2');
+        return redirect()->to(route('accounting.vats'))
+                        ->with('success', __('Successfully created VAT type.'));
+    }
+
+    /**
+     * Update the specified VAT type in storage.
+     *
+     * @param \App\Http\Requests\Accounting\UpdateVatRequest $request
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function update(UpdateVatRequest $request)
+    { 
+        $vat = AccountingVat::findOrFail($request->id);
+        $vat->update($request->validated());
+
+        // Set other VATs to non-default if this one is marked default
+        if ($request->default) {
+            AccountingVat::where('id', '!=', $vat->id)->update(['default' => 0]);
+        }
+        Cache::forget('select_data_vat_v2');
+        return redirect()->to(route('accounting.vats'))
+                        ->with('success', __('Successfully updated VAT type.'));
+    }
+}

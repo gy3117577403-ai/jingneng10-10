@@ -1,0 +1,99 @@
+name: ${SEM_PROJECT:-jingneng-sem}
+
+x-app: &app
+  image: jingneng/sem:jn-0007
+  platform: linux/amd64
+  build:
+    context: .
+    dockerfile: infra/sem/Dockerfile
+    args:
+      DEBIAN_MIRROR: ${SEM_DEBIAN_MIRROR:-https://deb.debian.org}
+      NPM_REGISTRY: ${SEM_NPM_REGISTRY:-https://registry.npmjs.org}
+      COMPOSER_HTTP1: ${SEM_COMPOSER_HTTP1:-0}
+  restart: unless-stopped
+  env_file: .local/sem/runtime.env
+  environment:
+    APP_URL: ${SEM_APP_URL:-http://127.0.0.1:8090}
+  volumes:
+    - sem-storage:/app/storage
+
+services:
+  db:
+    image: ${SEM_DB_IMAGE:-mariadb:11.8.9@sha256:6422478cb8e159f080fb1d8ccf65101e26fe51385787fde7d16c3b165a331f15}
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${SEM_DB_ROOT_PASSWORD:?Run python scripts/sem.py init-env}
+      MARIADB_DATABASE: sem
+      MARIADB_USER: sem
+      MARIADB_PASSWORD: ${SEM_DB_PASSWORD:?Run python scripts/sem.py init-env}
+      TZ: Asia/Shanghai
+    command: [--character-set-server=utf8mb4, --collation-server=utf8mb4_unicode_ci]
+    volumes:
+      - sem-db:/var/lib/mysql
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      interval: 5s
+      timeout: 5s
+      start_period: 30s
+      retries: 30
+  redis:
+    image: ${SEM_REDIS_IMAGE:-redis:7.4.11-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499}
+    restart: unless-stopped
+    command: [redis-server, --appendonly, 'yes']
+    volumes:
+      - sem-redis:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  init:
+    <<: *app
+    restart: 'no'
+    command: [sh, -c, 'php artisan migrate --force && php artisan db:seed --class=JingnengDemoSeeder --force']
+    depends_on:
+      db: {condition: service_healthy}
+      redis: {condition: service_healthy}
+  app:
+    <<: *app
+    depends_on:
+      init: {condition: service_completed_successfully}
+    healthcheck:
+      test: [CMD, php, /opt/jingneng-sem/health.php]
+      interval: 15s
+      timeout: 10s
+      start_period: 20s
+      retries: 15
+  web:
+    <<: *app
+    command: [nginx, -g, 'daemon off;']
+    ports:
+      - '127.0.0.1:${SEM_HTTP_PORT:-8090}:8080'
+    depends_on:
+      app: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, --output, /dev/null, http://localhost:8080/login]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+  worker:
+    <<: *app
+    command: [php, artisan, 'queue:work', redis, '--tries=3', '--timeout=120', '--sleep=2', '--max-time=3600']
+    depends_on:
+      init: {condition: service_completed_successfully}
+  scheduler:
+    <<: *app
+    command: [php, artisan, 'schedule:work']
+    depends_on:
+      init: {condition: service_completed_successfully}
+
+volumes:
+  sem-db:
+  sem-storage:
+  sem-redis:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${SEM_SUBNET:-10.250.20.0/24}
