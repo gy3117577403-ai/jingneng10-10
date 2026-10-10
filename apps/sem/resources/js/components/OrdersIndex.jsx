@@ -1,3 +1,4 @@
+import { readListContext, saveListContext, useListScroll } from '../ui/listContext';
 import { translateUiText, uiCurrency, uiLocale } from '../lib/i18n.js';
 import React, { useState, useEffect, useRef, useCallback } from 'react'; // useRef used by ListTab debounce
 import { DataTable, Pagination, StatusBadge, StatusFilter, MobileFilters, useIndexTab } from './table';
@@ -815,40 +816,27 @@ function CreateModal({ endpoints, trans, onClose }) {
 // ---------------------------------------------------------------------------
 
 function ListTab({ endpoints, trans, currency, locale, companieId }) {
+    const scope = `OrdersIndex.${companieId || 'all'}`;
+    const saved = readListContext(scope);
     const [orders, setOrders]       = useState([]);
     const [meta, setMeta]           = useState(null);
     const [loading, setLoading]     = useState(false);
-    const [search, setSearch]       = useState('');
-    const [statuses, setStatuses]   = useState([1, 2]);
-    const [sortField, setSortField] = useState('created_at');
-    const [sortAsc, setSortAsc]     = useState(false);
-    const [page, setPage]           = useState(1);
-    const [viewType, setViewType]   = useState('table');
+    const [search, setSearch]       = useState(saved?.search ?? '');
+    const [statuses, setStatuses]   = useState(saved?.statuses ?? [1, 2]);
+    const [sortField, setSortField] = useState(saved?.sortField ?? 'created_at');
+    const [sortAsc, setSortAsc]     = useState(saved?.sortAsc ?? false);
+    const [page, setPage]           = useState(saved?.page ?? 1);
+    const [viewType, setViewType]   = useState(saved?.viewType ?? 'table');
+    const [listError,setListError] = useState('');
+    const sequence = useRef(0);
+    useListScroll(scope, !!meta && !loading);
     const [showModal, setShowModal] = useState(false);
     const debounceRef = useRef(null);
 
-    // Restore filters from localStorage
-    useEffect(() => {
-        try {
-            const saved = localStorage.getItem(LS_FILTERS);
-            if (saved) {
-                const f = JSON.parse(saved);
-                if (f.search    !== undefined) setSearch(f.search);
-                if (f.statuses  !== undefined) setStatuses(f.statuses);
-                if (f.sortField !== undefined) setSortField(f.sortField);
-                if (f.sortAsc   !== undefined) setSortAsc(f.sortAsc);
-                if (f.viewType  !== undefined) setViewType(f.viewType);
-            }
-        } catch {}
-    }, []);
-
-    // Persist filters
-    useEffect(() => {
-        localStorage.setItem(LS_FILTERS, JSON.stringify({ search, statuses, sortField, sortAsc, viewType }));
-    }, [search, statuses, sortField, sortAsc, viewType]);
+    useEffect(() => {saveListContext(scope,{search,statuses,sortField,sortAsc,viewType,page});},[scope,search,statuses,sortField,sortAsc,viewType,page]);
 
     const fetchOrders = useCallback(async (overrides = {}) => {
-        setLoading(true);
+        setLoading(true); setListError(''); const seq=++sequence.current;
         const p  = overrides.page      ?? page;
         const q  = overrides.search    ?? search;
         const s  = overrides.statuses  ?? statuses;
@@ -861,16 +849,15 @@ function ListTab({ endpoints, trans, currency, locale, companieId }) {
 
         try {
             const data = await apiFetch(`${endpoints.list}?${params}`);
-            setOrders(data.data ?? []);
-            setMeta(data.meta ?? null);
-        } catch {}
-        finally { setLoading(false); }
+            if(seq===sequence.current){setOrders(data.data ?? []);setMeta(data.meta ?? null);}
+        } catch {if(seq===sequence.current)setListError('列表读取失败，当前筛选已保留。');}
+        finally {if(seq===sequence.current)setLoading(false);}
     }, [endpoints.list, page, search, statuses, sortField, sortAsc, companieId]);
 
     useEffect(() => {
-        if (debounceRef.current) clearTimeout(debounceRef.current);
+        sequence.current++;if (debounceRef.current) clearTimeout(debounceRef.current);
         debounceRef.current = setTimeout(() => fetchOrders(), 200);
-        return () => clearTimeout(debounceRef.current);
+        return () => {sequence.current++;clearTimeout(debounceRef.current);};
     }, [fetchOrders]);
 
     const handleSort = field => {
@@ -895,6 +882,8 @@ function ListTab({ endpoints, trans, currency, locale, companieId }) {
 
     return (
         <div>
+            <p className="jn-search-scope">搜索全部订单的名称、编号或客户；结果遵循当前状态筛选。</p>
+            {listError&&<div className="jn-list-feedback" role="alert">{listError}<button className="btn btn-sm btn-outline-primary" onClick={()=>fetchOrders()}>重新读取</button></div>}
             {/* Toolbar — all controls on one line */}
             <div className="d-flex flex-wrap align-items-center mb-2" style={{ gap: '0.5rem' }}>
                 {/* Search */}

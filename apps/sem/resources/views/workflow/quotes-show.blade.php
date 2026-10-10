@@ -20,7 +20,7 @@ $arrowSteps = json_encode([
     <x-document-header h1="{{ __('general_content.quote_template_trans_key') }} : {{ $Quote->label }}"
                        list="{{ route('quotes', ['tab' => 'templates']) }}"/>
     @else
-    <x-document-header h1="{{ __('general_content.quote_trans_key') }} : {{  $Quote->code }}"
+    <x-document-header h1="{{ __('general_content.quote_trans_key') }} : {{ $Quote->label }}"
                        previous="{{ $previousUrl }}" list="{{ route('quotes') }}" next="{{ $nextUrl }}"
                        :steps="$arrowSteps" statu="{{ $Quote->statu }}"
                        endpoint="{{ route('quotes.json.statu', $Quote->id) }}"
@@ -31,6 +31,7 @@ $arrowSteps = json_encode([
 @section('right-sidebar')
 
 @section('content')
+@include('presales.quote-source', ['quoteId' => $Quote->id])
 
 <script src="{{ asset('vendor/jquery/jquery.min.js') }}"></script>
 
@@ -57,7 +58,7 @@ $arrowSteps = json_encode([
 
 <div class="card">
   <div class="card-header p-2">
-    <ul class="nav nav-pills"  id="DocumentTabs">
+    <ul class="nav nav-pills"  id="DocumentTabs" data-jn-sales-tabs="#Quote #Lines #Documents">
       <li class="nav-item"><a class="nav-link " href="#Quote" data-toggle="tab">{{ __('general_content.quote_info_trans_key') }}</a></li>
       <li class="nav-item"><a class="nav-link" href="#Lines" data-toggle="tab">{{ __('general_content.quote_line_trans_key') }} ({{ $Quote->QuoteLines->filter->isArticle()->count() }})</a></li>
       @if($Factory->enable_construction_site)
@@ -81,7 +82,9 @@ $arrowSteps = json_encode([
         <div class="row">
           <div class="col-md-9">
             @include('include.alert-result')
-            <form method="POST" action="{{ route('quotes.update', ['id' => $Quote->id]) }}" enctype="multipart/form-data" data-jn-edit-form>
+            <form method="POST" action="{{ route('quotes.update', ['id' => $Quote->id]) }}" enctype="multipart/form-data" data-jn-edit-form data-jn-continuity-form data-jn-revision="{{ hash('sha256', json_encode($Quote->getAttributes())) }}" class="jn-continuity-form">
+              <input type="hidden" name="_jn_revision" value="{{ hash('sha256', json_encode($Quote->getAttributes())) }}">
+
               <x-adminlte-card title="{{ __('general_content.informations_trans_key') }}" theme="teal" theme-mode="outline" maximizable>
                 @csrf 
                 <div class="row">
@@ -633,14 +636,14 @@ $arrowSteps = json_encode([
                     <tr>
                       <td>{{ optional($entry['created_at'])->format('d/m/Y H:i') }}</td>
                       <td>{{ $entry['causer'] ?? __('general_content.undefined_trans_key') }}</td>
-                      <td>{{ $entry['description'] }}</td>
+                      <td>{{ __($entry['description']) }}</td>
                       <td>
                         <table class="table table-sm mb-0">
                           <thead>
                             <tr>
                               <th>{{ __('general_content.label_trans_key') }}</th>
-                              <th>{{ __('general_content.previous_trans_key') }}</th>
-                              <th>{{ __('general_content.new_trans_key') }}</th>
+                              <th>修改前</th>
+                              <th>修改后</th>
                             </tr>
                           </thead>
                           <tbody>

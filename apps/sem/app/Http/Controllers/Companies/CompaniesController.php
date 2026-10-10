@@ -352,15 +352,23 @@ class CompaniesController extends Controller
             }
         }
 
-        $company->update($request->validated());
-        $company->active               = $request->boolean('active');
-        $company->quoted_delivery_note = $request->boolean('quoted_delivery_note');
-        $company->order_status_email   = $request->boolean('order_status_email');
-        $company->save();
+        $company = \Illuminate\Support\Facades\DB::transaction(function () use ($request, $company) {
+            $record = Companies::whereKey($company->id)->lockForUpdate()->firstOrFail();
+            if ($request->filled('_jn_revision')) {
+                abort_unless(hash_equals(hash('sha256', json_encode($record->getAttributes())), (string) $request->input('_jn_revision')), 409, '客户档案已更新，输入已保留，请核对最新档案后再保存。');
+            }
+            $record->fill($request->validated());
+            $record->active = $request->boolean('active');
+            $record->quoted_delivery_note = $request->boolean('quoted_delivery_note');
+            $record->order_status_email = $request->boolean('order_status_email');
+            $record->save();
+            return $record->fresh();
+        });
 
         return response()->json([
             'success' => true,
             'warning' => $vatWarning,
+            'revision' => hash('sha256', json_encode($company->getAttributes())),
         ]);
     }
 

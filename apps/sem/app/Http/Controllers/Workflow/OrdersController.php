@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Workflow;
 
+use Illuminate\Support\Facades\DB;
+
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Number;
@@ -252,8 +254,12 @@ class OrdersController extends Controller
      */
     public function update(UpdateOrderRequest $request)
     {
+        $order = DB::transaction(function () use ($request) {
         // Retrieve the order
-        $order = Orders::findOrFail($request->id);
+        $order = Orders::whereKey($request->id)->lockForUpdate()->firstOrFail();
+        if ($request->filled('_jn_revision')) {
+            abort_unless(hash_equals(hash('sha256', json_encode($order->getAttributes())), (string) $request->input('_jn_revision')), 409, '订单已更新，请核对最新记录后再保存。');
+        }
 
         $previousDecision = $order->review_decision;
 
@@ -284,6 +290,9 @@ class OrdersController extends Controller
             Cache::forget(CalculateTaskDates::cacheKeyForOrder($order->id));
             CalculateTaskDates::dispatchAfterResponse($order->id);
         }
+
+        return $order;
+        });
 
         // Redirect with success message
         return redirect()->route('orders.show', ['id' => $order->id])->with('success', __('Successfully updated Order'));
@@ -322,7 +331,7 @@ class OrdersController extends Controller
         $query = Orders::withCount(['OrderLines' => fn ($q) => $q->articles()])
             ->selectRaw("orders.*, {$totalSub} as total_amount")
             ->with(['companie:id,label,code', 'contact:id,first_name,name'])
-            ->when($search, fn ($q) => $q->where('label', 'like', '%'.$search.'%'))
+            ->when($search, fn ($q) => $q->where(fn ($match) => $match->where('orders.label', 'like', '%'.$search.'%')->orWhere('orders.code', 'like', '%'.$search.'%')->orWhereHas('companie', fn ($c) => $c->where('label', 'like', '%'.$search.'%'))))
             ->when($statuses, fn ($q) => $q->whereIn('statu', $statuses))
             ->when($companyId, fn ($q) => $q->where('companies_id', $companyId));
 

@@ -58,7 +58,7 @@ export default function CompanyDashboard({ kpi, charts, trans, fiscalYearStartMo
                 <SmallBox value={kpi.customerProcessingCost} label={trans.customer_processing_cost} icon="fa-cogs"          theme="teal" />
                 <SmallBox value={`${kpi.serviceRate ?? 0}%`} label={trans.service_rate}             icon="fa-chart-line"    theme="primary" />
                 <InvoicesCard paid={kpi.paidInvoices} unpaid={kpi.unpaidInvoices} trans={trans} />
-                <SmallBox value="Since" label={kpi.since}                                           icon="fa-calendar-alt"  theme="warning" />
+                <SmallBox value={kpi.since} label="建档日期"                                         icon="fa-calendar-alt"  theme="warning" />
             </div>
 
             {/* Charts */}

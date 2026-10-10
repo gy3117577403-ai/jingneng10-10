@@ -3,10 +3,15 @@
 namespace App\Services\Presales;
 
 /** A deterministic offline adapter. Source documents never become instructions. */
-class SimulatedExtractor
+class SimulatedExtractor implements ExtractionProvider
 {
     public const VERSION = 'fixed-labels-v1';
     public const FIELDS = ['customer_name' => '客户名称', 'expected_date' => '期望交期', 'requirements' => '需求说明'];
+
+    public function identity(): array
+    {
+        return ['provider' => 'simulation', 'version' => self::VERSION, 'mode' => 'simulation', 'label' => '本机模拟提取'];
+    }
 
     public static function validValue(string $field, mixed $value): bool
     {
@@ -37,6 +42,6 @@ class SimulatedExtractor
             if (!self::validValue($field, $value)) { $questions[] = $label . '格式或长度不符合要求，请核对原文。'; continue; }
             $candidates[$field] = ['value' => $value, 'sources' => array_map(fn ($h) => array_diff_key($h, ['value' => true]), $hits)];
         }
-        return ['mode' => 'simulation', 'adapter' => self::VERSION, 'candidates' => $candidates, 'questions' => $questions];
+        return ['mode' => 'simulation', 'adapter' => self::VERSION, 'candidates' => $candidates, 'questions' => $questions, 'usage' => ['input_tokens' => 0, 'output_tokens' => 0]];
     }
 }

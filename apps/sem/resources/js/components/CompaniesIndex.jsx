@@ -1,3 +1,4 @@
+import { readListContext, saveListContext, useListScroll } from '../ui/listContext';
 import { translateUiText, uiLocale } from '../lib/i18n.js';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { DataTable, Pagination, MobileFilters, useIndexTab } from './table';
@@ -481,24 +482,14 @@ function CreateModal({ show, onClose, endpoints, trans }) {
 
 const LS_KEY = 'companies_list_filters';
 
-function loadFilters() {
-    try {
-        const raw = localStorage.getItem(LS_KEY);
-        if (!raw) return null;
-        return JSON.parse(raw);
-    } catch { return null; }
-}
-
-function saveFilters(filters) {
-    try { localStorage.setItem(LS_KEY, JSON.stringify(filters)); } catch {}
-}
 
 // ---------------------------------------------------------------------------
 // List Tab
 // ---------------------------------------------------------------------------
 
 function ListTab({ endpoints, trans }) {
-    const saved = loadFilters();
+    const scope = 'CompaniesIndex';
+    const saved = readListContext(scope);
 
     const [companies,  setCompanies]  = useState([]);
     const [meta,       setMeta]       = useState(null);
@@ -507,13 +498,15 @@ function ListTab({ endpoints, trans }) {
     const [status,     setStatus]     = useState(saved?.status     ?? 'all');
     const [sortField,  setSortField]  = useState(saved?.sortField  ?? 'created_at');
     const [sortAsc,    setSortAsc]    = useState(saved?.sortAsc    ?? false);
-    const [page,       setPage]       = useState(1);
+    const [page,       setPage]       = useState(saved?.page ?? 1);
+    const [listError,setListError] = useState('');
+    const sequence = useRef(0);
+    useListScroll(scope, !!meta && !loading);
     const [showModal,  setShowModal]  = useState(false);
 
-    const searchTimeout = useRef(null);
 
     const fetchCompanies = useCallback((opts = {}) => {
-        setLoading(true);
+        setLoading(true); setListError(''); const seq=++sequence.current;
         const params = new URLSearchParams({
             search: opts.search  ?? search,
             status: opts.status  ?? status,
@@ -522,24 +515,18 @@ function ListTab({ endpoints, trans }) {
             page:   opts.page    ?? page,
         });
         apiFetch(`${endpoints.list}?${params}`)
-            .then(data => { setCompanies(data.data); setMeta(data.meta); })
-            .finally(() => setLoading(false));
+            .then(data => {if(seq===sequence.current){setCompanies(data.data);setMeta(data.meta);}})
+            .catch(()=>{if(seq===sequence.current)setListError('列表读取失败，当前筛选已保留。');})
+            .finally(() => {if(seq===sequence.current)setLoading(false);});
     }, [search, status, sortField, sortAsc, page, endpoints.list]);
 
-    useEffect(() => { fetchCompanies(); }, [sortField, sortAsc, page, status]);
+    useEffect(() => {sequence.current++;const timer=setTimeout(()=>fetchCompanies(),200);return()=>{clearTimeout(timer);sequence.current++;};},[fetchCompanies]);
 
-    const handleSearch = (val) => {
-        setSearch(val);
-        clearTimeout(searchTimeout.current);
-        searchTimeout.current = setTimeout(() => {
-            setPage(1);
-            fetchCompanies({ search: val, page: 1 });
-        }, 400);
-    };
+    const handleSearch = val => {setSearch(val);setPage(1);};
 
     useEffect(() => {
-        saveFilters({ search, status, sortField, sortAsc });
-    }, [search, status, sortField, sortAsc]);
+        saveListContext(scope,{ search, status, sortField, sortAsc, page });
+    }, [search, status, sortField, sortAsc, page]);
 
     const handleSort = (field) => {
         const asc = field === sortField ? !sortAsc : true;
@@ -554,6 +541,8 @@ function ListTab({ endpoints, trans }) {
 
     return (
         <div>
+            <p className="jn-search-scope">搜索全部客户档案；结果遵循当前类型筛选。</p>
+            {listError&&<div className="jn-list-feedback" role="alert">{listError}<button className="btn btn-sm btn-outline-primary" onClick={()=>fetchCompanies()}>重新读取</button></div>}
             {/* Toolbar */}
             <div className="d-flex flex-wrap align-items-center mb-2" style={{ gap: '0.5rem' }}>
                 <div className="input-group input-group-sm flex-shrink-0" style={{ width: 200 }}>
@@ -586,7 +575,7 @@ function ListTab({ endpoints, trans }) {
                 trans={trans}
             />
 
-            <Pagination meta={meta} ulClassName="pagination pagination-sm justify-content-end" onPage={p => { setPage(p); fetchCompanies({ page: p }); }} />
+            <Pagination meta={meta} ulClassName="pagination pagination-sm justify-content-end" onPage={setPage} />
 
             <CreateModal
                 show={showModal}
