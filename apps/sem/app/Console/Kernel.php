@@ -26,6 +26,7 @@ class Kernel extends ConsoleKernel
     protected function schedule(Schedule $schedule)
     {
         $schedule->command('jingneng:recover-presales')->everyMinute()->withoutOverlapping();
+        $schedule->command('jingneng:recover-documents')->everyMinute()->withoutOverlapping();
         // pulse:check is a daemon by default. Scheduling it each minute leaks
         // processes/connections and blocks every task later in this schedule.
         if (config('pulse.enabled')) {

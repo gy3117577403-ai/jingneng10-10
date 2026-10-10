@@ -7,6 +7,7 @@ Route::middleware(['auth', 'verified', 'has.role', 'check.factory'])->prefix('co
         Route::get('/', [C::class, 'index'])->name('index');
         Route::get('/records/{id}', [C::class, 'detail'])->whereNumber('id');
         Route::get('/configuration', [C::class, 'configuration']);
+        Route::get('/search', [C::class, 'search'])->middleware('throttle:90,1');
         Route::get('/collaboration', [C::class, 'collaboration']);
         Route::get('/imports', [C::class, 'imports']);
         Route::get('/imports/{id}', [C::class, 'batch'])->whereNumber('id');
@@ -17,6 +18,7 @@ Route::middleware(['auth', 'verified', 'has.role', 'check.factory'])->prefix('co
             Route::post('/records/{id}/{action}', [C::class, 'record'])->whereIn('action', ['create', 'save', 'submit', 'approve', 'reject', 'withdraw', 'archive', 'restore'])->whereNumber('id');
             Route::post('/collaboration/{id}/{action}', [C::class, 'collaborate'])->whereIn('action', ['comment', 'task', 'request', 'task-action', 'access-action'])->whereNumber('id');
             Route::post('/records/{id}/files', [C::class, 'upload'])->whereNumber('id');
+            Route::post('/records/{id}/versions/{version}/files/{file}/retry', [C::class, 'retryDocument'])->whereNumber(['id', 'version', 'file']);
             Route::post('/imports/stage/{id}', [C::class, 'stage'])->whereNumber('id');
             Route::post('/imports/{id}', [C::class, 'importAction'])->whereNumber('id');
         });

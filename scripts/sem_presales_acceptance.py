@@ -11,7 +11,7 @@ import uuid
 from sem_acceptance import Client
 from sem import ROOT
 
-OUT = ROOT / '.local' / 'acceptance' / 'jn-0013'
+OUT = ROOT / '.local' / 'acceptance' / 'jn-0014'
 
 
 class PresalesClient(Client):
