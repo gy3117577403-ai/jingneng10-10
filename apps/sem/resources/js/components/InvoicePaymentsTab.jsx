@@ -1,3 +1,4 @@
+import { confirmAction } from '../ui/confirmAction';
 import { translateUiText, uiLocale } from '../lib/i18n.js';
 import React, { useEffect, useState } from 'react';
 
@@ -88,7 +89,7 @@ export default function InvoicePaymentsTab({ endpoints, paymentMethods, invoiceI
     }
 
     async function handleDelete(paymentId) {
-        if (!confirm(translateUiText("Supprimer ce règlement ?"))) return;
+        if (!await confirmAction(translateUiText("Supprimer ce règlement ?"))) return;
         const url = endpoints.destroy.replace('__payment__', paymentId);
         try {
             await fetch(url, {

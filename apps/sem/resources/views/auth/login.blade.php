@@ -18,7 +18,7 @@
     @php( $password_reset_url = $password_reset_url ? url($password_reset_url) : '' )
 @endif
 
-@section('auth_header', __('adminlte::adminlte.login_message'))
+@section('auth_header', '登录工作台')
 
 @section('auth_body')
     <form action="{{ route('login.store') }}" method="post">
@@ -83,7 +83,7 @@
         {{-- Mode field --}}
         @if(config('auth.login_mode_selector_enabled'))
             <div class="input-group mb-3">
-                <select name="modeView" id="modeView" class="form-control">
+                <select name="modeView" id="modeView" class="form-control" aria-label="登录后的工作界面">
                     <option value="desktop">{{ __('Desktop') }}</option>
                     <option value="workshop">{{ __('Workshop (Beta)') }}</option>
                 </select>
@@ -138,7 +138,4 @@
             </a>
         </p>
     @endif
-
-
-    <p class="my-2 text-muted">{{ __('v1.19') }}</p>
 @stop

@@ -1,3 +1,4 @@
+import { confirmAction } from '../ui/confirmAction';
 import { translateUiText, uiLocale } from '../lib/i18n.js';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { formatQty } from '../utils';
@@ -1148,7 +1149,7 @@ export default function TaskManagePage({ context, endpoints }) {
     }, []);
 
     const handleTaskDelete = useCallback(async (id) => {
-        if (!window.confirm(translateUiText("Supprimer cette tâche ?"))) return;
+        if (!await confirmAction(translateUiText("Supprimer cette tâche ?"))) return;
         await apiFetch(endpoints.task_destroy.replace('__ID__', id), { method: 'DELETE' });
         setTechCutTasks(prev => prev.filter(t => t.id !== id));
         setBomTasks(prev => prev.filter(t => t.id !== id));
@@ -1171,7 +1172,7 @@ export default function TaskManagePage({ context, endpoints }) {
     }, []);
 
     const handleSubAssemblyDelete = useCallback(async (id) => {
-        if (!window.confirm(translateUiText("Supprimer ce sous-ensemble ?"))) return;
+        if (!await confirmAction(translateUiText("Supprimer ce sous-ensemble ?"))) return;
         await apiFetch(endpoints.subassembly_destroy.replace('__ID__', id), { method: 'DELETE' });
         setSubAssemblies(prev => prev.filter(s => s.id !== id));
     }, [endpoints]);
@@ -1185,7 +1186,7 @@ export default function TaskManagePage({ context, endpoints }) {
     // ── Apply nomenclature ──────────────────────────────────────────────────
 
     const handleApplyNomenclature = useCallback(async (tplId) => {
-        if (!window.confirm(translateUiText("Ajouter toutes les opérations de ce modèle à la gamme ?"))) return;
+        if (!await confirmAction(translateUiText("Ajouter toutes les opérations de ce modèle à la gamme ?"))) return;
         setNomenclatureLoading(true);
         const url = endpoints.apply_nomenclature.replace('__TPL_ID__', tplId);
         const res  = await apiFetch(url, { method: 'POST' });

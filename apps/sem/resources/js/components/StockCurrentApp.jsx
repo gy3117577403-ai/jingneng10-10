@@ -1,3 +1,4 @@
+import { confirmAction } from '../ui/confirmAction';
 import { translateUiText } from '../lib/i18n.js';
 import React, { useState } from 'react';
 
@@ -50,7 +51,7 @@ function ProductRow({ product, storeOrderUrl }) {
     const [error, setError]       = useState(null);
 
     async function handleCreateOrder() {
-        if (!confirm(translateUiText("Créer une commande interne pour \":v0\" (qté : :v1) ?", { v0: (product.label), v1: (product.qty_need) }))) return;
+        if (!await confirmAction(translateUiText("Créer une commande interne pour \":v0\" (qté : :v1) ?", { v0: (product.label), v1: (product.qty_need) }))) return;
         setOrdering(true);
         setError(null);
         try {

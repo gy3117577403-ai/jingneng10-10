@@ -8,7 +8,7 @@
 
 @section('content')
 
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<script src="{{ asset('vendor/jquery/jquery.min.js') }}"></script>
 
 
 <div class="row">
@@ -469,10 +469,10 @@
                       <button type="button" class="btn btn-xs btn-outline-primary" data-toggle="modal" data-target="#customerPriceListEdit{{ $priceList->id }}">
                         <i class="fas fa-edit"></i>
                       </button>
-                      <form method="POST" action="{{ route('products.customer-price-list.destroy', ['product' => $Product->id, 'priceList' => $priceList->id]) }}" class="d-inline">
+                      <form method="POST" action="{{ route('products.customer-price-list.destroy', ['product' => $Product->id, 'priceList' => $priceList->id]) }}" class="d-inline" data-jn-confirm="确认删除此客户价格？">
                         @csrf
                         @method('DELETE')
-                        <button type="submit" class="btn btn-xs btn-outline-danger" onclick="return confirm('{{ __('general_content.delete_trans_key') }} ?');">
+                        <button type="submit" class="btn btn-xs btn-outline-danger" aria-label="删除客户价格">
                           <i class="fas fa-trash"></i>
                         </button>
                       </form>

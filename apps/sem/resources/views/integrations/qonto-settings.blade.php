@@ -45,7 +45,7 @@
             <div class="d-flex gap-2">
                 @if($connection)
                     <form method="POST" action="{{ route('admin.integrations.qonto.disconnect') }}"
-                          onsubmit="return confirm('Déconnecter Qonto ?')">
+                          data-jn-confirm="确认断开 Qonto 连接？">
                         @csrf
                         <button type="submit" class="btn btn-sm btn-outline-danger">
                             <i class="fas fa-unlink mr-1"></i>{{ __('Déconnecter') }}

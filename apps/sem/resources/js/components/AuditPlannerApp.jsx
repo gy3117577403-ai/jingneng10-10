@@ -1,3 +1,4 @@
+import { confirmAction } from '../ui/confirmAction';
 import { translateUiText, uiLocale } from '../lib/i18n.js';
 import React, { useState, useEffect, useCallback } from 'react';
 
@@ -426,7 +427,7 @@ function PlansTab({ endpoints, canAdmin }) {
     }
 
     async function handleDelete(id) {
-        if (!confirm(translateUiText("Supprimer ce plan et toutes ses planifications ?"))) return;
+        if (!await confirmAction(translateUiText("Supprimer ce plan et toutes ses planifications ?"))) return;
         await apiFetch(`${endpoints.planBase}/${id}`, { method: 'DELETE' });
         setPlans(p => p.filter(pl => pl.id !== id));
     }
@@ -655,7 +656,7 @@ function CalendarTab({ endpoints, users, processes: initialProcesses, checklists
     }
 
     async function handleDelete(id) {
-        if (!confirm(translateUiText("Supprimer cette planification ?"))) return;
+        if (!await confirmAction(translateUiText("Supprimer cette planification ?"))) return;
         await apiFetch(`${endpoints.scheduleBase}/${id}`, { method: 'DELETE' });
         setSchedules(s => s.filter(x => x.id !== id));
     }
@@ -944,7 +945,7 @@ function ExecutionModal({ schedule, endpoints, onClose, onUpdated }) {
     }
 
     async function closeExecution() {
-        if (!confirm(translateUiText("Clôturer cet audit ? Cette action est irréversible."))) return;
+        if (!await confirmAction(translateUiText("Clôturer cet audit ? Cette action est irréversible."))) return;
         setSaving(true);
         try {
             await apiFetch(`${endpoints.executionBase}/${execution.id}`, { method: 'PUT', body: JSON.stringify(form) });
@@ -1383,7 +1384,7 @@ function ProcessesTab({ processes: initial, endpoints, users, canAdmin }) {
     }
 
     async function handleDelete(id) {
-        if (!confirm(translateUiText("Supprimer ce processus ?"))) return;
+        if (!await confirmAction(translateUiText("Supprimer ce processus ?"))) return;
         await apiFetch(`${endpoints.processBase}/${id}`, { method: 'DELETE' });
         setProcesses(p => p.filter(x => x.id !== id));
     }

@@ -72,13 +72,12 @@ class AppServiceProvider extends ServiceProvider
                 }
             }
             unset($item);
+            $menu = \App\Support\WorkspaceNavigation::build($menu);
             array_walk_recursive($menu, function (&$value, $key) {
                 if (in_array($key, ['text', 'header', 'label']) && is_string($value)) {
                     $value = __($value);
                 }
             });
-            // Keep every existing module reachable and put the daily workspace first.
-            array_unshift($menu, ['text' => '售前工作台', 'url' => 'presales', 'icon' => 'fas fa-inbox', 'active' => ['presales', 'presales/*', '*/presales', '*/presales/*']]);
             Config::set('adminlte.menu', $menu);
         }
 

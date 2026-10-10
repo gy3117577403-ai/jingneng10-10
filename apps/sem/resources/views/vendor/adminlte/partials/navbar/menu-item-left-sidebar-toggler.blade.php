@@ -17,6 +17,12 @@
     </a>
 </li>
 
+<li class="nav-item d-none d-lg-flex jn-command-nav">
+    <button type="button" class="jn-command-trigger" data-jn-command-open aria-label="快捷查找页面">
+        <i class="fas fa-search" aria-hidden="true"></i><span>快捷查找</span><kbd>Ctrl K</kbd>
+    </button>
+</li>
+
 @isset($adminlte)
     @php($wemLauncherCurrent = \App\Support\MobileLauncher::current(\App\Support\MobileLauncher::groups($adminlte->menu('sidebar'), request()->path())))
     <li class="nav-item d-lg-none">

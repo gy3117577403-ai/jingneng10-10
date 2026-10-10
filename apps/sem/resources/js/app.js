@@ -1280,12 +1280,11 @@ async function mountWorkshopReportsApp() {
 async function mountChatWidget() {
     // Le widget est global : il crée son propre container sur document.body
     // et s'affiche uniquement si l'utilisateur est authentifié (présence du meta csrf-token)
-    const hasCsrf = !!document.querySelector('meta[name="csrf-token"]');
-    if (!hasCsrf) return;
+    const configured = document.querySelector('meta[name="ai-assistant-configured"]')?.content === '1';
+    if (!configured) return;
 
     // Détecte le locale depuis l'URL (/fr/..., /en/...) — mcamara/laravel-localization
-    const localeMatch = window.location.pathname.match(/^\/([a-z]{2})\//);
-    const locale = localeMatch ? localeMatch[1] : 'fr';
+    const locale = document.documentElement.lang || 'zh-CN';
 
     // Lit les permissions depuis la meta tag injectée par le backend
     const permMeta = document.querySelector('meta[name="user-permissions"]');

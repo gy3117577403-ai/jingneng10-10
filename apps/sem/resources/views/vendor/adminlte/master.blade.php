@@ -16,6 +16,7 @@
     {{-- User permissions for JS components --}}
     @auth
     <meta name="user-permissions" content="{{ json_encode(auth()->user()->getAllPermissions()->pluck('name')->values()) }}">
+    <meta name="ai-assistant-configured" content="{{ filled(app(\App\Services\AI\AISettingsResolver::class)->active()['api_key'] ?? null) ? '1' : '0' }}">
     @endauth
 
     {{-- Title --}}
@@ -133,7 +134,7 @@
 
 </head>
 
-<body class="@yield('classes_body') {{ \App\Support\ThemeMode::bodyClass() }}" @yield('body_data')>
+<body class="jn-ui @yield('classes_body') {{ \App\Support\ThemeMode::bodyClass() }}" @yield('body_data')>
 
     {{-- Body Content --}}
     @yield('body')
@@ -141,6 +142,7 @@
     {{-- Lanceur d'applications mobile : pages adminlte::page uniquement --}}
     @if(isset($adminlte) && auth()->check())
         @include('include.mobile-app-launcher')
+        @include('include.workspace-tools')
     @endif
 
     {{-- Base Scripts (depends on Laravel asset bundling tool) --}}
@@ -179,6 +181,7 @@
 
     {{-- Custom Scripts --}}
     @yield('adminlte_js')
+    @vite('resources/js/workspace.js')
 
     {{-- Sidebar : suit le widget dark mode de la navbar, qui ne bascule que --}}
     {{-- la classe "dark-mode" du body et laisse la sidebar sur sa variante figée --}}

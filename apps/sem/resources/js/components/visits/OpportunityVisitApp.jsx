@@ -1,3 +1,4 @@
+import { confirmAction } from '../../ui/confirmAction';
 import { uiLocale } from '../../lib/i18n.js';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -575,7 +576,7 @@ export default function OpportunityVisitApp({ opportunity, visit: initialVisit, 
     };
 
     const draftReport = async () => {
-        if (fields.report.trim() && !window.confirm(t.report_overwrite_confirm)) return;
+        if (fields.report.trim() && !await confirmAction(t.report_overwrite_confirm)) return;
         setBusy('report');
         setMessage(null);
         if (!(await flush())) { setBusy(null); setMessage({ type: 'danger', text: t.save_failed }); return; }
@@ -591,7 +592,7 @@ export default function OpportunityVisitApp({ opportunity, visit: initialVisit, 
     };
 
     const validate = async () => {
-        if (!window.confirm(t.validate_confirm)) return;
+        if (!await confirmAction(t.validate_confirm)) return;
         setBusy('validate');
         setMessage(null);
         if (!(await flush())) { setBusy(null); setMessage({ type: 'danger', text: t.save_failed }); return; }
@@ -605,7 +606,7 @@ export default function OpportunityVisitApp({ opportunity, visit: initialVisit, 
     };
 
     const discard = async () => {
-        if (!window.confirm(t.delete_confirm)) return;
+        if (!await confirmAction(t.delete_confirm)) return;
         setBusy('delete');
         clearTimeout(timerRef.current);
         dirtyRef.current = {};

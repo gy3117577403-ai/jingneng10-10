@@ -373,7 +373,7 @@ BASH;
             <div class="d-flex gap-2 align-items-center flex-wrap">
                 <form method="POST" action="{{ route('admin.integrations.endpoints.regenerate', $endpoint) }}"
                       class="d-inline mr-2"
-                      onsubmit="return confirm('Régénérer les secrets ? Le partenaire devra être reconfiguré.');">
+                      data-jn-confirm="确认重新生成密钥？合作方需要重新配置连接。">
                     @csrf
                     <button type="submit" class="btn btn-outline-warning btn-sm">
                         <i class="fas fa-sync-alt"></i> {{ __('Régénérer les secrets') }}
@@ -405,7 +405,7 @@ BASH;
             </p>
             <form method="POST" action="{{ route('admin.integrations.endpoints.resync-sheets', $endpoint) }}"
                   class="form-inline"
-                  onsubmit="return confirm('Lancer la resynchronisation du catalogue tôles ?');">
+                  data-jn-confirm="确认重新同步板材目录？">
                 @csrf
                 <label class="mr-2 mb-0" for="resync-days">{{ __('Fenêtre (jours)') }}</label>
                 <input type="number" id="resync-days" name="days" value="30" min="1" max="365"

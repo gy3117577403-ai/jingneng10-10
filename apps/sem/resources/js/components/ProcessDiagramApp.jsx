@@ -1,3 +1,4 @@
+import { confirmAction } from '../ui/confirmAction';
 import { translateUiText } from '../lib/i18n.js';
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import ReactFlow, {
@@ -529,7 +530,7 @@ export default function ProcessDiagramApp({ endpoints }) {
     };
 
     const handleDelete = async (id) => {
-        if (!confirm(translateUiText("Supprimer ce diagramme ?"))) return;
+        if (!await confirmAction(translateUiText("Supprimer ce diagramme ?"))) return;
         try {
             await apiFetch(urlId(endpoints.delete, id), { method: 'DELETE' });
             await loadDiagrams();

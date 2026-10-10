@@ -33,7 +33,7 @@
                 <p class="text-muted">
                     {{ __('Votre demande sera transmise à un administrateur. L\'effacement effectif peut nécessiter une anonymisation si des pièces comptables (factures, commandes) sont liées à votre compte - la loi française impose une conservation de 10 ans pour ces documents.') }}
                 </p>
-                <form method="POST" action="{{ route('me.rgpd.erase') }}" onsubmit="return confirm('{{ __('Confirmer la demande d\'effacement ?') }}')">
+                <form method="POST" action="{{ route('me.rgpd.erase') }}" data-jn-confirm="{{ __('Confirmer la demande d\'effacement ?') }}">
                     @csrf
                     <div class="form-group">
                         <label for="reason">{{ __('Motif (facultatif)') }}</label>

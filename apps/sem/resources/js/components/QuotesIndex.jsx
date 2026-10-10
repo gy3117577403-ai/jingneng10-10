@@ -1,3 +1,4 @@
+import { confirmAction } from '../ui/confirmAction';
 import { translateUiText } from '../lib/i18n.js';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import QuoteRateWidget from './dashboard/widgets/QuoteRateWidget.jsx';
@@ -977,7 +978,7 @@ function TemplatesTab({ endpoints, trans }) {
     }, [load]);
 
     const handleDelete = async (template) => {
-        if (!window.confirm(trans.delete_template_confirm)) return;
+        if (!await confirmAction(trans.delete_template_confirm)) return;
         // La route renvoie une redirection (formulaire de la page devis) : seul le statut compte ici.
         const res = await fetch(template.destroy_url, {
             method:  'DELETE',

@@ -31,7 +31,7 @@
                             <td>{{ optional($spreadsheet->updated_at)->format('d/m/Y H:i') }}</td>
                             <td class="text-end">
                                 <a href="{{ route('spreadsheet.edit', $spreadsheet) }}" class="btn btn-sm btn-info">{{ __('Éditer') }}</a>
-                                <form action="{{ route('spreadsheet.destroy', $spreadsheet) }}" method="POST" class="d-inline-block" onsubmit="return confirm('Supprimer ce tableur ?')">
+                                <form action="{{ route('spreadsheet.destroy', $spreadsheet) }}" method="POST" class="d-inline-block" data-jn-confirm="确认删除此电子表格？">
                                     @csrf
                                     @method('DELETE')
                                     <button type="submit" class="btn btn-sm btn-danger">{{ __('Supprimer') }}</button>

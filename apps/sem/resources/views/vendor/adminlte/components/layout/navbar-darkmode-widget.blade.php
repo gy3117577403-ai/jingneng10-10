@@ -9,6 +9,10 @@
         \App\Support\ThemeMode::DARK  => ['icon' => 'fas fa-moon',   'label' => __('general_content.theme_dark_trans_key')],
         \App\Support\ThemeMode::PRO   => ['icon' => 'fas fa-adjust', 'label' => __('general_content.theme_pro_trans_key')],
     ];
+    // The new Chinese workspace has one consistent light theme and a dark variant.
+    if (config('app.locale') === 'zh-CN') {
+        unset($themeModes[\App\Support\ThemeMode::PRO]);
+    }
 
     $themeMode = \App\Support\ThemeMode::current();
 @endphp

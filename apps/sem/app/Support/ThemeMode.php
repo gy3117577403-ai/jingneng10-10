@@ -33,6 +33,9 @@ class ThemeMode
     public static function current(): string
     {
         $mode = session(self::SESSION_KEY);
+        if (config('app.locale') === 'zh-CN' && $mode === self::PRO) {
+            return self::LIGHT;
+        }
 
         if (in_array($mode, self::MODES, true)) {
             return $mode;
@@ -48,6 +51,9 @@ class ThemeMode
      */
     public static function set(string $mode): string
     {
+        if (config('app.locale') === 'zh-CN' && $mode === self::PRO) {
+            $mode = self::LIGHT;
+        }
         if (! in_array($mode, self::MODES, true)) {
             $mode = self::LIGHT;
         }

@@ -1,3 +1,4 @@
+import { confirmAction } from '../ui/confirmAction';
 import { translateUiText, uiLocale, uiCurrency } from '../lib/i18n.js';
 import React, { useState, useEffect, useRef } from 'react';
 import { Pagination } from './table';
@@ -264,8 +265,8 @@ export default function IncomingInvoicesIndex({ endpoints = {}, locale, currency
             .finally(() => setActing(null));
     };
 
-    const doAction = (row, url, confirmMsg) => {
-        if (confirmMsg && !window.confirm(confirmMsg)) return;
+    const doAction = async (row, url, confirmMsg) => {
+        if (confirmMsg && !await confirmAction(confirmMsg)) return;
         setActing(row.id);
         apiFetch(url, { method: 'POST' })
             .then(res => {

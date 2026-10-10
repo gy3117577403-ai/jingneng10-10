@@ -20,7 +20,7 @@ function write(key, value) {
  *     soumis à un droit retiré entre-temps est ignoré) ;
  *  3. « list » sur téléphone, `fallback` ailleurs.
  */
-export default function useIndexTab(storageKey, { tabs = ['dashboard', 'list'], fallback = 'dashboard', forced = null } = {}) {
+export default function useIndexTab(storageKey, { tabs = ['dashboard', 'list'], fallback = 'list', forced = null } = {}) {
     const [tab, setTabState] = useState(() => {
         if (forced) return forced;
         const saved = read(storageKey);

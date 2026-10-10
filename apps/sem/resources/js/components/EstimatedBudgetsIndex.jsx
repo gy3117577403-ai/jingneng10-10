@@ -1,3 +1,4 @@
+import { confirmAction } from '../ui/confirmAction';
 import { translateUiText } from '../lib/i18n.js';
 import React, { useState, useEffect, useCallback } from 'react';
 import { DataTable, Pagination } from './table';
@@ -428,7 +429,7 @@ export default function EstimatedBudgetsIndex({ endpoints, trans }) {
     // -----------------------------------------------------------------------
 
     async function handleDelete(id) {
-        if (!window.confirm(translateUiText("Supprimer cette ligne ?"))) return;
+        if (!await confirmAction(translateUiText("Supprimer cette ligne ?"))) return;
         try {
             const url = buildUrl(endpoints.destroy, id);
             await apiFetch(url, { method: 'DELETE' });

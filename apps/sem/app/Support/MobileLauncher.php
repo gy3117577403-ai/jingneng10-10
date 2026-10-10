@@ -54,7 +54,7 @@ class MobileLauncher
 
             $children = [];
 
-            foreach ($item['submenu'] ?? [] as $child) {
+            foreach (self::flattenChildren($item['submenu'] ?? []) as $child) {
                 if (! isset($child['text']) || isset($child['header']) || empty($child['href'])) {
                     continue;
                 }
@@ -184,5 +184,20 @@ class MobileLauncher
         $icon = trim(str_replace('nav-icon', '', (string) $icon));
 
         return $icon !== '' ? $icon : 'fas fa-circle';
+    }
+
+    private static function flattenChildren(array $items, string $prefix = ''): array
+    {
+        $result = [];
+        foreach ($items as $item) {
+            if (!isset($item['text'])) { continue; }
+            $label = $prefix . $item['text'];
+            if (!empty($item['submenu'])) {
+                $result = [...$result, ...self::flattenChildren($item['submenu'], $label . ' · ')];
+            } elseif (!empty($item['href']) && $item['href'] !== '#') {
+                $result[] = [...$item, 'text' => $label];
+            }
+        }
+        return $result;
     }
 }

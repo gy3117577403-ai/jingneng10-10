@@ -16,7 +16,7 @@
               <td>{{ $r->label }}</td>
               <td class="py-0 align-middle text-right">
                 <x-ButtonTextEdit :modalTarget="'Regime' . $r->id" />
-                <form method="POST" action="{{ route('accounting.vatRegime.destroy', ['id' => $r->id]) }}" class="d-inline" onsubmit="return confirm(@js(__('vat.confirm_delete_regime')))">
+                <form method="POST" action="{{ route('accounting.vatRegime.destroy', ['id' => $r->id]) }}" class="d-inline" data-jn-confirm="{{ __('vat.confirm_delete_regime') }}">
                   @csrf @method('DELETE')
                   <button type="submit" class="btn btn-xs btn-outline-danger"><i class="fas fa-trash"></i></button>
                 </form>
@@ -64,7 +64,7 @@
               <td>{{ $n->label }}</td>
               <td class="py-0 align-middle text-right">
                 <x-ButtonTextEdit :modalTarget="'Nature' . $n->id" />
-                <form method="POST" action="{{ route('accounting.vatNature.destroy', ['id' => $n->id]) }}" class="d-inline" onsubmit="return confirm(@js(__('vat.confirm_delete_nature')))">
+                <form method="POST" action="{{ route('accounting.vatNature.destroy', ['id' => $n->id]) }}" class="d-inline" data-jn-confirm="{{ __('vat.confirm_delete_nature') }}">
                   @csrf @method('DELETE')
                   <button type="submit" class="btn btn-xs btn-outline-danger"><i class="fas fa-trash"></i></button>
                 </form>

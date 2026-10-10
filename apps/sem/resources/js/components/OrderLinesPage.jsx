@@ -1,3 +1,4 @@
+import { confirmAction } from '../ui/confirmAction';
 import { translateUiText, uiLocale, uiCurrency } from '../lib/i18n.js';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { formatQty, formatDate } from '../utils';
@@ -1025,7 +1026,7 @@ export default function OrderLinesPage({ orderId, orderStatu: initialStatu, orde
     };
 
     const handleDelete = async (id) => {
-        if (!confirm(translateUiText("Supprimer cette ligne ?"))) return;
+        if (!await confirmAction(translateUiText("Supprimer cette ligne ?"))) return;
         const res = await apiFetch(endpoints.destroy.replace('__ID__', id), { method: 'DELETE' });
         if (res.ok) {
             setLines((prev) => { const u = prev.filter((l) => l.id !== id); refreshNextOrdre(u); return u; });
@@ -1055,7 +1056,7 @@ export default function OrderLinesPage({ orderId, orderStatu: initialStatu, orde
     };
 
     const handleBreakDown = async (id) => {
-        if (!confirm(translateUiText("Appliquer le découpage technique du produit sur cette ligne ?"))) return;
+        if (!await confirmAction(translateUiText("Appliquer le découpage technique du produit sur cette ligne ?"))) return;
         const res  = await apiFetch(endpoints.breakdown.replace('__ID__', id), { method: 'POST' });
         const data = await res.json();
         if (res.ok) {
@@ -1107,7 +1108,7 @@ export default function OrderLinesPage({ orderId, orderStatu: initialStatu, orde
         const msg = skipped > 0
             ? translateUiText("Créer un BL à partir des :v0 ligne(s) à livrer ? (:v1 ligne(s) déjà livrée(s) ignorée(s))", { v0: (ids.length), v1: (skipped) })
             : translateUiText("Créer un BL à partir des :v0 ligne(s) sélectionnée(s) ?", { v0: (ids.length) });
-        if (!confirm(msg)) return;
+        if (!await confirmAction(msg)) return;
         try {
             const res  = await apiFetch(endpoints.storeDelivery, {
                 method: 'POST',
@@ -1137,7 +1138,7 @@ export default function OrderLinesPage({ orderId, orderStatu: initialStatu, orde
         const msg = skipped > 0
             ? translateUiText("Créer une facture à partir des :v0 ligne(s) à facturer ? (:v1 ligne(s) déjà facturée(s) ignorée(s))", { v0: (ids.length), v1: (skipped) })
             : translateUiText("Créer une facture à partir des :v0 ligne(s) sélectionnée(s) ?", { v0: (ids.length) });
-        if (!confirm(msg)) return;
+        if (!await confirmAction(msg)) return;
         try {
             const res  = await apiFetch(endpoints.storeInvoice, {
                 method: 'POST',
@@ -1163,8 +1164,8 @@ export default function OrderLinesPage({ orderId, orderStatu: initialStatu, orde
             showFlash('warning', translateUiText("Aucune ligne sélectionnée n'a de code externe sans produit lié."));
             return;
         }
-        if (!confirm(translateUiText("Rechercher un produit existant pour :v0 ligne(s) (par code externe) ?", { v0: (ids.length) }))) return;
-        const updatePrice = confirm(translateUiText("Forcer la mise à jour du prix unitaire des lignes avec le prix de vente du produit ?\n\n(OK = oui, Annuler = conserver le prix actuel des lignes)"));
+        if (!await confirmAction(translateUiText("Rechercher un produit existant pour :v0 ligne(s) (par code externe) ?", { v0: (ids.length) }))) return;
+        const updatePrice = await confirmAction('是否将所选行的单价更新为产品销售价？', { title: '选择价格处理方式', confirmLabel: '更新为产品价格', cancelLabel: '保留原价' });
         try {
             const res  = await apiFetch(endpoints.linkProducts, {
                 method: 'POST',
@@ -1206,7 +1207,7 @@ export default function OrderLinesPage({ orderId, orderStatu: initialStatu, orde
     const handleCreateProducts = async () => {
         const ids = [...selected];
         if (ids.length === 0) return;
-        if (!confirm(translateUiText("Créer des produits à partir des :v0 ligne(s) sélectionnée(s) ?", { v0: (ids.length) }))) return;
+        if (!await confirmAction(translateUiText("Créer des produits à partir des :v0 ligne(s) sélectionnée(s) ?", { v0: (ids.length) }))) return;
         try {
             const res  = await apiFetch(endpoints.createProducts, {
                 method: 'POST',

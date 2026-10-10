@@ -1,3 +1,4 @@
+import { confirmAction } from '../ui/confirmAction';
 import { translateUiText } from '../lib/i18n.js';
 import React, { useEffect, useState } from 'react';
 
@@ -44,7 +45,7 @@ export default function AccountingPeriodsApp({ endpoints }) {
 
     async function handleLock(e) {
         e.preventDefault();
-        if (!confirm(translateUiText("Verrouiller :v0 ? Aucune facture clôturée de cette période ne pourra plus être modifiée.", { v0: (monthLabel(month, year)) }))) return;
+        if (!await confirmAction(translateUiText("Verrouiller :v0 ? Aucune facture clôturée de cette période ne pourra plus être modifiée.", { v0: (monthLabel(month, year)) }))) return;
         setWorking(true);
         setError(null);
         try {
@@ -68,7 +69,7 @@ export default function AccountingPeriodsApp({ endpoints }) {
     }
 
     async function handleUnlock(p) {
-        if (!confirm(translateUiText("Déverrouiller :v0 ?", { v0: (monthLabel(p.month, p.year)) }))) return;
+        if (!await confirmAction(translateUiText("Déverrouiller :v0 ?", { v0: (monthLabel(p.month, p.year)) }))) return;
         setWorking(true);
         setError(null);
         try {
