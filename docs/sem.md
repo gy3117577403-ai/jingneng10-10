@@ -85,3 +85,7 @@ python scripts/sem.py restore-new --backup .local/sem/transfer
 如镜像/依赖下载慢，可在本机 `.local/sem/compose.env` 配置 `SEM_DEBIAN_MIRROR` 与 `SEM_NPM_REGISTRY`；仍保留 APT 签名与 NPM 锁文件完整性校验。默认使用官方源。本批不更改全局 Docker 或其他项目的网络配置。
 
 当前网络发生过 HTTP/2 截断，本机额外使用 `SEM_COMPOSER_HTTP1=1`：仅在构建时让 Composer 使用 HTTP/1.1，继续验证 TLS、沿用原始依赖锁文件。缓存和有限重试避免重复下载；此开关默认关闭。
+
+## JN-0013 公司资料入口
+
+本机当前镜像为 `jingneng/sem:jn-0013`。公司资料入口 `/zh-CN/company-data`，包含资料与台账、协作待办、导入记录、分类与权限；使用与权限说明见 [公司资料](sem-company-data.md)。新模块只使用虚构演示资料，未连接企业正式数据库。备份检查包含全部 `jn_data_*` 表和私有原件；配套恢复结果见 [JN-0013](changes/JN-0013.md)。

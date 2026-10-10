@@ -11,6 +11,14 @@ async function mountSalesControl() {
 }
 mountSalesControl();
 
+async function mountCompanyData() {
+    const el = document.getElementById('company-data-app');
+    if (!el) return;
+    const {default: CompanyData} = await import('./components/company-data/CompanyData.jsx');
+    createRoot(el).render(React.createElement(CompanyData, {endpoint: el.dataset.endpoint}));
+}
+mountCompanyData();
+
 function parseJsonAttribute(value) {
     if (!value) return null;
     try {

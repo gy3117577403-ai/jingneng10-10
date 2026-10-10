@@ -4,7 +4,7 @@ import { Segments, SurfaceDialog, readPreference, savePreference } from '../ui/W
 import useMediaQuery from './table/useMediaQuery';
 
 const SCOPES=[['mine','我负责的'],['all','可见事项'],['requested','我发起的处理']];
-const TYPES={presales:'售前核对',quote_review:'报价核对',technical_handoff:'技术交接',quote:'报价',order:'订单',invoice:'发票',lead:'线索'};
+const TYPES={presales:'售前核对',quote_review:'报价核对',technical_handoff:'技术交接',data_review:'资料审核',data_access:'查看申请',data_task:'资料协作',quote:'报价',order:'订单',invoice:'发票',lead:'线索'};
 const when=value=>value?String(value).slice(0,16).replace('T',' '):'未设置';
 const preferences=()=>{const p=readPreference('inbox',{});return p&&typeof p==='object'?p:{};};
 function readStars(){const v=readPreference('inbox.stars',[]);return Array.isArray(v)?v.filter(x=>typeof x==='string'):[];}

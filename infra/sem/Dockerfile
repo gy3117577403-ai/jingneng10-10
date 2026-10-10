@@ -31,6 +31,7 @@ RUN --mount=type=cache,target=/root/.composer/cache \
       attempt=$((attempt + 1)); [ "$attempt" -lt 3 ] || exit 1; sleep 5; \
     done \
     && composer check-platform-reqs
+RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils && rm -rf /var/lib/apt/lists/*
 COPY apps/sem/ ./
 RUN composer dump-autoload --optimize --no-interaction
 COPY --from=assets /app/public/build/ /app/public/build/
