@@ -77,6 +77,8 @@ class AppServiceProvider extends ServiceProvider
                     $value = __($value);
                 }
             });
+            // Keep every existing module reachable and put the daily workspace first.
+            array_unshift($menu, ['text' => '售前工作台', 'url' => 'presales', 'icon' => 'fas fa-inbox', 'active' => ['presales', 'presales/*', '*/presales', '*/presales/*']]);
             Config::set('adminlte.menu', $menu);
         }
 

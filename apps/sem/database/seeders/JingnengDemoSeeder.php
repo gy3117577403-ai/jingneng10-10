@@ -147,6 +147,7 @@ class JingnengDemoSeeder extends Seeder
                 'thickness' => 2, 'x_size' => 2000, 'y_size' => 1000, 'comment' => '虚构材料与价格。',
             ]);
         });
+        $this->call(JingnengPresalesSeeder::class);
         $this->command->info('Chinese fictional SEM fixtures ready; existing records preserved.');
     }
 }
