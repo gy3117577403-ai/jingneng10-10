@@ -21,7 +21,9 @@ $tables = ['users', 'companies', 'quotes', 'quote_lines', 'orders', 'order_lines
            'purchases', 'purchase_lines', 'purchase_receipts', 'deliverys', 'delivery_lines', 'invoices', 'invoice_lines', 'files',
            'stock_moves', 'stock_location_products', 'jn_inquiries', 'jn_inquiry_members', 'jn_documents',
            'jn_file_versions', 'jn_ai_runs', 'jn_presales_events', 'jn_presales_receipts', 'jn_quote_sources',
-           'jn_quote_reviews', 'jn_order_quote_reviews', 'jn_technical_handoffs', 'jn_handoff_versions', 'jn_sales_events', 'jn_sales_receipts'];
+           'jn_quote_reviews', 'jn_order_quote_reviews', 'jn_technical_handoffs', 'jn_handoff_versions', 'jn_sales_events', 'jn_sales_receipts',
+           'jn_data_state', 'jn_data_groups', 'jn_data_members', 'jn_data_categories', 'jn_data_records', 'jn_data_versions',
+           'jn_data_files', 'jn_data_rules', 'jn_data_access_requests', 'jn_data_tasks', 'jn_data_comments', 'jn_data_imports', 'jn_data_events', 'jn_data_receipts'];
 $counts = [];
 foreach ($tables as $table) {
     if (Illuminate\Support\Facades\Schema::hasTable($table)) { $counts[$table] = DB::table($table)->count(); }

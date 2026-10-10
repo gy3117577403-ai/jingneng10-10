@@ -32,6 +32,7 @@ class JingnengDemoSeeder extends Seeder
                 'name' => '演示管理员', 'password' => Hash::make($password), 'email_verified_at' => now(),
             ]);
             $admin->assignRole($role);
+            $this->call(CompanyDataDemoSeeder::class);
             $vat = AccountingVat::firstOrCreate(['code' => 'DEMO-13'], ['label' => '演示税率 13%（待企业确认）', 'rate' => 13, 'default' => 1]);
             Factory::firstOrCreate(['name' => '京能制造示范企业（虚构资料）'], [
                 'address' => '演示园区 1 号', 'city' => '演示城市', 'zipcode' => '000000', 'country' => 'CN',

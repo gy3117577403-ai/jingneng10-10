@@ -30,6 +30,7 @@ Route::group(['prefix' => LaravelLocalization::setLocale(),
 
     require __DIR__ . '/presales.php';
     require __DIR__ . '/sales-control.php';
+    require __DIR__ . '/company-data.php';
 
     Route::middleware(['throttle:60,1'])->group(function () {
         Route::get('/guest/quote/{uuid}', 'App\Http\Controllers\GuestController@ShowQuoteDocument')->name('guest.quote.show');

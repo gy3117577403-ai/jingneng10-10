@@ -25,6 +25,8 @@ class WorkspaceController extends Controller
         $user = $request->user(); $scope = $input['scope'] ?? 'mine'; $search = trim($input['q'] ?? '');
         $control = app(\App\Services\SalesControl\SalesInbox::class)->items($user, $scope, $search);
         $items = collect($control['items']); $sources = $control['sources'];
+        $dataItems = app(\App\Services\CompanyData\DataInbox::class)->items($user, $scope, $search);
+        $items = $items->concat($dataItems['items']); $sources = [...$sources, ...$dataItems['sources']];
         $runs = $this->inquiries($user)->join('jn_ai_runs as r', 'r.inquiry_id', '=', 'i.id')
             ->leftJoin('users as u', 'u.id', '=', 'i.owner_id')->whereIn('r.state', ['queued', 'running', 'review', 'failed']);
         if ($scope === 'mine') $runs->where('i.owner_id', $user->id);
