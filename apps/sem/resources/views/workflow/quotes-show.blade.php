@@ -32,7 +32,7 @@ $arrowSteps = json_encode([
 
 @section('content')
 
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<script src="{{ asset('vendor/jquery/jquery.min.js') }}"></script>
 
 @if($Quote->is_template)
 <div class="callout callout-info d-flex flex-wrap align-items-center justify-content-between" style="gap:.5rem">
@@ -44,7 +44,7 @@ $arrowSteps = json_encode([
       <i class="fas fa-plus mr-1"></i>{{ __('general_content.new_quote_from_template_trans_key') }}
     </a>
     <form method="POST" action="{{ route('quotes.template.destroy', ['id' => $Quote->id]) }}"
-          onsubmit="return confirm(@js(__('general_content.delete_template_confirm_trans_key')))">
+          data-jn-confirm="{{ __('general_content.delete_template_confirm_trans_key') }}">
       @csrf
       @method('DELETE')
       <button type="submit" class="btn btn-sm btn-outline-danger">
@@ -81,7 +81,7 @@ $arrowSteps = json_encode([
         <div class="row">
           <div class="col-md-9">
             @include('include.alert-result')
-            <form method="POST" action="{{ route('quotes.update', ['id' => $Quote->id]) }}" enctype="multipart/form-data">
+            <form method="POST" action="{{ route('quotes.update', ['id' => $Quote->id]) }}" enctype="multipart/form-data" data-jn-edit-form>
               <x-adminlte-card title="{{ __('general_content.informations_trans_key') }}" theme="teal" theme-mode="outline" maximizable>
                 @csrf 
                 <div class="row">
@@ -161,11 +161,8 @@ $arrowSteps = json_encode([
                 <div class="row">
                   <x-FormTextareaComment  comment="{{ $Quote->comment }}" />
                 </div>
-                <div class="row mt-3">
-                  <div class="col-12">
-                    <h5 class="text-info">{{ __('general_content.review_change_tracking_trans_key') }}</h5>
-                  </div>
-                </div>
+                <details class="jn-form-more" @if($errors->any() || $Quote->reviewed_by || $Quote->reviewed_at || $Quote->change_requested_by || $Quote->change_reason || $Quote->change_approved_at || ($Quote->review_decision && $Quote->review_decision !== 'pending')) open @endif>
+                  <summary>{{ __('general_content.review_change_tracking_trans_key') }}</summary>
                 <div class="row">
                   <div class="form-group col-md-6">
                     <label for="reviewed_by">{{ __('general_content.reviewed_by_trans_key') }}</label>
@@ -231,6 +228,7 @@ $arrowSteps = json_encode([
                     @enderror
                   </div>
                 </div>
+                </details>
                 <x-slot name="footerSlot">
                   <x-adminlte-button class="btn-flat" type="submit" label="{{ __('general_content.update_trans_key') }}" theme="info" icon="fas fa-lg fa-save"/>
                 </x-slot>

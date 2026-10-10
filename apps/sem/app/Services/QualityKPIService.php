@@ -72,9 +72,9 @@ class QualityKPIService
         $internalActionRate = ($totalActions > 0) ? ($internalActions / $totalActions) * 100 : 0;
 
         // External rate as a percentage
-        $externalDerogationRate = 100 - $internalDerogationRate;
-        $externalNonConformityRate = 100 - $internalNonConformityRate;
-        $externalActionRate = 100 - $internalActionRate;
+        $externalDerogationRate = $totalDerogations > 0 ? 100 - $internalDerogationRate : 0;
+        $externalNonConformityRate = $totalNonConformities > 0 ? 100 - $internalNonConformityRate : 0;
+        $externalActionRate = $totalActions > 0 ? 100 - $internalActionRate : 0;
 
         return compact('internalDerogationRate', 'externalDerogationRate', 'internalNonConformityRate', 'externalNonConformityRate', 'internalActionRate', 'externalActionRate');
     }

@@ -1,3 +1,4 @@
+import { confirmAction } from '../../ui/confirmAction';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import FileDropzone from './FileDropzone.jsx';
 import FileViewer from './FileViewer.jsx';
@@ -76,7 +77,7 @@ export default function FileManager({ endpoints, target, roles, accept, trans, c
     };
 
     const handleDelete = async (file) => {
-        if (!window.confirm(t('confirm_delete').replace(':name', file.name))) return;
+        if (!await confirmAction(t('confirm_delete').replace(':name', file.name))) return;
 
         try {
             await deleteFile(endpoints, target, file.id);

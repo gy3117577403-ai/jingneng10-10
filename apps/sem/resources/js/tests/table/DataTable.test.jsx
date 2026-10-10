@@ -97,6 +97,7 @@ describe('DataTable — PC', () => {
 
     it('filtre par texte (sur filterValue) et par plage de dates', () => {
         setup();
+        fireEvent.click(screen.getByRole('button', { name: '本页筛选' }));
         fireEvent.change(screen.getByLabelText('Client'), { target: { value: 'bol' } });
         expect(bodyCodes()).toEqual(['CM-002']);
         fireEvent.change(screen.getByLabelText('Client'), { target: { value: '' } });
@@ -116,6 +117,7 @@ describe('DataTable — PC', () => {
 
     it('total de la page filtrée, libellé dans la colonne précédente', () => {
         setup({ trans: { total: 'Total HT' } });
+        fireEvent.click(screen.getByRole('button', { name: '本页筛选' }));
         const cells = [...document.querySelectorAll('tfoot td')].map(td => td.textContent);
         expect(cells).toEqual(['', '', '', 'Total HT', '150.50 €', '']);
         fireEvent.change(screen.getByLabelText('Code'), { target: { value: '001' } });

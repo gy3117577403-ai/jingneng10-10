@@ -74,7 +74,7 @@ function joinNodes(nodes, separator) {
 
 function DefaultRowAction({ href, title }) {
     return (
-        <a href={href} className="btn btn-xs btn-info" title={title}>
+        <a href={href} className="btn btn-xs btn-info" title={title || '查看详情'} aria-label={title || '查看详情'}>
             <i className="fas fa-eye" />
         </a>
     );
@@ -227,6 +227,8 @@ export default function DataTable({
     const visible = layout.visible.map(k => cols[k]);
 
     const [localFilters, setLocalFilters] = useState({});
+    const [filtersOpen, setFiltersOpen] = useState(() => Object.keys(controlledFilters || {}).length > 0);
+    const [columnsOpen, setColumnsOpen] = useState(false);
     const colFilters    = controlledFilters ?? localFilters;
     const setColFilter  = (key, value) => {
         const next = { ...colFilters, [key]: value };
@@ -246,6 +248,7 @@ export default function DataTable({
     }));
     const hasFilters = visible.some(c => c.filter);
     const actions    = rowActions ?? (rowHref ? row => <DefaultRowAction href={rowHref(row)} /> : null);
+    const filterCount = Object.values(colFilters).filter(v => typeof v === 'object' ? v?.from || v?.to : String(v || '').trim()).length;
 
     if (isMobile) {
         return (
@@ -274,7 +277,14 @@ export default function DataTable({
     const colSpan       = visible.length + (actionsColumn ? 1 : 0);
 
     return (
-        <div>
+        <div className="jn-data-table">
+            {(hasFilters || hideable || reorderable) && <div className="jn-table-tools">
+                {hasFilters && <button type="button" className="btn btn-sm btn-default" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(v => !v)}>本页筛选{filterCount ? ` · ${filterCount}` : ''}</button>}
+                {filterCount > 0 && <button type="button" className="btn btn-sm btn-default" onClick={() => { if (onColFiltersChange) onColFiltersChange({}); if (controlledFilters === undefined) setLocalFilters({}); }}>清除筛选</button>}
+                {(hideable || reorderable) && <details onToggle={e => setColumnsOpen(e.currentTarget.open)}><summary className="btn btn-sm btn-default">显示列</summary>{columnsOpen && <div className="jn-column-menu" aria-label="表格列设置">
+                    {layout.order.map((key, index) => <label key={key}><span><input type="checkbox" aria-label={`显示 ${cols[key].label} 列`} checked={!layout.hidden.has(key)} disabled={!hideable || cols[key].hideable === false || !layout.hidden.has(key) && visible.length === 1} onChange={e => e.target.checked ? layout.show(key) : layout.hide(key)} />{cols[key].label}</span>{reorderable && <span><button type="button" aria-label={`上移 ${cols[key].label} 列`} disabled={index === 0} onClick={() => layout.move(key, layout.order[index - 1])}>↑</button><button type="button" aria-label={`下移 ${cols[key].label} 列`} disabled={index === layout.order.length - 1} onClick={() => layout.move(key, layout.order[index + 1])}>↓</button></span>}</label>)}
+                </div>}</details>}
+            </div>}
             {hideable && layout.hidden.size > 0 && (
                 <div className={chipsClassName} style={{ gap: '4px' }}>
                     {layout.order.filter(k => layout.hidden.has(k)).map(key => (
@@ -303,6 +313,9 @@ export default function DataTable({
                                     <th
                                         key={col.key}
                                         className={alignClass(col.align)}
+                                        tabIndex={field && onSort ? 0 : undefined}
+                                        aria-sort={field === sortField ? (sortAsc ? 'ascending' : 'descending') : undefined}
+                                        onKeyDown={e => { if (field && onSort && ['Enter', ' '].includes(e.key) && e.target === e.currentTarget) { e.preventDefault(); onSort(field); } }}
                                         draggable={reorderable || undefined}
                                         style={{
                                             cursor:     field ? 'pointer' : unsortableCursor,
@@ -333,8 +346,10 @@ export default function DataTable({
                                                 role="button"
                                                 aria-label={translateUiText("Masquer la colonne")}
                                                 style={{ marginLeft: '6px', opacity: 0.4, fontSize: '0.8rem', lineHeight: 1 }}
-                                                className="text-danger"
-                                                onClick={e => { e.stopPropagation(); layout.hide(col.key); }}
+                                                className="text-danger jn-hide-column"
+                                                tabIndex={0}
+                                                onKeyDown={e => { if (['Enter', ' '].includes(e.key) && visible.length > 1) { e.preventDefault(); e.stopPropagation(); layout.hide(col.key); } }}
+                                                onClick={e => { e.stopPropagation(); if (visible.length > 1) layout.hide(col.key); }}
                                                 onMouseEnter={e => { e.currentTarget.style.opacity = 1; }}
                                                 onMouseLeave={e => { e.currentTarget.style.opacity = 0.4; }}
                                             >×</span>
@@ -344,8 +359,8 @@ export default function DataTable({
                             })}
                             {actionsColumn && <th style={{ width: actionsWidth }}>{actionsHeader}</th>}
                         </tr>
-                        {hasFilters && (
-                            <tr>
+                        {hasFilters && filtersOpen && (
+                            <tr className="jn-table-filter">
                                 {visible.map(col => (
                                     <th key={col.key} style={{ padding: '2px 4px', fontWeight: 'normal' }}>
                                         {col.filter === 'text' && (
@@ -368,6 +383,7 @@ export default function DataTable({
                                                         className="form-control form-control-sm"
                                                         style={{ ...INPUT_STYLE, flex: 1, minWidth: 0 }}
                                                         title={bound === 'from' ? translateUiText("Du") : translateUiText("Au")}
+                                                        aria-label={`${col.label} ${bound === 'from' ? '开始日期' : '结束日期'}`}
                                                         value={(colFilters[col.key] ?? {})[bound] ?? ''}
                                                         onChange={e => setColFilter(col.key, { ...(colFilters[col.key] ?? {}), [bound]: e.target.value })}
                                                     />

@@ -1,3 +1,4 @@
+import { confirmAction } from '../ui/confirmAction';
 import { translateUiText, uiLocale, uiCurrency } from '../lib/i18n.js';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { formatQty, formatDate } from '../utils';
@@ -1280,7 +1281,7 @@ export default function QuoteLinesPage({ quoteId, quoteStatu: initialStatu, endp
     };
 
     const handleDelete = async (id) => {
-        if (!confirm(translateUiText("Supprimer cette ligne ?"))) return;
+        if (!await confirmAction(translateUiText("Supprimer cette ligne ?"))) return;
         const res = await apiFetch(endpoints.destroy.replace('__ID__', id), { method: 'DELETE' });
         if (res.ok) {
             setLines((prev) => { const u = prev.filter((l) => l.id !== id); refreshNextOrdre(u); return u; });
@@ -1310,7 +1311,7 @@ export default function QuoteLinesPage({ quoteId, quoteStatu: initialStatu, endp
     };
 
     const handleBreakDown = async (id) => {
-        if (!confirm(translateUiText("Appliquer le découpage technique du produit sur cette ligne ?"))) return;
+        if (!await confirmAction(translateUiText("Appliquer le découpage technique du produit sur cette ligne ?"))) return;
         const res  = await apiFetch(endpoints.breakdown.replace('__ID__', id), { method: 'POST' });
         const data = await res.json();
         if (res.ok) {
@@ -1385,7 +1386,7 @@ export default function QuoteLinesPage({ quoteId, quoteStatu: initialStatu, endp
     const handleStoreOrder = async (presentation = 'keep') => {
         const ids = [...selected];
         if (ids.length === 0) return;
-        if (!hasPresentation && !confirm(translateUiText("Créer une commande à partir des :v0 ligne(s) sélectionnée(s) ?", { v0: (ids.length) }))) return;
+        if (!hasPresentation && !await confirmAction(translateUiText("Créer une commande à partir des :v0 ligne(s) sélectionnée(s) ?", { v0: (ids.length) }))) return;
         setConvertOpen(false);
         try {
             const res  = await apiFetch(endpoints.storeOrder, { method: 'POST', body: JSON.stringify({ line_ids: ids, presentation }) });
@@ -1403,7 +1404,7 @@ export default function QuoteLinesPage({ quoteId, quoteStatu: initialStatu, endp
     const handleCreateProducts = async () => {
         const ids = [...selected];
         if (ids.length === 0) return;
-        if (!confirm(translateUiText("Créer des produits à partir des :v0 ligne(s) sélectionnée(s) ?", { v0: (ids.length) }))) return;
+        if (!await confirmAction(translateUiText("Créer des produits à partir des :v0 ligne(s) sélectionnée(s) ?", { v0: (ids.length) }))) return;
         try {
             const res  = await apiFetch(endpoints.createProducts, {
                 method: 'POST',

@@ -127,9 +127,10 @@ function KpiCard({ value, label, icon, theme }) {
 // Stacked Horizontal Bar (internal vs external %)
 // ---------------------------------------------------------------------------
 
-function StackedBar({ label, internal, external, trans }) {
+export function StackedBar({ label, internal, external, trans }) {
     const internalPct = Math.round(internal);
-    const externalPct = 100 - internalPct;
+    const externalPct = Math.round(external);
+    if (!internalPct && !externalPct) return <div className="mb-3"><small><strong>{label}</strong></small><p className="text-muted mb-0 mt-1">暂无数据</p></div>;
     return (
         <div className="mb-3">
             <div className="d-flex justify-content-between mb-1">
@@ -286,7 +287,7 @@ function DashboardTab({ kpi, rates, statusCounts, topGenerators, trans }) {
     return (
         <div>
             {/* KPI cards */}
-            <div className="row">
+            <div className="row jn-quality-kpis">
                 <div className="col-lg-2 col-md-4 col-sm-6">
                     <KpiCard value={kpi.totalActionsOpen ?? 0} label={`${trans.open ?? translateUiText("Ouvert")} ${trans.actions ?? translateUiText("Actions")}`} icon="fas fa-chart-bar" theme="teal" />
                 </div>

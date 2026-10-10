@@ -1,3 +1,4 @@
+import { confirmAction } from '../ui/confirmAction';
 import { translateUiText } from '../lib/i18n.js';
 import React, { useState } from 'react';
 import { formatQty } from '../utils';
@@ -241,7 +242,7 @@ export default function DeliveryLinesTab({ lines: initialLines, deliveryId, nonC
 
     async function markNotChargeable(line) {
         if (!endpoints.markNotChargeable) return;
-        if (!window.confirm(trans.confirm_not_chargeable ?? translateUiText("Marquer cette ligne comme non facturable ?"))) return;
+        if (!await confirmAction(trans.confirm_not_chargeable ?? translateUiText("Marquer cette ligne comme non facturable ?"))) return;
 
         setBusyId(line.id);
         setError('');

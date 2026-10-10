@@ -1,3 +1,4 @@
+import { confirmAction } from '../../ui/confirmAction';
 import { translateUiText, uiLocale, uiCurrency } from '../../lib/i18n.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -94,7 +95,7 @@ export default function InventoryShow({ endpoints, trans }) {
     }
 
     async function handleValidate() {
-        if (!window.confirm(trans.confirm_validate)) return;
+        if (!await confirmAction(trans.confirm_validate)) return;
         setBusy('validate');
         setError(null);
         try {
@@ -114,7 +115,7 @@ export default function InventoryShow({ endpoints, trans }) {
     }
 
     async function handleCancel() {
-        if (!window.confirm(trans.confirm_cancel)) return;
+        if (!await confirmAction(trans.confirm_cancel)) return;
         setBusy('cancel');
         setError(null);
         try {

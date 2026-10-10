@@ -77,7 +77,7 @@
                   <td class="py-0 align-middle">
                     <form method="POST"
                           action="{{ route('methods.operation-transition-delay.destroy', ['id' => $delay->id]) }}"
-                          onsubmit="return confirm('Supprimer ce délai ?');">
+                          data-jn-confirm="确认删除此等待时间？">
                       @csrf
                       <button type="submit" class="btn btn-sm btn-outline-danger" title="{{ __('general_content.delete_trans_key') }}">
                         <i class="fas fa-trash"></i>

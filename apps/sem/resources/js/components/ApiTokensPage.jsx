@@ -1,3 +1,4 @@
+import { confirmAction } from '../ui/confirmAction';
 import { translateUiText, uiLocale } from '../lib/i18n.js';
 import React, { useState } from 'react';
 
@@ -64,7 +65,7 @@ export default function ApiTokensPage({ initialTokens, endpoints }) {
     }
 
     async function handleRevoke(id) {
-        if (!confirm(translateUiText("Révoquer ce token ? Les intégrations utilisant ce token seront immédiatement coupées."))) return;
+        if (!await confirmAction(translateUiText("Révoquer ce token ? Les intégrations utilisant ce token seront immédiatement coupées."))) return;
         setRevoking(id);
         try {
             const res = await fetch(endpoints.destroy.replace(':id', id), {

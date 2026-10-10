@@ -1,3 +1,4 @@
+import { confirmAction } from '../ui/confirmAction';
 import { translateUiText } from '../lib/i18n.js';
 import React, { useEffect, useMemo, useState } from 'react';
 
@@ -73,7 +74,7 @@ function ProductRow({ product, expanded, onToggle, endpoints }) {
     const canExpand = product.purchased && product.reservation_breakdown.length > 0;
 
     async function createOrder() {
-        if (!confirm(translateUiText("Créer une commande interne pour \":v0\" (qté : :v1) ?", { v0: (product.label), v1: (product.qty_need) }))) return;
+        if (!await confirmAction(translateUiText("Créer une commande interne pour \":v0\" (qté : :v1) ?", { v0: (product.label), v1: (product.qty_need) }))) return;
         setOrdering(true);
         setError(null);
         try {

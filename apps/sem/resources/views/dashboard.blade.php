@@ -1,6 +1,6 @@
 @extends('adminlte::page')
 
-@section('title', __('general_content.dashboard_trans_key'))
+@section('title', '工作台')
 
 @section('content_header')
 @stop
@@ -11,9 +11,7 @@
   <div class="card">
     <div class="card-body">
         <x-adminlte-alert theme="info" title="{{ __('Info') }}">
-          your account currently have no role defined and the menu has a reduced display.  Contact the administrator or use user demo login for demo page =>
-      LOGIN: contact@wem-project.org
-      PASSWORD: password
+          当前账号尚未分配岗位角色，请联系管理员配置可访问的功能。
         </x-adminlte-alert>
     </div>
   </div>
@@ -22,7 +20,6 @@
   <div
     id="home-dashboard-app"
     data-props="{{ json_encode($reactProps) }}"
-    style="margin-top: 2rem;"
   ></div>
 
 @stop

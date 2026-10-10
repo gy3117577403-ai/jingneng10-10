@@ -22,7 +22,7 @@
 
 @section('content')
 
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<script src="{{ asset('vendor/jquery/jquery.min.js') }}"></script>
 
 <div class="card">
   <div class="card-header p-2">
@@ -235,8 +235,8 @@
         });
     });
 
-    $('#btn-activate-order').on('click', function () {
-        if (!confirm('Confirmer la réception du paiement ? La commande sera activée et entrera en production.')) return;
+    $('#btn-activate-order').on('click', async function () {
+        if (!await window.jnConfirm('确认已收到付款？订单将被激活并进入生产。')) return;
         $.ajax({
             url: '{{ route('proformas.activate.order', $Proforma->id) }}',
             method: 'POST',
@@ -246,8 +246,8 @@
         });
     });
 
-    $('#btn-convert-proforma').on('click', function () {
-        if (!confirm('Convertir cette proforma en facture réelle ? Un nouveau numéro de facture lui sera attribué.')) return;
+    $('#btn-convert-proforma').on('click', async function () {
+        if (!await window.jnConfirm('确认转为正式发票？系统将分配新的发票编号。')) return;
         $.ajax({
             url: '{{ route('proformas.convert', $Proforma->id) }}',
             method: 'POST',

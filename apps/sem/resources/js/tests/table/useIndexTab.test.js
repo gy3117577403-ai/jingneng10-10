@@ -14,9 +14,9 @@ afterEach(() => {
 });
 
 describe('useIndexTab', () => {
-    it('ouvre le tableau de bord sur PC et la liste sur téléphone sans mémoire', () => {
+    it('defaults to lists on desktop and mobile without overriding saved choices', () => {
         mobile(false);
-        expect(renderHook(() => useIndexTab(KEY)).result.current[0]).toBe('dashboard');
+        expect(renderHook(() => useIndexTab(KEY)).result.current[0]).toBe('list');
 
         mobile(true);
         expect(renderHook(() => useIndexTab(KEY)).result.current[0]).toBe('list');
@@ -38,7 +38,7 @@ describe('useIndexTab', () => {
     it('ignore un onglet mémorisé qui n\'est plus proposé', () => {
         mobile(false);
         localStorage.setItem(KEY, 'duplicates');
-        expect(renderHook(() => useIndexTab(KEY)).result.current[0]).toBe('dashboard');
+        expect(renderHook(() => useIndexTab(KEY)).result.current[0]).toBe('list');
         expect(renderHook(() => useIndexTab(KEY, { tabs: ['dashboard', 'list', 'duplicates'] })).result.current[0]).toBe('duplicates');
     });
 

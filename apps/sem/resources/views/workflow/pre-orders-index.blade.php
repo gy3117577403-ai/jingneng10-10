@@ -83,7 +83,7 @@
                                 </a>
                                 @if($preOrder->status === \App\Models\Workflow\PreOrder::STATUS_PENDING)
                                     <form method="POST" action="{{ route('pre-orders.destroy', $preOrder) }}" class="d-inline"
-                                          onsubmit="return confirm('Supprimer cette pré-commande ?')">
+                                          data-jn-confirm="确认删除此预订单？">
                                         @csrf
                                         @method('DELETE')
                                         <button type="submit" class="btn btn-xs btn-default text-danger">

@@ -1,3 +1,4 @@
+import { confirmAction } from '../ui/confirmAction';
 import { translateUiText, uiLocale, uiCurrency } from '../lib/i18n.js';
 import React, { useState } from 'react';
 
@@ -194,7 +195,7 @@ export default function InvoiceLinesDraft({ invoiceId, statu: initialStatu, line
         const message = line.is_free_line
             ? translateUiText("Supprimer la ligne « :v0 » ?", { v0: (line.order_line_label) })
             : translateUiText("Supprimer la ligne « :v0 » ? Les quantités seront rendues à la commande :v1.", { v0: (line.order_line_label), v1: (line.order_code ?? '') });
-        if (!confirm(message)) return;
+        if (!await confirmAction(message)) return;
 
         setSaving(prev => ({ ...prev, [line.id]: true }));
         setError(null);
@@ -208,7 +209,7 @@ export default function InvoiceLinesDraft({ invoiceId, statu: initialStatu, line
     }
 
     async function handleEmit() {
-        if (!confirm(translateUiText("Émettre la facture ? Elle ne sera plus modifiable."))) return;
+        if (!await confirmAction(translateUiText("Émettre la facture ? Elle ne sera plus modifiable."))) return;
         setEmitting(true);
         setError(null);
         try {

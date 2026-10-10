@@ -17,6 +17,7 @@ export default defineConfig({
                 'resources/sass/app.scss',
                 'resources/js/app.js',
                 'resources/js/presales.jsx',
+                'resources/js/workspace.js',
                 'resources/js/guest.js',
                 'resources/js/spreadsheet.js',
                 'node_modules/frappe-gantt/dist/frappe-gantt.css',

@@ -20,7 +20,7 @@
 
     @stack('styles')
 </head>
-<body class="bg-light">
+<body class="jn-ui">
     @php($customer = auth('customer')->user())
     <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
         <div class="container">
@@ -61,6 +61,7 @@
 
     <script src="{{ asset('vendor/jquery/jquery.min.js') }}"></script>
     <script src="{{ asset('vendor/bootstrap/js/bootstrap.bundle.min.js') }}"></script>
+    @vite('resources/js/workspace.js')
     @stack('scripts')
 </body>
 </html>

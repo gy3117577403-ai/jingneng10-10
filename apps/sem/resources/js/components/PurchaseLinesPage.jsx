@@ -1,3 +1,4 @@
+import { confirmAction } from '../ui/confirmAction';
 import { translateUiText, uiLocale } from '../lib/i18n.js';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { formatQty } from '../utils';
@@ -795,7 +796,7 @@ export default function PurchaseLinesPage({ purchaseId, purchaseStatu: initialSt
     };
 
     const handleDelete = async (id) => {
-        if (!confirm(translateUiText("Supprimer cette ligne ?"))) return;
+        if (!await confirmAction(translateUiText("Supprimer cette ligne ?"))) return;
         const res = await apiFetch(endpoints.destroy.replace('__ID__', id), { method: 'DELETE' });
         if (res.ok) {
             setLines((prev) => { const u = prev.filter((l) => l.id !== id); refreshNextOrdre(u); computeTotals(u); return u; });
@@ -824,7 +825,7 @@ export default function PurchaseLinesPage({ purchaseId, purchaseStatu: initialSt
     const handleStoreReceipt = async () => {
         const ids = [...selected];
         if (ids.length === 0) return;
-        if (!confirm(translateUiText("Créer un bon de réception à partir des :v0 ligne(s) sélectionnée(s) ?", { v0: (ids.length) }))) return;
+        if (!await confirmAction(translateUiText("Créer un bon de réception à partir des :v0 ligne(s) sélectionnée(s) ?", { v0: (ids.length) }))) return;
         try {
             const res  = await apiFetch(endpoints.storeReceipt, {
                 method: 'POST',

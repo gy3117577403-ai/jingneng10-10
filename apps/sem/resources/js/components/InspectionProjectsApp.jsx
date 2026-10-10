@@ -1,3 +1,4 @@
+import { confirmAction } from '../ui/confirmAction';
 import { translateUiText, uiLocale } from '../lib/i18n.js';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
@@ -542,7 +543,7 @@ function ControlPointsSection({ points, projectId, endpoints, onRefresh }) {
     };
 
     const handleDelete = async (pointId) => {
-        if (!confirm(translateUiText("Supprimer ce point de contrôle ?"))) return;
+        if (!await confirmAction(translateUiText("Supprimer ce point de contrôle ?"))) return;
         await apiFetch(url(endpoints.controlPointDelete, pointId), { method: 'DELETE' });
         await onRefresh();
     };

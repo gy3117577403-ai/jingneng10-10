@@ -584,7 +584,7 @@ class QuotesController extends Controller
         event(new QuoteCreated($quote));
 
         return redirect()->route('quotes.show', ['id' => $quote->id])
-            ->with('success', __('Devis ') . $source->code . ' dupliqué en ' . $quote->code);
+            ->with('success', __('Quote :source copied to :target.', ['source' => $source->code, 'target' => $quote->code]));
     }
 
     public function saveAsTemplate(Request $request, int $id, QuoteDuplicator $duplicator)
@@ -597,7 +597,7 @@ class QuotesController extends Controller
         $template = $duplicator->saveAsTemplate($source, $validated['template_label']);
 
         return redirect()->route('quotes.show', ['id' => $template->id])
-            ->with('success', __('Trame « ') . $template->label . ' » créée à partir du devis ' . $source->code);
+            ->with('success', __('Template :label created from quote :source.', ['label' => $template->label, 'source' => $source->code]));
     }
 
     public function destroyTemplate(int $id)
@@ -611,7 +611,7 @@ class QuotesController extends Controller
         });
 
         return redirect()->route('quotes', ['tab' => 'templates'])
-            ->with('success', __('Trame « ') . $template->label . ' » supprimée');
+            ->with('success', __('Template :label deleted.', ['label' => $template->label]));
     }
 
     public function templatesJson(Request $request)

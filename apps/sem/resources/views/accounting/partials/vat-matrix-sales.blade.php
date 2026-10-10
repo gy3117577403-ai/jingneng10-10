@@ -20,7 +20,7 @@
               <td>{{ $rule->vat_account }}</td>
               <td class="py-0 align-middle text-right">
                 <x-ButtonTextEdit :modalTarget="'SalesRule' . $rule->id" />
-                <form method="POST" action="{{ route('accounting.vatMatrixSales.destroy', ['id' => $rule->id]) }}" class="d-inline" onsubmit="return confirm(@js(__('vat.confirm_delete_rule')))">
+                <form method="POST" action="{{ route('accounting.vatMatrixSales.destroy', ['id' => $rule->id]) }}" class="d-inline" data-jn-confirm="{{ __('vat.confirm_delete_rule') }}">
                   @csrf @method('DELETE')
                   <button type="submit" class="btn btn-xs btn-outline-danger"><i class="fas fa-trash"></i></button>
                 </form>

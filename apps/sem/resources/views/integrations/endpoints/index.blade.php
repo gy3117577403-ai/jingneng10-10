@@ -79,7 +79,7 @@
                                     <a href="{{ route('admin.integrations.endpoints.edit', $endpoint) }}" class="btn btn-sm btn-outline-primary" title="{{ __('Éditer') }}">
                                         <i class="fas fa-edit"></i>
                                     </a>
-                                    <form method="POST" action="{{ route('admin.integrations.endpoints.destroy', $endpoint) }}" class="d-inline" onsubmit="return confirm('Supprimer cet endpoint ? Toutes ses livraisons seront également effacées.');">
+                                    <form method="POST" action="{{ route('admin.integrations.endpoints.destroy', $endpoint) }}" class="d-inline" data-jn-confirm="确认删除此接口端点？相关投递记录也将删除。">
                                         @csrf
                                         @method('DELETE')
                                         <button type="submit" class="btn btn-sm btn-outline-danger" title="{{ __('Supprimer') }}">

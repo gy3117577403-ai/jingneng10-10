@@ -69,13 +69,13 @@ if (!$orderHasInvoicedLines) {
 
 @section('content')
 
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script> 
+<script src="{{ asset('vendor/jquery/jquery.min.js') }}"></script>
 
 <div class="card">
   <div class="card-header p-2">
     <ul class="nav nav-pills" id="DocumentTabs">
       <li class="nav-item"><a class="nav-link" href="#Order" data-toggle="tab">{{ __('general_content.order_info_trans_key') }}</a></li>
-      <li class="nav-item"><a class="nav-link" href="#Lines" data-toggle="tab">Lignes ({{ $Order->OrderLines->filter->isArticle()->count() }})</a></li>
+      <li class="nav-item"><a class="nav-link" href="#Lines" data-toggle="tab">{{ __('Lignes') }} ({{ $Order->OrderLines->filter->isArticle()->count() }})</a></li>
       <li class="nav-item"><a class="nav-link" href="#Site" data-toggle="tab">{{ __('general_content.construction_site_trans_key') }}</a></li>
       <li class="nav-item"><a class="nav-link" href="#Charts" data-toggle="tab">{{ __('general_content.charts_trans_key') }}</a></li>
       <li class="nav-item"><a class="nav-link" href="#Bilan" data-toggle="tab">{{ __('general_content.business_Review_trans_key') }}</a></li>
@@ -119,7 +119,7 @@ if (!$orderHasInvoicedLines) {
         <div class="row">
           <div class="col-md-9">
             @include('include.alert-result')
-            <form method="POST" action="{{ route('orders.update', ['id' => $Order->id]) }}" enctype="multipart/form-data">
+            <form method="POST" action="{{ route('orders.update', ['id' => $Order->id]) }}" enctype="multipart/form-data" data-jn-edit-form>
               <x-adminlte-card title="{{ __('general_content.informations_trans_key') }}" theme="secondary" theme-mode="outline" maximizable>
                 @csrf
                 <div class="row">
@@ -230,11 +230,8 @@ if (!$orderHasInvoicedLines) {
                 <div class="row">
                   <x-FormTextareaComment  comment="{{ $Order->comment }}" />
                 </div>
-                <div class="row mt-3">
-                  <div class="col-12">
-                    <h5 class="text-info">{{ __('general_content.review_change_tracking_trans_key') }}</h5>
-                  </div>
-                </div>
+                <details class="jn-form-more" @if($errors->any() || $Order->reviewed_by || $Order->reviewed_at || $Order->change_requested_by || $Order->change_reason || $Order->change_approved_at || ($Order->review_decision && $Order->review_decision !== 'pending')) open @endif>
+                  <summary>{{ __('general_content.review_change_tracking_trans_key') }}</summary>
                 <div class="row">
                   <div class="form-group col-md-6">
                     <label for="reviewed_by">{{ __('general_content.reviewed_by_trans_key') }}</label>
@@ -300,6 +297,7 @@ if (!$orderHasInvoicedLines) {
                     @enderror
                   </div>
                 </div>
+                </details>
                 <x-slot name="footerSlot">
                   <x-adminlte-button class="btn-flat" type="submit" label="{{ __('general_content.update_trans_key') }}" theme="info" icon="fas fa-lg fa-save"/>
                 </x-slot>

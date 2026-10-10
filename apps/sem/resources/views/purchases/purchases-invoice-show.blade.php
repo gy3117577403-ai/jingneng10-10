@@ -10,7 +10,7 @@
 
 @section('content')
 
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<script src="{{ asset('vendor/jquery/jquery.min.js') }}"></script>
 
 <div class="card">
   <div class="card-header p-2">

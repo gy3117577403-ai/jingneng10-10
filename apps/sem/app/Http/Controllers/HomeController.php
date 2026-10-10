@@ -255,6 +255,7 @@ class HomeController extends Controller
             ] : null,
 
             'urls' => [
+                'presales'       => route('presales.index'),
                 'orders_index'   => route('orders'),
                 'orders_show'    => route('orders') . '/',
                 'quotes_index'   => route('quotes'),
