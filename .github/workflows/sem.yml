@@ -33,6 +33,8 @@ jobs:
         run: python3 scripts/sem_presales_acceptance.py
       - name: Verify customer links, quotation evidence and concurrent order conversion
         run: python3 scripts/sem_sales_acceptance.py
+      - name: Verify versioned quote review, frozen PDFs and technical handoff
+        run: python3 scripts/sem_review_acceptance.py
       - name: Run upstream backend suite without network or live database access
         run: python3 scripts/sem.py test
       - name: Verify restart persistence

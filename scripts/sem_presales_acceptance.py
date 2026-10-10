@@ -11,7 +11,7 @@ import uuid
 from sem_acceptance import Client
 from sem import ROOT
 
-OUT = ROOT / '.local' / 'acceptance' / 'jn-0011'
+OUT = ROOT / '.local' / 'acceptance' / 'jn-0012'
 
 
 class PresalesClient(Client):
@@ -27,10 +27,7 @@ class PresalesClient(Client):
         elif data is not None:
             body = json.dumps(data).encode(); headers['Content-Type'] = 'application/json'
         request = urllib.request.Request(self.base + '/zh-CN/presales/api/inquiries' + suffix, body, headers, method=method)
-        try:
-            response = self.opener.open(request, timeout=30)
-        except urllib.error.HTTPError as error:
-            response = error
+        response = self.open_with_backoff(request, timeout=30)
         content = response.read()
         assert response.status == expected, f'{suffix}: {response.status} {content[:300]!r}'
         return json.loads(content) if 'json' in response.headers.get('Content-Type', '') else content

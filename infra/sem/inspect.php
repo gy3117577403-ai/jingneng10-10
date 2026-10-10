@@ -20,7 +20,8 @@ if (($argv[1] ?? '') === 'queue-result') {
 $tables = ['users', 'companies', 'quotes', 'quote_lines', 'orders', 'order_lines', 'tasks', 'products', 'stocks',
            'purchases', 'purchase_lines', 'purchase_receipts', 'deliverys', 'delivery_lines', 'invoices', 'invoice_lines', 'files',
            'stock_moves', 'stock_location_products', 'jn_inquiries', 'jn_inquiry_members', 'jn_documents',
-           'jn_file_versions', 'jn_ai_runs', 'jn_presales_events', 'jn_presales_receipts'];
+           'jn_file_versions', 'jn_ai_runs', 'jn_presales_events', 'jn_presales_receipts', 'jn_quote_sources',
+           'jn_quote_reviews', 'jn_order_quote_reviews', 'jn_technical_handoffs', 'jn_handoff_versions', 'jn_sales_events', 'jn_sales_receipts'];
 $counts = [];
 foreach ($tables as $table) {
     if (Illuminate\Support\Facades\Schema::hasTable($table)) { $counts[$table] = DB::table($table)->count(); }

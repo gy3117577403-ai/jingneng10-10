@@ -6,6 +6,7 @@ import json
 import time
 import urllib.parse
 from sem_presales_acceptance import PresalesClient, OUT
+from sem_review_acceptance import approve_quote
 
 
 def main():
@@ -44,6 +45,7 @@ def main():
             assert '查看已确认需求与原件' in page
             assert not c.ok(f'/zh-CN/quotes/{qid}/lines/json')['lines']
             line = c.ok(f'/zh-CN/quotes/{qid}/lines/json/store', {'ordre':1,'label':f'{label}验收产品（虚构）','qty':2,'selling_price':100,'discount':0})['line']
+            approve_quote(c, qid)
             with ThreadPoolExecutor(max_workers=2) as pool:
                 orders = list(pool.map(lambda _: c.request(f'/zh-CN/quotes/{qid}/lines/json/store-order', {'line_ids':[line['id']]}), range(2)))
             assert sum(status == 200 for status,_,_ in orders) == 1

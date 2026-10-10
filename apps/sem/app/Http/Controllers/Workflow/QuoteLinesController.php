@@ -782,6 +782,7 @@ class QuoteLinesController extends Controller
             $selected = array_unique(array_map('intval', $lineIds));
             abort_unless(count($selected) && QuoteLines::where('quotes_id', $quote->id)->whereIn('id', $selected)->count() === count($selected), 422, '所选明细不属于当前报价。');
             abort_unless(QuoteLines::where('quotes_id', $quote->id)->whereIn('id', $selected)->articles()->exists(), 422, '请至少选择一条产品明细。');
+            $confirmedReview = app(\App\Services\SalesControl\QuoteReview::class)->assertConvertible($quote);
             $orderCode = 'OR-' . strtoupper((string) \Illuminate\Support\Str::ulid());
 
             $orderService = app(OrderService::class);
@@ -829,6 +830,11 @@ class QuoteLinesController extends Controller
             }
 
             Quotes::where('id', $quote->id)->update(['statu' => 3]);
+
+            if ($confirmedReview) {
+                DB::table('jn_order_quote_reviews')->insert(['order_id' => $newOrder->id, 'review_id' => $confirmedReview->id,
+                    'line_ids' => json_encode($lineIds, JSON_THROW_ON_ERROR), 'created_at' => now()]);
+            }
 
             return $newOrder;
         });

@@ -1,6 +1,7 @@
 import '../css/workspace.css';
 import '../css/focused-workspace.css';
 import '../css/sales-continuity.css';
+import '../css/sales-control.css';
 import { bindFormConfirmations, confirmAction } from './ui/confirmAction';
 import { bindUnsavedForms } from './ui/unsavedForm';
 import { bindDocumentContinuity } from './ui/documentContinuity';

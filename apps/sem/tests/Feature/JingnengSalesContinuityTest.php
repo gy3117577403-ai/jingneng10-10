@@ -54,6 +54,12 @@ class JingnengSalesContinuityTest extends TestCase
             $source=app(SalesHandoff::class)->source($qid,$this->owner);
             $this->assertSame($file['version_id'],$source['snapshot']['versions'][0]['id']);
             $line=QuoteLines::factory()->create(['quotes_id'=>$qid,'statu'=>1]);
+            $reviewer = User::factory()->create(); $reviewer->assignRole(Role::findByName('报价核对员', 'web'));
+            $reviewService = app(\App\Services\SalesControl\QuoteReview::class);
+            $context = $reviewService->context($qid, $this->owner);
+            $reviewId = $reviewService->submit($qid, $this->owner, $this->key(), ['fingerprint'=>$context['fingerprint'], 'reviewer_id'=>$reviewer->id,
+                'version_ids'=>[$file['version_id']], 'confirmed'=>true, 'note'=>'核对测试报价'])['review_id'];
+            $reviewService->decide($qid, $reviewId, $reviewer, $this->key(), ['decision'=>'approve', 'confirmed'=>true, 'note'=>'确认测试报价']);
             $this->postJson("/quotes/$qid/lines/json/store-order",['line_ids'=>[$line->id]])->assertOk();
             $this->postJson("/quotes/$qid/lines/json/store-order",['line_ids'=>[$line->id]])->assertUnprocessable();
             $this->assertSame(1,Orders::where('quotes_id',$qid)->count());

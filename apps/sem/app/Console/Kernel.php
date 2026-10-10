@@ -26,7 +26,11 @@ class Kernel extends ConsoleKernel
     protected function schedule(Schedule $schedule)
     {
         $schedule->command('jingneng:recover-presales')->everyMinute()->withoutOverlapping();
-        $schedule->command('pulse:check')->everyMinute();
+        // pulse:check is a daemon by default. Scheduling it each minute leaks
+        // processes/connections and blocks every task later in this schedule.
+        if (config('pulse.enabled')) {
+            $schedule->command('pulse:check --once')->everyMinute()->withoutOverlapping();
+        }
         $schedule->job(new DispatchGtdTaskReminders())->dailyAt('08:00')->withoutOverlapping();
         $schedule->command('quality:dispatch-calibration-alerts')->dailyAt('07:30')->withoutOverlapping();
         $schedule->command('emails:send-auto-reports')->everyMinute()->withoutOverlapping();

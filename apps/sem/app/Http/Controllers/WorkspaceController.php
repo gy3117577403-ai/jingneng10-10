@@ -23,7 +23,8 @@ class WorkspaceController extends Controller
     {
         $input = $request->validate(['scope' => 'nullable|in:mine,all,requested', 'q' => 'nullable|string|max:160']);
         $user = $request->user(); $scope = $input['scope'] ?? 'mine'; $search = trim($input['q'] ?? '');
-        $items = collect(); $sources = [];
+        $control = app(\App\Services\SalesControl\SalesInbox::class)->items($user, $scope, $search);
+        $items = collect($control['items']); $sources = $control['sources'];
         $runs = $this->inquiries($user)->join('jn_ai_runs as r', 'r.inquiry_id', '=', 'i.id')
             ->leftJoin('users as u', 'u.id', '=', 'i.owner_id')->whereIn('r.state', ['queued', 'running', 'review', 'failed']);
         if ($scope === 'mine') $runs->where('i.owner_id', $user->id);
@@ -54,6 +55,8 @@ class WorkspaceController extends Controller
                 // Each source retains its own definition of unfinished work.
                 if ($type === 'quote') $query->where(fn ($q) => $q->where('statu', 1)->orWhere(fn ($w) => $w->where('statu', 2)->where('validity_date', '<=', today()->addDays(7))));
                 if ($type === 'order') $query->whereIn('statu', [1, 2]);
+                if ($type === 'quote') $query->whereNotIn('id', DB::table('jn_quote_reviews')->select('quote_id'));
+                if ($type === 'order') $query->whereNotIn('id', DB::table('jn_technical_handoffs')->whereNotIn('state', ['completed', 'cancelled'])->select('order_id'));
                 if ($type === 'invoice') $query->whereNotIn('statu', [5])->whereNotNull('due_date')->where('due_date', '<', today());
                 if ($type === 'lead') $query->where('statu', 1)->where('created_at', '<', today()->subDays(2));
                 if ($scope === 'mine') $query->where('user_id', $user->id);

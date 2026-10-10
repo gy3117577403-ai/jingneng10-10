@@ -17,7 +17,7 @@ import urllib.request
 
 from sem import LOCAL, ROOT, compose
 
-OUT = ROOT / '.local' / 'acceptance' / 'jn-0011'
+OUT = ROOT / '.local' / 'acceptance' / 'jn-0012'
 
 
 def snapshot(project=None):
@@ -30,6 +30,19 @@ class Client:
         self.base = base.rstrip('/')
         self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
         self.token = None
+
+    def open_with_backoff(self, request, timeout=120):
+        # Consecutive suites share the real demo user's limit. Honor it rather than disabling it.
+        for attempt in range(4):
+            try:
+                return self.opener.open(request, timeout=timeout)
+            except urllib.error.HTTPError as error:
+                if error.code != 429 or attempt == 3:
+                    return error
+                delay = min(60, max(1, int(error.headers.get('Retry-After', '5'))))
+                error.close()
+                print(f'HTTP 429: respecting Retry-After ({delay}s), keeping the original request identity', flush=True)
+                time.sleep(delay)
 
     def request(self, path, data=None, form=False, method=None):
         if path.startswith('http'):
@@ -48,10 +61,7 @@ class Client:
         else:
             body = None
         request = urllib.request.Request(self.base + path, body, headers, method=method)
-        try:
-            response = self.opener.open(request, timeout=120)
-        except urllib.error.HTTPError as error:
-            response = error
+        response = self.open_with_backoff(request)
         content = response.read()
         kind = response.headers.get('Content-Type', '')
         if 'json' in kind:

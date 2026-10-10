@@ -29,6 +29,7 @@ Route::group(['prefix' => LaravelLocalization::setLocale(),
                             'middleware' => [ 'localeSessionRedirect', 'localizationRedirect', 'localeViewPath' ]], function(){
 
     require __DIR__ . '/presales.php';
+    require __DIR__ . '/sales-control.php';
 
     Route::middleware(['throttle:60,1'])->group(function () {
         Route::get('/guest/quote/{uuid}', 'App\Http\Controllers\GuestController@ShowQuoteDocument')->name('guest.quote.show');
@@ -317,7 +318,7 @@ Route::group(['prefix' => LaravelLocalization::setLocale(),
         });
     });
 
-    Route::group(['prefix' => 'quotes', 'middleware' => ['auth', 'verified', 'has.role', 'check.factory', 'check.task.status']], function () {
+    Route::group(['prefix' => 'quotes', 'middleware' => ['auth', 'verified', 'has.role', 'check.factory', 'check.task.status', \App\Http\Middleware\SalesRecordLock::class . ':quote']], function () {
         //quote
         Route::get('/', 'App\Http\Controllers\Workflow\QuotesController@index')->name('quotes');
         Route::get('/lines', 'App\Http\Controllers\Workflow\QuoteLinesController@index')->name('quotes-lines');
@@ -372,7 +373,7 @@ Route::group(['prefix' => LaravelLocalization::setLocale(),
     });
     
 
-    Route::group(['prefix' => 'orders', 'middleware' => ['auth', 'verified', 'has.role', 'check.factory', 'check.task.status']], function () {
+    Route::group(['prefix' => 'orders', 'middleware' => ['auth', 'verified', 'has.role', 'check.factory', 'check.task.status', \App\Http\Middleware\SalesRecordLock::class . ':order']], function () {
         //order
         Route::get('/', 'App\Http\Controllers\Workflow\OrdersController@index')->name('orders');
         Route::get('/lines', 'App\Http\Controllers\Workflow\OrderLinesController@index')->name('orders-lines');

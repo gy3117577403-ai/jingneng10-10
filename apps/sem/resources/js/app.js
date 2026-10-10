@@ -3,6 +3,14 @@ import './bootstrap';
 import { createRoot } from 'react-dom/client';
 import React from 'react';
 
+async function mountSalesControl() {
+    const elements = document.querySelectorAll('.jn-sales-control[data-endpoint]');
+    if (!elements.length) return;
+    const {default: SalesControl} = await import('./components/SalesControl.jsx');
+    elements.forEach(el => createRoot(el).render(React.createElement(SalesControl, {mode: el.dataset.mode, endpoint: el.dataset.endpoint})));
+}
+mountSalesControl();
+
 function parseJsonAttribute(value) {
     if (!value) return null;
     try {

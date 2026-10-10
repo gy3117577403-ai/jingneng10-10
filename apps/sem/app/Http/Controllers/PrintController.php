@@ -34,6 +34,14 @@ class PrintController extends Controller
     public function getQuotePdf(Quotes $Document)
     {
         $typeDocumentName = __('general_content.quote_trans_key');
+        $reviews = app(\App\Services\SalesControl\QuoteReview::class);
+        if ($reviews->required($Document)) {
+            $latest = \Illuminate\Support\Facades\DB::table('jn_quote_reviews')->where('quote_id', $Document->id)->orderByDesc('version')->first();
+            if ($latest && $latest->state === 'approved' && $reviews->current($latest, $Document)) {
+                return $reviews->pdf($Document->id, $latest->id, auth()->user());
+            }
+            $typeDocumentName = '报价 · 当前编辑草稿（未确认）';
+        }
         $calculatorService = new QuoteCalculatorService($Document);
         return $this->generatePdf($Document, $typeDocumentName, $calculatorService, 'print/pdf-sales');
     }
@@ -212,7 +220,16 @@ class PrintController extends Controller
      * @param string $view
      * @return \Illuminate\Http\Response
      */
-    private function generatePdf($Document, $typeDocumentName, $calculatorService, $viewKey): \Symfony\Component\HttpFoundation\Response
+    public function quoteVersionHtml(Quotes $quote, int $version, array $materials): string
+    {
+        $html = $this->documentHtml($quote, '报价 · 第' . $version . '版 · JN_REVIEW_STATE_7D85', new QuoteCalculatorService($quote), 'print/pdf-sales');
+        $basis = '<section style="font-size:10px;margin:12px 4px"><strong>本次报价资料依据</strong><p>询价：' . e($materials['inquiry']['code'] ?? '独立报价') . '</p>';
+        foreach ($materials['files'] as $file) $basis .= '<p>' . e($file['filename']) . ' · 第' . (int) $file['version'] . '版</p>';
+        $basis .= '<p>此文件固定保存提交时的报价内容；核对确认不代表工程图纸批准或生产放行。</p></section>';
+        return str_replace('</main>', $basis . '</main>', $html);
+    }
+
+    private function documentHtml($Document, $typeDocumentName, $calculatorService, $viewKey): string
     {
         $factory = app('Factory');
         $currency = $factory->curency ?? 'EUR';
@@ -231,7 +248,12 @@ class PrintController extends Controller
         $resolver = app(PdfThemeResolver::class);
         $resolvedView = $resolver->resolveForDocument($Document, $viewKey, $Factory);
         $customCss = $Factory->pdf_custom_css;
-        $pdf = PDF::loadView($resolvedView, compact('typeDocumentName', 'Document', 'Factory', 'formattedTotalPrice', 'formattedSubPrice', 'vatPrice', 'image', 'customCss', 'normalizeCurrency', 'printRows'));
+        return view($resolvedView, compact('typeDocumentName', 'Document', 'Factory', 'formattedTotalPrice', 'formattedSubPrice', 'vatPrice', 'image', 'customCss', 'normalizeCurrency', 'printRows'))->render();
+    }
+
+    private function generatePdf($Document, $typeDocumentName, $calculatorService, $viewKey): \Symfony\Component\HttpFoundation\Response
+    {
+        $pdf = PDF::loadHTML($this->documentHtml($Document, $typeDocumentName, $calculatorService, $viewKey));
 
         // Render first so all pages exist, then add page numbers on every page
         $pdf->render();
