@@ -31,6 +31,9 @@ $arrowSteps = json_encode([
 @section('right-sidebar')
 
 @section('content')
+@if(app(\App\Services\SalesControl\QuoteReview::class)->visible($Quote, auth()->user()))
+    @include('sales-control.mount', ['mode' => 'quote', 'recordId' => $Quote->id])
+@endif
 @include('presales.quote-source', ['quoteId' => $Quote->id])
 
 <script src="{{ asset('vendor/jquery/jquery.min.js') }}"></script>
@@ -164,74 +167,8 @@ $arrowSteps = json_encode([
                 <div class="row">
                   <x-FormTextareaComment  comment="{{ $Quote->comment }}" />
                 </div>
-                <details class="jn-form-more" @if($errors->any() || $Quote->reviewed_by || $Quote->reviewed_at || $Quote->change_requested_by || $Quote->change_reason || $Quote->change_approved_at || ($Quote->review_decision && $Quote->review_decision !== 'pending')) open @endif>
-                  <summary>{{ __('general_content.review_change_tracking_trans_key') }}</summary>
-                <div class="row">
-                  <div class="form-group col-md-6">
-                    <label for="reviewed_by">{{ __('general_content.reviewed_by_trans_key') }}</label>
-                    <select class="form-control" name="reviewed_by" id="reviewed_by">
-                      <option value="">{{ __('general_content.select_user_trans_key') }}</option>
-                      @foreach($Reviewers as $user)
-                        <option value="{{ $user->id }}" @selected(old('reviewed_by', $Quote->reviewed_by) == $user->id)>{{ $user->name }}</option>
-                      @endforeach
-                    </select>
-                    @error('reviewed_by')
-                      <span class="text-danger">{{ $message }}</span>
-                    @enderror
-                  </div>
-                  <div class="form-group col-md-6">
-                    <label for="reviewed_at">{{ __('general_content.review_date_trans_key') }}</label>
-                    <input type="datetime-local" class="form-control" name="reviewed_at" id="reviewed_at" value="{{ old('reviewed_at', optional($Quote->reviewed_at)->format('Y-m-d\\TH:i')) }}">
-                    @error('reviewed_at')
-                      <span class="text-danger">{{ $message }}</span>
-                    @enderror
-                  </div>
-                </div>
-                <div class="row">
-                  <div class="form-group col-md-6">
-                    <label for="review_decision">{{ __('general_content.decision_trans_key') }}</label>
-                    <select class="form-control" name="review_decision" id="review_decision">
-                      <option value="">{{ __('general_content.undefined_trans_key') }}</option>
-                      <option value="pending" @selected(old('review_decision', $Quote->review_decision) === 'pending')>{{ __('general_content.pending_trans_key') }}</option>
-                      <option value="approved" @selected(old('review_decision', $Quote->review_decision) === 'approved')>{{ __('general_content.approved_trans_key') }}</option>
-                      <option value="rejected" @selected(old('review_decision', $Quote->review_decision) === 'rejected')>{{ __('general_content.rejected_trans_key') }}</option>
-                    </select>
-                    @error('review_decision')
-                      <span class="text-danger">{{ $message }}</span>
-                    @enderror
-                  </div>
-                  <div class="form-group col-md-6">
-                    <label for="change_requested_by">{{ __('general_content.change_requested_by_trans_key') }}</label>
-                    <select class="form-control" name="change_requested_by" id="change_requested_by">
-                      <option value="">{{ __('general_content.select_user_trans_key') }}</option>
-                      @foreach($Reviewers as $user)
-                        <option value="{{ $user->id }}" @selected(old('change_requested_by', $Quote->change_requested_by) == $user->id)>{{ $user->name }}</option>
-                      @endforeach
-                    </select>
-                    @error('change_requested_by')
-                      <span class="text-danger">{{ $message }}</span>
-                    @enderror
-                  </div>
-                </div>
-                <div class="row">
-                  <div class="form-group col-md-12">
-                    <label for="change_reason">{{ __('general_content.change_reason_trans_key') }}</label>
-                    <textarea class="form-control" name="change_reason" id="change_reason" rows="3">{{ old('change_reason', $Quote->change_reason) }}</textarea>
-                    @error('change_reason')
-                      <span class="text-danger">{{ $message }}</span>
-                    @enderror
-                  </div>
-                </div>
-                <div class="row">
-                  <div class="form-group col-md-6">
-                    <label for="change_approved_at">{{ __('general_content.change_approved_at_trans_key') }}</label>
-                    <input type="datetime-local" class="form-control" name="change_approved_at" id="change_approved_at" value="{{ old('change_approved_at', optional($Quote->change_approved_at)->format('Y-m-d\\TH:i')) }}">
-                    @error('change_approved_at')
-                      <span class="text-danger">{{ $message }}</span>
-                    @enderror
-                  </div>
-                </div>
-                </details>
+                {{-- Quote review is handled by the immutable version workflow above. --}}
+
                 <x-slot name="footerSlot">
                   <x-adminlte-button class="btn-flat" type="submit" label="{{ __('general_content.update_trans_key') }}" theme="info" icon="fas fa-lg fa-save"/>
                 </x-slot>

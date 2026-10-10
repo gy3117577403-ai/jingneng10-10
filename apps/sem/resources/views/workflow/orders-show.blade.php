@@ -68,6 +68,9 @@ if (!$orderHasInvoicedLines) {
 @section('right-sidebar')
 
 @section('content')
+@if(app(\App\Services\SalesControl\TechnicalHandoff::class)->visible($Order, auth()->user()))
+    @include('sales-control.mount', ['mode' => 'order', 'recordId' => $Order->id])
+@endif
 @if($Order->quotes_id) @include('presales.quote-source', ['quoteId' => $Order->quotes_id]) @endif
 
 <script src="{{ asset('vendor/jquery/jquery.min.js') }}"></script>

@@ -4,7 +4,7 @@ import { Segments, SurfaceDialog, readPreference, savePreference } from '../ui/W
 import useMediaQuery from './table/useMediaQuery';
 
 const SCOPES=[['mine','我负责的'],['all','可见事项'],['requested','我发起的处理']];
-const TYPES={presales:'售前核对',quote:'报价',order:'订单',invoice:'发票',lead:'线索'};
+const TYPES={presales:'售前核对',quote_review:'报价核对',technical_handoff:'技术交接',quote:'报价',order:'订单',invoice:'发票',lead:'线索'};
 const when=value=>value?String(value).slice(0,16).replace('T',' '):'未设置';
 const preferences=()=>{const p=readPreference('inbox',{});return p&&typeof p==='object'?p:{};};
 function readStars(){const v=readPreference('inbox.stars',[]);return Array.isArray(v)?v.filter(x=>typeof x==='string'):[];}
@@ -68,7 +68,7 @@ export default function WorkInbox({endpoint}) {
     return <div className="jn-inbox">
         <div className="jn-inbox-toolbar"><Segments value={scope} onChange={v=>{setScope(v);setSelected(null);}} items={SCOPES} label="事项范围"/><div className="jn-inbox-actions"><button className={`jn-text-button ${watching?'active':''}`} aria-pressed={watching} onClick={()=>setWatching(v=>!v)}><Star size={15}/>关注</button><button className="jn-icon-button" aria-label="刷新事项" onClick={()=>setRefresh(v=>v+1)} disabled={loading}><RotateCw size={16} className={loading?'jn-spin':''}/></button></div></div>
         <div className="jn-inbox-search"><label className="jn-search-box"><Search size={17}/><input type="search" maxLength={160} aria-label="搜索事项" value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索事项、客户或编号"/></label><label><span className="sr-only">事项类型</span><select aria-label="事项类型" value={type} onChange={e=>setType(e.target.value)}><option value="">所有类型</option>{(data?.sources||[]).map(s=><option key={s.key} value={s.key}>{s.label}（{s.total}）</option>)}</select></label></div>
-        <div className="jn-inbox-summary"><span>{loading?'正在更新事项…':error?'读取未完成':`${rows.length} 项${watching?'已关注':''}事项`}</span><span>{scope==='all'?'仅展示有权访问的事项':scope==='requested'?'展示你发起的未结束售前处理':'按原记录负责人归集'}{watching?' · 关注保存在本机':''}</span></div>
+        <div className="jn-inbox-summary"><span>{loading?'正在更新事项…':error?'读取未完成':`${rows.length} 项${watching?'已关注':''}事项`}</span><span>{scope==='all'?'仅展示有权访问的事项':scope==='requested'?'展示你发起的未结束处理':'按当前需要你处理的事项归集'}{watching?' · 关注保存在本机':''}</span></div>
         <div className="jn-work-list" ref={listRef} aria-busy={loading} onScroll={e=>savePreference('inbox',{scope,query,type,watching,scroll:e.currentTarget.scrollTop})}>
             {error?<div className="jn-empty" role="alert"><Inbox size={30}/><strong>{error}</strong><button className="btn btn-default" onClick={()=>setRefresh(v=>v+1)}>重新读取</button></div>
                 :loading&&!data?<div className="jn-loading-rows" role="status" aria-label="正在读取事项">{[1,2,3,4].map(i=><div key={i}><span/><span/></div>)}</div>
