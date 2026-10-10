@@ -79,24 +79,35 @@ class PresalesService
             return ['id' => $run->id, 'state' => $run->state, 'revision' => $run->revision, 'stale' => $run->revision !== $record->revision,
                 'attempts' => $run->attempts, 'requested_by' => $run->requested_by, 'created_at' => $run->created_at,
                 'finished_at' => $run->finished_at, 'error' => $run->error, 'output' => $this->decode($run->output), 'review' => $this->decode($run->review),
-                'sources' => $this->decode($run->sources)];
+                'sources' => $this->decode($run->sources), 'provider' => $this->decode($run->provider_snapshot), 'metrics' => $this->decode($run->metrics)];
         });
         $events = DB::table('jn_presales_events as e')->leftJoin('users as u', 'u.id', '=', 'e.actor_id')->where('e.inquiry_id', $id)
             ->orderByDesc('e.id')->limit(100)->get(['e.id', 'e.label', 'e.detail', 'e.created_at', 'u.name as actor_name'])
             ->map(fn ($e) => [...(array) $e, 'detail' => $this->decode($e->detail)]);
         $members = DB::table('jn_inquiry_members as m')->join('users as u', 'u.id', '=', 'm.user_id')->where('m.inquiry_id', $id)->get(['u.id', 'u.name']);
         return ['record' => [...(array) $record, 'owner_name' => User::find($record->owner_id)?->name], 'can_manage' => $this->manages($user, $record),
-            'documents' => $documents, 'runs' => $runs, 'events' => $events, 'members' => $members, 'actor_id' => $user->id];
+            'documents' => $documents, 'runs' => $runs, 'events' => $events, 'members' => $members, 'actor_id' => $user->id,
+            'company' => $record->company_id ? \App\Models\Companies\Companies::find($record->company_id, ['id', 'label', 'active']) : null,
+            'quotes' => app(SalesHandoff::class)->links($id)];
     }
     private function fields(array $input, bool $creating): array
     {
         $rules = ['title' => 'required|string|max:160', 'kind' => 'required|in:cabinet,sheet_metal', 'customer_name' => 'nullable|string|max:140',
-            'expected_date' => 'nullable|date_format:Y-m-d', 'requirements' => 'nullable|string|max:4000'];
+            'expected_date' => 'nullable|date_format:Y-m-d', 'requirements' => 'nullable|string|max:4000',
+            'company_id' => ['nullable', 'integer', \Illuminate\Validation\Rule::exists('companies', 'id')->whereNull('deleted_at')->where('active', 1)->whereIn('statu_customer', [2, 3])]];
         $data = validator($input, $rules, [], ['title' => '询价名称', 'kind' => '业务类型', 'customer_name' => '客户名称', 'expected_date' => '期望交期', 'requirements' => '需求说明'])->validate();
         $data['customer_name'] = $data['customer_name'] ?? '';
         $data['expected_date'] = $data['expected_date'] ?? null;
         $data['requirements'] = $data['requirements'] ?? '';
         return $data;
+    }
+    public function quote(int $id, User $user, string $key, array $input): array
+    {
+        return $this->mutate($id, $user, $key, 'quote', $input, true, function ($record) use ($user, $input, $id) {
+            $result = app(SalesHandoff::class)->create($record, $user, $input);
+            if (!$result['reused']) { $this->event($id, $user->id, '确认报价依据并生成草稿', ['quote_id' => $result['quote_id'], 'revision' => $record->revision, 'note' => trim($input['note'])]); }
+            return $result;
+        });
     }
     public function create(User $user, string $key, array $input): array
     {
@@ -187,11 +198,12 @@ class PresalesService
                 abort_unless((int) DB::table('jn_file_versions')->where('document_id', $version->document_id)->max('version') === $version->version, 409, '资料已有新版本，请重新选择。');
                 $sources[] = $this->source($version);
             }
-            $hash = hash('sha256', $this->json([$revision, SimulatedExtractor::VERSION, array_map(fn ($s) => [$s['version_id'], $s['sha256']], $sources)]));
+            $identity = app(ExtractionGateway::class)->provider()->identity();
+            $hash = hash('sha256', $this->json([$revision, $identity, array_map(fn ($s) => [$s['version_id'], $s['sha256']], $sources)]));
             $old = DB::table('jn_ai_runs')->where('inquiry_id', $id)->where('input_hash', $hash)->first();
             if ($old) { return ['id' => $id, 'run_id' => $old->id, 'reused' => true]; }
             $rid = DB::table('jn_ai_runs')->insertGetId(['inquiry_id' => $id, 'requested_by' => $user->id, 'input_hash' => $hash, 'revision' => $revision,
-                'state' => 'queued', 'sources' => $this->json($sources), 'created_at' => now(), 'updated_at' => now()]);
+                'state' => 'queued', 'sources' => $this->json($sources), 'provider_snapshot' => $this->json($identity), 'created_at' => now(), 'updated_at' => now()]);
             $this->event($id, $user->id, '开始模拟提取', ['run_id' => $rid, 'version_ids' => $ids]);
             DB::afterCommit(fn () => $this->dispatch($rid));
             return ['id' => $id, 'run_id' => $rid, 'reused' => false];
@@ -212,6 +224,7 @@ class PresalesService
             return $run;
         });
         if (!$run) { return; }
+        $started = hrtime(true); $output = null;
         try {
             $user = User::find($run->requested_by); $record = DB::table('jn_inquiries')->where('id', $run->inquiry_id)->first();
             if (!$user || !$record || !$this->allowed($user, $record)) { throw new \RuntimeException('发起人已失去资料访问权限，本次处理已停止。'); }
@@ -220,9 +233,12 @@ class PresalesService
                 $version = $this->version($run->inquiry_id, $source['version_id'], $user);
                 if ($this->source($version) !== $source) { throw new \RuntimeException('来源资料校验失败，请检查原件。'); }
             }
-            $output = app(SimulatedExtractor::class)->extract($sources);
+            $gateway = app(ExtractionGateway::class);
+            $identity = $this->decode($run->provider_snapshot) ?? app(SimulatedExtractor::class)->identity();
+            $output = $gateway->extract($gateway->provider($identity), $sources);
             $changes = ['state' => 'review', 'output' => $this->json($output), 'error' => null];
-        } catch (\Throwable $e) { report($e); $changes = ['state' => 'failed', 'error' => '模拟处理未完成，请核对资料与访问权限后重试。']; }
+        } catch (\Throwable $e) { report($e); $changes = ['state' => 'failed', 'error' => '处理未完成，请核对资料、访问权限与提取服务配置后重试。']; }
+        $changes['metrics'] = $this->json(['duration_ms' => (int) round((hrtime(true) - $started) / 1000000), 'attempt' => $run->attempts + 1, 'usage' => $output['usage'] ?? null]);
         DB::table('jn_ai_runs')->where('id', $id)->where('state', 'running')->where('execution_token', $token)
             ->update([...$changes, 'finished_at' => now(), 'updated_at' => now()]);
     }

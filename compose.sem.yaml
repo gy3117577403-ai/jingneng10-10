@@ -1,7 +1,7 @@
 name: ${SEM_PROJECT:-jingneng-sem}
 
 x-app: &app
-  image: jingneng/sem:jn-0010
+  image: jingneng/sem:jn-0011
   platform: linux/amd64
   build:
     context: .

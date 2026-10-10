@@ -1,5 +1,6 @@
 import { translateUiText } from '../lib/i18n.js';
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { readDraft, writeDraft, clearDraft } from '../ui/sessionDraft';
 
 function csrfToken() {
     return document.querySelector('meta[name="csrf-token"]')?.content ?? '';
@@ -86,7 +87,10 @@ function Card({ title, theme, children }) {
 // ---------------------------------------------------------------------------
 
 export default function CompanyForm({ company: initial, users, vatRegimes = [], endpoint, pdpLookupUrl, trans }) {
-    const [form, setForm]       = useState({ ...initial });
+    const scope = `company.${initial.id}`, revision = useRef(initial._jn_revision || JSON.stringify(initial));
+    const lock=useRef(false);
+    const [form, setForm] = useState(()=>readDraft(scope,revision.current) || {...initial});
+    const [draftNote,setDraftNote]=useState(()=>readDraft(scope,revision.current)?'已恢复本标签页草稿，尚未提交。':'');
     const [errors, setErrors]   = useState({});
     const [saving, setSaving]   = useState(false);
     const [success, setSuccess] = useState(null);
@@ -95,7 +99,7 @@ export default function CompanyForm({ company: initial, users, vatRegimes = [], 
     const [pdpLookup, setPdpLookup] = useState({ status: 'idle', message: '' });
 
     const set = (field) => (value) => {
-        setForm(f => ({ ...f, [field]: value }));
+        setForm(f => {const next={...f,[field]:value};setDraftNote(writeDraft(scope,revision.current,next)?'修改已保存在本标签页，尚未提交。':'草稿保存失败，请保持页面打开。');return next;});
         setErrors(e => { const n = { ...e }; delete n[field]; return n; });
     };
 
@@ -127,6 +131,7 @@ export default function CompanyForm({ company: initial, users, vatRegimes = [], 
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if(lock.current)return;lock.current=true;
         setSaving(true);
         setSuccess(null);
         setWarning(null);
@@ -134,7 +139,7 @@ export default function CompanyForm({ company: initial, users, vatRegimes = [], 
         setErrors({});
         try {
             const res = await apiFetch(endpoint, normalizeForm(form));
-            setSuccess(trans.save_success);
+            clearDraft(scope);if(res.revision){revision.current=res.revision;setForm(f=>({...f,_jn_revision:res.revision}));}setDraftNote('');setSuccess(trans.save_success);
             if (res.warning) setWarning(res.warning);
         } catch (err) {
             // Sans ce message, un refus hors validation (403, 419, 500…)
@@ -148,7 +153,7 @@ export default function CompanyForm({ company: initial, users, vatRegimes = [], 
                 setError(translateUiText("Enregistrement impossible (:v0):v1.", { v0: (err.status ?? translateUiText("réseau")), v1: (err.message ? ' : ' + err.message : '') }));
             }
         } finally {
-            setSaving(false);
+            lock.current=false;setSaving(false);
         }
     };
 
@@ -210,6 +215,7 @@ export default function CompanyForm({ company: initial, users, vatRegimes = [], 
 
     return (
         <form onSubmit={handleSubmit}>
+            {draftNote&&<p className="jn-draft-note" role="status">{draftNote}</p>}
 
             {/* Feedback */}
             {success && (

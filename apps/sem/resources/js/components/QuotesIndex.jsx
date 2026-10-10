@@ -1,3 +1,4 @@
+import { readListContext, saveListContext, useListScroll } from '../ui/listContext';
 import { confirmAction } from '../ui/confirmAction';
 import { translateUiText } from '../lib/i18n.js';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -805,26 +806,14 @@ function CreateModal({ show, onClose, endpoints, trans, initialTemplateId = null
 
 const LS_KEY = 'quotes_list_filters';
 
-function loadFilters() {
-    try {
-        const raw = localStorage.getItem(LS_KEY);
-        if (!raw) return null;
-        return JSON.parse(raw);
-    } catch {
-        return null;
-    }
-}
-
-function saveFilters(filters) {
-    try { localStorage.setItem(LS_KEY, JSON.stringify(filters)); } catch {}
-}
 
 // ---------------------------------------------------------------------------
 // List Tab
 // ---------------------------------------------------------------------------
 
 function ListTab({ endpoints, trans, companieId, initialTemplateId = null }) {
-    const saved = loadFilters();
+    const scope = `QuotesIndex.${companieId || 'all'}`;
+    const saved = readListContext(scope);
 
     const [quotes, setQuotes]         = useState([]);
     const [meta, setMeta]             = useState(null);
@@ -833,14 +822,16 @@ function ListTab({ endpoints, trans, companieId, initialTemplateId = null }) {
     const [statuses, setStatuses]     = useState(saved?.statuses ?? [1]);
     const [sortField, setSortField]   = useState(saved?.sortField ?? 'created_at');
     const [sortAsc, setSortAsc]       = useState(saved?.sortAsc   ?? false);
-    const [page, setPage]             = useState(1);
+    const [page, setPage]             = useState(saved?.page ?? 1);
     const [viewType, setViewType]     = useState(saved?.viewType  ?? 'table');
+    const [listError,setListError] = useState('');
+    const sequence = useRef(0);
+    useListScroll(scope, !!meta && !loading);
     const [showModal, setShowModal]   = useState(!!initialTemplateId);
 
-    const searchTimeout = useRef(null);
 
     const fetchQuotes = useCallback((opts = {}) => {
-        setLoading(true);
+        setLoading(true); setListError(''); const seq=++sequence.current;
         const params = new URLSearchParams({
             search:   opts.search   ?? search,
             sort:     opts.sort     ?? sortField,
@@ -851,25 +842,19 @@ function ListTab({ endpoints, trans, companieId, initialTemplateId = null }) {
         if (companieId) params.set('company_id', companieId);
 
         apiFetch(`${endpoints.list}?${params}`)
-            .then(data => { setQuotes(data.data); setMeta(data.meta); })
-            .finally(() => setLoading(false));
+            .then(data => {if(seq===sequence.current){setQuotes(data.data);setMeta(data.meta);}})
+            .catch(()=>{if(seq===sequence.current)setListError('列表读取失败，当前筛选已保留。');})
+            .finally(() => {if(seq===sequence.current)setLoading(false);});
     }, [search, sortField, sortAsc, page, statuses, endpoints.list, companieId]);
 
-    useEffect(() => { fetchQuotes(); }, [sortField, sortAsc, page, statuses]);
+    useEffect(() => {sequence.current++;const timer=setTimeout(()=>fetchQuotes(),200);return()=>{clearTimeout(timer);sequence.current++;};},[fetchQuotes]);
 
-    const handleSearch = (val) => {
-        setSearch(val);
-        clearTimeout(searchTimeout.current);
-        searchTimeout.current = setTimeout(() => {
-            setPage(1);
-            fetchQuotes({ search: val, page: 1 });
-        }, 400);
-    };
+    const handleSearch = val => {setSearch(val);setPage(1);};
 
     // Persist filters whenever they change
     useEffect(() => {
-        saveFilters({ search, statuses, sortField, sortAsc, viewType });
-    }, [search, statuses, sortField, sortAsc, viewType]);
+        saveListContext(scope,{ search, statuses, sortField, sortAsc, viewType, page });
+    }, [search, statuses, sortField, sortAsc, viewType, page]);
 
     const handleSort = (field) => {
         const asc = field === sortField ? !sortAsc : true;
@@ -884,6 +869,8 @@ function ListTab({ endpoints, trans, companieId, initialTemplateId = null }) {
 
     return (
         <div>
+            <p className="jn-search-scope">搜索全部报价的名称、编号或客户；结果遵循当前状态筛选。</p>
+            {listError&&<div className="jn-list-feedback" role="alert">{listError}<button className="btn btn-sm btn-outline-primary" onClick={()=>fetchQuotes()}>重新读取</button></div>}
             {/* Toolbar — all controls on one line */}
             <div className="d-flex flex-wrap align-items-center mb-2" style={{ gap: '0.5rem' }}>
                 {/* Search */}

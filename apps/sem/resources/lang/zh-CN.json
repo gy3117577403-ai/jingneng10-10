@@ -8987,5 +8987,13 @@
     "Browse": "选择文件",
     "Quote :source copied to :target.": "报价 :source 已复制为 :target。",
     "Template :label created from quote :source.": "已从报价 :source 创建模板“:label”。",
-    "Template :label deleted.": "模板“:label”已删除。"
+    "Template :label deleted.": "模板“:label”已删除。",
+    "Quote has been created": "报价已创建",
+    "Quote has been updated": "报价已更新",
+    "Quote has been deleted": "报价已删除",
+    "Quote has been restored": "报价已恢复",
+    "Order has been created": "订单已创建",
+    "Order has been updated": "订单已更新",
+    "Order has been deleted": "订单已删除",
+    "Order has been restored": "订单已恢复"
 }

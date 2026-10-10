@@ -753,6 +753,7 @@ class QuoteLinesController extends Controller
 
     public function storeOrderJson(Request $request, int $quoteId)
     {
+        $request->validate(['line_ids' => 'required|array|min:1|max:500', 'line_ids.*' => 'integer|distinct|min:1']);
         $lineIds = $request->input('line_ids', []);
         if (empty($lineIds)) {
             return response()->json(['error' => __('Aucune ligne sélectionnée.')], 422);
@@ -763,7 +764,7 @@ class QuoteLinesController extends Controller
         }
 
         $quote = Quotes::withTemplates()->findOrFail($quoteId);
-        abort_unless($quote->user_id === Auth::id() || Auth::user()->hasRole(['admin','manager']), 403);
+        abort_unless($quote->user_id === Auth::id() || Auth::user()->hasRole(['Admin','admin','manager']), 403);
 
         if ($quote->is_template) {
             return response()->json(['error' => __("Une trame de devis ne se convertit pas en commande : créez d'abord un devis à partir de la trame.")], 422);
@@ -776,8 +777,12 @@ class QuoteLinesController extends Controller
         $converter = app(QuoteLineToOrderLineConverter::class);
 
         $order = DB::transaction(function () use ($quote, $lineIds, $converter, $presentation) {
-            $lastOrder = Orders::latest('id')->first();
-            $orderCode = $lastOrder ? 'OR-' . ($lastOrder->id + 1) : 'OR-1';
+            $quote = Quotes::whereKey($quote->id)->lockForUpdate()->firstOrFail();
+            abort_unless(in_array($quote->statu, [1, 2]), 409, '报价已转单或状态已变化，请刷新后查看关联订单。');
+            $selected = array_unique(array_map('intval', $lineIds));
+            abort_unless(count($selected) && QuoteLines::where('quotes_id', $quote->id)->whereIn('id', $selected)->count() === count($selected), 422, '所选明细不属于当前报价。');
+            abort_unless(QuoteLines::where('quotes_id', $quote->id)->whereIn('id', $selected)->articles()->exists(), 422, '请至少选择一条产品明细。');
+            $orderCode = 'OR-' . strtoupper((string) \Illuminate\Support\Str::ulid());
 
             $orderService = app(OrderService::class);
             $newOrder = $orderService->createOrder(

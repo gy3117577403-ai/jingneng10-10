@@ -28,7 +28,7 @@ if (!$orderHasInvoicedLines) {
 
 @section('content_header')
   <script rel="stylesheet" src="{{ asset('js/switchtabNav.js') }}"></script>
-  <x-document-header h1="{{ __('general_content.orders_trans_key') }} : {{  $Order->code }}"
+  <x-document-header h1="{{ __('general_content.orders_trans_key') }} : {{ $Order->label }}"
                      previous="{{ $previousUrl }}" list="{{ route('orders') }}" next="{{ $nextUrl }}"
                      :steps="$orderSteps" statu="{{ $Order->statu }}"
                      endpoint="{{ route('orders.json.statu', $Order->id) }}"
@@ -68,12 +68,13 @@ if (!$orderHasInvoicedLines) {
 @section('right-sidebar')
 
 @section('content')
+@if($Order->quotes_id) @include('presales.quote-source', ['quoteId' => $Order->quotes_id]) @endif
 
 <script src="{{ asset('vendor/jquery/jquery.min.js') }}"></script>
 
 <div class="card">
   <div class="card-header p-2">
-    <ul class="nav nav-pills" id="DocumentTabs">
+    <ul class="nav nav-pills" id="DocumentTabs" data-jn-sales-tabs="#Order #Lines #Documents">
       <li class="nav-item"><a class="nav-link" href="#Order" data-toggle="tab">{{ __('general_content.order_info_trans_key') }}</a></li>
       <li class="nav-item"><a class="nav-link" href="#Lines" data-toggle="tab">{{ __('Lignes') }} ({{ $Order->OrderLines->filter->isArticle()->count() }})</a></li>
       <li class="nav-item"><a class="nav-link" href="#Site" data-toggle="tab">{{ __('general_content.construction_site_trans_key') }}</a></li>
@@ -119,7 +120,9 @@ if (!$orderHasInvoicedLines) {
         <div class="row">
           <div class="col-md-9">
             @include('include.alert-result')
-            <form method="POST" action="{{ route('orders.update', ['id' => $Order->id]) }}" enctype="multipart/form-data" data-jn-edit-form>
+            <form method="POST" action="{{ route('orders.update', ['id' => $Order->id]) }}" enctype="multipart/form-data" data-jn-edit-form data-jn-continuity-form data-jn-revision="{{ hash('sha256', json_encode($Order->getAttributes())) }}" class="jn-continuity-form">
+              <input type="hidden" name="_jn_revision" value="{{ hash('sha256', json_encode($Order->getAttributes())) }}">
+
               <x-adminlte-card title="{{ __('general_content.informations_trans_key') }}" theme="secondary" theme-mode="outline" maximizable>
                 @csrf
                 <div class="row">
@@ -825,14 +828,14 @@ if (!$orderHasInvoicedLines) {
                     <tr>
                       <td>{{ optional($entry['created_at'])->format('d/m/Y H:i') }}</td>
                       <td>{{ $entry['causer'] ?? __('general_content.undefined_trans_key') }}</td>
-                      <td>{{ $entry['description'] }}</td>
+                      <td>{{ __($entry['description']) }}</td>
                       <td>
                         <table class="table table-sm mb-0">
                           <thead>
                             <tr>
                               <th>{{ __('general_content.label_trans_key') }}</th>
-                              <th>{{ __('general_content.previous_trans_key') }}</th>
-                              <th>{{ __('general_content.new_trans_key') }}</th>
+                              <th>修改前</th>
+                              <th>修改后</th>
                             </tr>
                           </thead>
                           <tbody>

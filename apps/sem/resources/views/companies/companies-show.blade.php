@@ -134,6 +134,7 @@
   ];
 
   $companyFormData = [
+    '_jn_revision'              => hash('sha256', json_encode($Companie->getAttributes())),
     'id'                        => $Companie->id,
     'code'                      => $Companie->code,
     'label'                     => $Companie->label,
@@ -370,9 +371,10 @@
 @endphp
 
 @section('content')
+@include('presales.company-context')
 <div class="card">
   <div class="card-header p-2">
-    <ul class="nav nav-pills">
+    <ul class="nav nav-pills" data-jn-sales-tabs="#Dashboard #Company #Adresses #Contact #Documents">
       <li class="nav-item"><a class="nav-link active" href="#Dashboard" data-toggle="tab">{{ __('general_content.dashboard_trans_key') }}</a></li>
       <li class="nav-item"><a class="nav-link" href="#Company" data-toggle="tab">{{ __('general_content.detail_trans_key') }}</a></li>
       <li class="nav-item"><a class="nav-link" href="#Adresses" data-toggle="tab">{{ __('general_content.adress_trans_key') }} ({{ $Companie->getAddressesCountAttribute() }})</a></li>
@@ -380,7 +382,7 @@
       <li class="nav-item">
         <a class="nav-link" href="#timeline" data-toggle="tab">
           <i class="fas fa-stream mr-1"></i>
-          Historique
+          往来记录
           @php
             $timelineCount = $Companie->getLeadsCountAttribute()
                            + $Companie->getQuotesCountAttribute()
@@ -684,6 +686,7 @@
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
 <script>
+  if (document.getElementById('map') && window.L) {
   // Vérifie que les coordonnées sont définies dans la variable PHP
   var latitude = {{ $Companie->latitude ?? '48.8588443' }};  // Remplace par des valeurs par défaut si non disponible
   var longitude = {{ $Companie->longitude ?? '2.2943506' }};  // Exemple: coordonnées de la Tour Eiffel
@@ -699,7 +702,8 @@
 
   // Ajouter un marqueur à la position des coordonnées
   L.marker([latitude, longitude]).addTo(map)
-      .bindPopup('{{ $Companie->label }}')
+      .bindPopup(Object.assign(document.createElement('span'), {textContent: @json($Companie->label)}))
       .openPopup();
+  }
 </script>
 @stop

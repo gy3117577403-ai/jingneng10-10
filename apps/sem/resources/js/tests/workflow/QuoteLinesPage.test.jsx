@@ -79,6 +79,13 @@ describe('QuoteLinesPage — lignes de présentation', () => {
         expect(await screen.findByText('2 lignes')).toBeInTheDocument();
     });
 
+    it('keeps adding another article available after lines already exist', async () => {
+        mockFetch(); renderPage(); await screen.findByText('Garde-corps acier');
+        fireEvent.click(screen.getByRole('button', { name: '新增明细' }));
+        expect(await screen.findByRole('textbox', { name: '明细名称' })).toHaveValue('');
+        expect(screen.getByRole('spinbutton', { name: '数量' })).toHaveValue(1);
+    });
+
     it('toggles the PDF visibility of an article through the presentation endpoint', async () => {
         const spy = mockFetch();
         renderPage();

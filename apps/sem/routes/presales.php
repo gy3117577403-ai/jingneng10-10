@@ -8,11 +8,14 @@ Route::middleware(['auth', 'verified', 'has.role', 'check.factory'])->prefix('pr
     Route::get('/inquiries/{inquiry}', [PresalesController::class, 'page'])->whereNumber('inquiry')->name('show');
     Route::get('/examples/{kind}', [PresalesController::class, 'example'])->name('example');
     Route::prefix('api')->group(function () {
+        Route::get('/companies', [PresalesController::class, 'companies']);
+        Route::get('/inquiries/{inquiry}/quote-options', [PresalesController::class, 'quoteOptions'])->whereNumber('inquiry');
         Route::get('/inquiries', [PresalesController::class, 'index']);
         Route::get('/inquiries/{inquiry}', [PresalesController::class, 'show'])->whereNumber('inquiry');
         Route::get('/inquiries/{inquiry}/users', [PresalesController::class, 'users'])->whereNumber('inquiry');
         Route::get('/inquiries/{inquiry}/versions/{version}/download', [PresalesController::class, 'download'])->whereNumber(['inquiry', 'version']);
         Route::middleware('throttle:60,1')->group(function () {
+            Route::post('/inquiries/{inquiry}/quote', [PresalesController::class, 'quote'])->whereNumber('inquiry');
             Route::post('/inquiries', [PresalesController::class, 'create']);
             Route::put('/inquiries/{inquiry}', [PresalesController::class, 'update'])->whereNumber('inquiry');
             Route::put('/inquiries/{inquiry}/members', [PresalesController::class, 'members'])->whereNumber('inquiry');

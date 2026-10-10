@@ -24,6 +24,19 @@ class PresalesController extends Controller
     public function create(Request $r) { return response()->json($this->service->create($r->user(), $this->key($r), $r->all())); }
     public function show(Request $r, int $inquiry) { return response()->json($this->service->detail($inquiry, $r->user()))->header('Cache-Control', 'no-store'); }
     public function update(Request $r, int $inquiry) { return response()->json($this->service->update($inquiry, $r->user(), $this->key($r), $r->all())); }
+    public function companies(Request $r)
+    {
+        $data = $r->validate(['q' => 'nullable|string|max:140', 'id' => 'nullable|integer|min:1']);
+        $query = \App\Models\Companies\Companies::where('active', 1)->whereIn('statu_customer', [2, 3]);
+        if (!empty($data['id'])) { $query->where('id', $data['id']); }
+        if (!empty($data['q'])) { $query->where(fn ($q) => $q->where('label', 'like', '%' . $data['q'] . '%')->orWhere('code', 'like', '%' . $data['q'] . '%')); }
+        return response()->json($query->orderBy('label')->limit(20)->get(['id', 'label', 'code']))->header('Cache-Control', 'no-store');
+    }
+    public function quoteOptions(Request $r, int $inquiry)
+    {
+        return response()->json(app(\App\Services\Presales\SalesHandoff::class)->options($this->service->record($inquiry, $r->user(), true)))->header('Cache-Control', 'no-store');
+    }
+    public function quote(Request $r, int $inquiry) { return response()->json($this->service->quote($inquiry, $r->user(), $this->key($r), $r->all())); }
     public function members(Request $r, int $inquiry) { return response()->json($this->service->members($inquiry, $r->user(), $this->key($r), $r->all())); }
     public function users(Request $r, int $inquiry)
     {

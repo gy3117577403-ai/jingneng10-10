@@ -1,3 +1,4 @@
+import { SurfaceDialog } from '../ui/WorkspaceKit';
 import { confirmAction } from '../ui/confirmAction';
 import { translateUiText, uiLocale, uiCurrency } from '../lib/i18n.js';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -234,7 +235,13 @@ function TaskModal({ lineId, lineLabel, endpoints, isReadOnly, useCalculatedPric
 // LineDrawer
 // ---------------------------------------------------------------------------
 
-function LineDrawer({ open, onClose, onOpenCreate, editingLine, selectData, endpoints, onSaved, isReadOnly }) {
+function LineDrawer({ open, onClose, editingLine, selectData, endpoints, onSaved, isReadOnly }) {
+    const dirtyLine = useRef(false), submitLock = useRef(false);
+    const closeLine = async () => {
+        if(submitLock.current)return;
+        if(dirtyLine.current && !await confirmAction('明细尚未保存，是否放弃本次修改？',{title:'关闭明细',cancelLabel:'继续编辑',confirmLabel:'放弃修改'}))return;
+        dirtyLine.current=false;onClose();
+    };
     const [form, setForm]                   = useState(EMPTY_FORM);
     const [priceList, setPriceList]         = useState([]);
     const [saving, setSaving]               = useState(false);
@@ -243,7 +250,7 @@ function LineDrawer({ open, onClose, onOpenCreate, editingLine, selectData, endp
     const [showProductList, setShowProductList] = useState(false);
 
     useEffect(() => {
-        if (!open) return;
+        if (!open) return; dirtyLine.current=false;
 
         if (editingLine) {
             setForm({
@@ -290,9 +297,10 @@ function LineDrawer({ open, onClose, onOpenCreate, editingLine, selectData, endp
             .catch(() => setPriceList([]));
     }, [form.product_id, open]);
 
-    const set = (field, value) => setForm((f) => ({ ...f, [field]: value }));
+    const set = (field, value) => {dirtyLine.current=true;setForm((f) => ({ ...f, [field]: value }));};
 
     const handleProductSelect = (product) => {
+        dirtyLine.current=true;
         setForm((f) => ({
             ...f,
             product_id:       product.id,
@@ -314,6 +322,7 @@ function LineDrawer({ open, onClose, onOpenCreate, editingLine, selectData, endp
     const filteredProducts = useProductSearch(endpoints.productSearch, productSearch, open && showProductList);
 
     const resetFormForCreate = (nextOrdre) => {
+        dirtyLine.current=false;
         const defaultUnit = selectData.units?.find((u) => u.default) ?? selectData.units?.[0];
         const defaultVat  = selectData.vats?.find((v)  => v.default) ?? selectData.vats?.[0];
         setForm({
@@ -331,7 +340,8 @@ function LineDrawer({ open, onClose, onOpenCreate, editingLine, selectData, endp
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (isReadOnly) return;
+        if (isReadOnly || submitLock.current) return;
+        submitLock.current=true;
         setSaving(true);
         setErrors({});
         const isEdit = !!editingLine;
@@ -342,7 +352,7 @@ function LineDrawer({ open, onClose, onOpenCreate, editingLine, selectData, endp
             const res  = await apiFetch(url, { method: isEdit ? 'PUT' : 'POST', body: JSON.stringify(form) });
             const data = await res.json();
             if (!res.ok) { setErrors(data.errors ?? { _global: data.message ?? translateUiText("Erreur") }); return; }
-            onSaved(data.line, isEdit);
+            dirtyLine.current=false;onSaved(data.line, isEdit);
             if (isEdit) {
                 onClose();
             } else {
@@ -351,86 +361,14 @@ function LineDrawer({ open, onClose, onOpenCreate, editingLine, selectData, endp
         } catch {
             setErrors({ _global: translateUiText("Erreur réseau") });
         } finally {
-            setSaving(false);
+            submitLock.current=false;setSaving(false);
         }
     };
 
-    const canAdd = !isReadOnly;
 
     return (
         <>
-            {/* Backdrop */}
-            <div onClick={onClose} style={{
-                position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)',
-                zIndex: 1040, opacity: open ? 1 : 0,
-                pointerEvents: open ? 'auto' : 'none',
-                transition: 'opacity 0.2s',
-            }} />
-
-            {/* Tab handle */}
-            {canAdd && (
-                <button
-                    type="button"
-                    onClick={onOpenCreate}
-                    style={{
-                        position: 'fixed',
-                        right: 0,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        width: 40,
-                        padding: '18px 0',
-                        background: '#28a745',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '6px 0 0 6px',
-                        boxShadow: '-3px 0 8px rgba(0,0,0,0.18)',
-                        cursor: 'pointer',
-                        opacity: open ? 0 : 1,
-                        pointerEvents: open ? 'none' : 'auto',
-                        transition: 'opacity 0.2s',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: 8,
-                        zIndex: 1049,
-                    }}
-                    title={translateUiText("Ajouter une ligne")}
-                >
-                    <i className="fas fa-plus" style={{ fontSize: 14 }} />
-                    <span style={{
-                        writingMode: 'vertical-rl',
-                        transform: 'rotate(180deg)',
-                        fontSize: 10,
-                        fontWeight: 700,
-                        letterSpacing: 1,
-                        textTransform: 'uppercase',
-                    }}>{translateUiText("Ajouter")}</span>
-                </button>
-            )}
-
-            {/* Panel */}
-            <div style={{
-                position: 'fixed', top: 0, right: 0, bottom: 0,
-                width: 460, maxWidth: '95vw',
-                background: '#fff', zIndex: 1050,
-                display: 'flex', flexDirection: 'column',
-                transform: open ? 'translateX(0)' : 'translateX(100%)',
-                transition: 'transform 0.25s ease',
-                boxShadow: '-4px 0 24px rgba(0,0,0,0.15)',
-            }}>
-
-                {/* Header */}
-                <div className="d-flex align-items-center justify-content-between px-3 py-2 border-bottom bg-light">
-                    <strong>
-                        {editingLine
-                            ? <><i className="fas fa-edit mr-2 text-warning" />{translateUiText("Modifier la ligne")}</>
-                            : <><i className="fas fa-plus-circle mr-2 text-success" />{translateUiText("Nouvelle ligne")}</>}
-                    </strong>
-                    <button type="button" className="btn btn-sm btn-outline-secondary" onClick={onClose}>
-                        <i className="fas fa-times" />
-                    </button>
-                </div>
-
+            {open && <SurfaceDialog title={editingLine?'编辑明细':'新增明细'} onClose={closeLine} className="jn-line-drawer">
                 {/* Body */}
                 <div className="flex-grow-1 overflow-auto p-3">
                     {errors._global && <div className="alert alert-danger py-2">{errors._global}</div>}
@@ -448,7 +386,7 @@ function LineDrawer({ open, onClose, onOpenCreate, editingLine, selectData, endp
                                     type="text"
                                     className="form-control"
                                     placeholder={translateUiText("Rechercher un produit…")}
-                                    value={productSearch}
+                                    aria-label="搜索产品" value={productSearch}
                                     onChange={(e) => { setProductSearch(e.target.value); setShowProductList(true); if (!e.target.value) handleProductClear(); }}
                                     onFocus={() => setShowProductList(true)}
                                     onBlur={() => setTimeout(() => setShowProductList(false), 150)}
@@ -490,14 +428,14 @@ function LineDrawer({ open, onClose, onOpenCreate, editingLine, selectData, endp
                                 <div className="input-group input-group-sm">
                                     <div className="input-group-prepend"><span className="input-group-text"><i className="fas fa-external-link-square-alt" /></span></div>
                                     <input type="text" className={`form-control ${errors.code ? 'is-invalid' : ''}`}
-                                        placeholder={translateUiText("Code externe")} value={form.code}
+                                        placeholder={translateUiText("Code externe")} aria-label="外部编号" value={form.code}
                                         onChange={(e) => set('code', e.target.value)} disabled={isReadOnly} />
                                 </div>
                             </div>
                             <div className="form-group col-4 mb-2">
                                 <label className="mb-1 small font-weight-bold">{translateUiText("Ordre")}</label>
                                 <input type="number" className={`form-control form-control-sm ${errors.ordre ? 'is-invalid' : ''}`}
-                                    min="1" value={form.ordre}
+                                    min="1" aria-label="排序" value={form.ordre}
                                     onChange={(e) => set('ordre', e.target.value)} disabled={isReadOnly} />
                             </div>
                         </div>
@@ -508,7 +446,7 @@ function LineDrawer({ open, onClose, onOpenCreate, editingLine, selectData, endp
                             <div className="input-group input-group-sm">
                                 <div className="input-group-prepend"><span className="input-group-text"><i className="fas fa-tags" /></span></div>
                                 <input type="text" className={`form-control ${errors.label ? 'is-invalid' : ''}`}
-                                    placeholder={translateUiText("Description de la ligne")} value={form.label}
+                                    placeholder={translateUiText("Description de la ligne")} aria-label="明细名称" value={form.label}
                                     onChange={(e) => set('label', e.target.value)} disabled={isReadOnly} />
                             </div>
                             {errors.label && <div className="invalid-feedback d-block">{errors.label[0]}</div>}
@@ -521,14 +459,14 @@ function LineDrawer({ open, onClose, onOpenCreate, editingLine, selectData, endp
                                 <div className="input-group input-group-sm">
                                     <div className="input-group-prepend"><span className="input-group-text"><i className="fas fa-times" /></span></div>
                                     <input type="number" className={`form-control ${errors.qty ? 'is-invalid' : ''}`}
-                                        min="0" step="0.001" value={form.qty}
+                                        min="0" step="0.001" aria-label="数量" value={form.qty}
                                         onChange={(e) => set('qty', e.target.value)} disabled={isReadOnly} />
                                 </div>
                                 {errors.qty && <div className="invalid-feedback d-block">{errors.qty[0]}</div>}
                             </div>
                             <div className="form-group col-7 mb-2">
                                 <label className="mb-1 small font-weight-bold">{translateUiText("Unité")}</label>
-                                <select className="form-control form-control-sm" value={form.methods_units_id}
+                                <select className="form-control form-control-sm" aria-label="单位" value={form.methods_units_id}
                                     onChange={(e) => set('methods_units_id', e.target.value)} disabled={isReadOnly}>
                                     <option value="">{translateUiText("— Unité —")}</option>
                                     {(selectData.units ?? []).map((u) => (
@@ -545,7 +483,7 @@ function LineDrawer({ open, onClose, onOpenCreate, editingLine, selectData, endp
                                 <div className="input-group input-group-sm">
                                     <div className="input-group-prepend"><span className="input-group-text">{selectData.currency ?? '€'}</span></div>
                                     <input type="number" className={`form-control ${errors.selling_price ? 'is-invalid' : ''}`}
-                                        min="0" step="0.001" value={form.selling_price}
+                                        min="0" step="0.001" aria-label="单价" value={form.selling_price}
                                         onChange={(e) => set('selling_price', e.target.value)} disabled={isReadOnly} />
                                 </div>
                                 {errors.selling_price && <div className="invalid-feedback d-block">{errors.selling_price[0]}</div>}
@@ -555,7 +493,7 @@ function LineDrawer({ open, onClose, onOpenCreate, editingLine, selectData, endp
                                 <div className="input-group input-group-sm">
                                     <div className="input-group-prepend"><span className="input-group-text"><i className="fas fa-percentage" /></span></div>
                                     <input type="number" className={`form-control ${errors.discount ? 'is-invalid' : ''}`}
-                                        min="0" max="100" step="0.01" value={form.discount}
+                                        min="0" max="100" step="0.01" aria-label="折扣" value={form.discount}
                                         onChange={(e) => set('discount', e.target.value)} disabled={isReadOnly} />
                                 </div>
                             </div>
@@ -565,7 +503,7 @@ function LineDrawer({ open, onClose, onOpenCreate, editingLine, selectData, endp
                         <div className="form-row">
                             <div className="form-group col-6 mb-2">
                                 <label className="mb-1 small font-weight-bold">{translateUiText("TVA")}</label>
-                                <select className="form-control form-control-sm" value={form.accounting_vats_id}
+                                <select className="form-control form-control-sm" aria-label="税率" value={form.accounting_vats_id}
                                     onChange={(e) => set('accounting_vats_id', e.target.value)} disabled={isReadOnly}>
                                     <option value="">{translateUiText("— TVA —")}</option>
                                     {(selectData.vats ?? []).map((v) => (
@@ -575,7 +513,7 @@ function LineDrawer({ open, onClose, onOpenCreate, editingLine, selectData, endp
                             </div>
                             <div className="form-group col-6 mb-2">
                                 <label className="mb-1 small font-weight-bold">{translateUiText("Date livraison")}</label>
-                                <input type="date" className="form-control form-control-sm" value={form.delivery_date}
+                                <input type="date" className="form-control form-control-sm" aria-label="交付日期" value={form.delivery_date}
                                     onChange={(e) => set('delivery_date', e.target.value)} disabled={isReadOnly} />
                             </div>
                         </div>
@@ -594,7 +532,7 @@ function LineDrawer({ open, onClose, onOpenCreate, editingLine, selectData, endp
                         </a>
                     ) : <span />}
                     <div>
-                        <button type="button" className="btn btn-sm btn-outline-secondary mr-2" onClick={onClose}>
+                        <button type="button" className="btn btn-sm btn-outline-secondary mr-2" onClick={closeLine}>
                             {translateUiText("Annuler")}
                         </button>
                         {!isReadOnly && (
@@ -610,7 +548,7 @@ function LineDrawer({ open, onClose, onOpenCreate, editingLine, selectData, endp
                         )}
                     </div>
                 </div>
-            </div>
+            </SurfaceDialog>}
         </>
     );
 }
@@ -951,6 +889,10 @@ export default function OrderLinesPage({ orderId, orderStatu: initialStatu, orde
         .finally(() => setLoading(false));
     }, []);
 
+    useEffect(() => {
+        if (!loading) window.dispatchEvent(new CustomEvent('jn-lines-count', { detail: { count: lines.filter(isArticle).length } }));
+    }, [lines, loading]);
+
     // ---------- Drag handlers ----------
 
     const handleDragStart = useCallback((e, index) => {
@@ -1270,6 +1212,7 @@ export default function OrderLinesPage({ orderId, orderStatu: initialStatu, orde
 
             {/* Toolbar */}
             <div className="d-flex flex-wrap align-items-center mb-3" style={{ gap: '0.5rem' }}>
+                {!isReadOnly && <button type="button" className="btn btn-primary btn-sm" onClick={handleOpenCreate}><i className="fas fa-plus mr-1" aria-hidden="true" />新增明细</button>}
                 <div className="input-group input-group-sm" style={{ maxWidth: 260 }}>
                     <div className="input-group-prepend"><span className="input-group-text"><i className="fas fa-search" /></span></div>
                     <input type="text" className="form-control" placeholder={translateUiText("Rechercher…")}
@@ -1387,11 +1330,11 @@ export default function OrderLinesPage({ orderId, orderStatu: initialStatu, orde
                             <th className="text-right">{translateUiText("Prix")}</th>
                             <th className="text-right">{translateUiText("Remise")}</th>
                             <th>{translateUiText("TVA")}</th>
-                            <th>{translateUiText("Livraison")}</th>
+                            <th>交付日期</th>
                             <th>{translateUiText("Tâches")}</th>
-                            <th>{translateUiText("Livraison")}</th>
+                            <th>交付进度</th>
                             <th>{translateUiText("Facturation")}</th>
-                            <th style={{ width: 120 }}>{translateUiText("Actions")}</th>
+                            <th style={{ width: 120 }}>操作</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1454,7 +1397,6 @@ export default function OrderLinesPage({ orderId, orderStatu: initialStatu, orde
             <LineDrawer
                 open={drawerOpen}
                 onClose={() => setDrawerOpen(false)}
-                onOpenCreate={handleOpenCreate}
                 editingLine={editingLine}
                 selectData={selectData}
                 endpoints={endpoints}

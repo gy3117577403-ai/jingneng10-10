@@ -16,7 +16,9 @@ export function bindUnsavedForms(root = document) {
         const url = new URL(link.href, location.href);
         if (!['http:', 'https:'].includes(url.protocol)) return;
         event.preventDefault(); event.stopPropagation();
-        if (await confirmAction('当前表单有未保存的修改。离开后，本次修改不会保存。', {title:'离开当前页面？',cancelLabel:'继续编辑',confirmLabel:'放弃并离开'})) {
+        const hasDraft = [...dirty].every(form => form.dataset.jnDraftSaved === 'true');
+        const message = hasDraft ? '当前修改尚未提交。已保留本标签页临时草稿，返回时可恢复；服务端记录保持原值。' : '当前表单有未保存的修改。离开后，本次修改不会保存。';
+        if (await confirmAction(message, {title:'离开当前页面？',cancelLabel:'继续编辑',confirmLabel:hasDraft ? '保留草稿并离开' : '放弃并离开'})) {
             dirty.clear(); location.assign(url.href);
         }
     }, true);

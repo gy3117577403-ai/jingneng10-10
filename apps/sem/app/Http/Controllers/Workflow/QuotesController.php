@@ -176,9 +176,13 @@ class QuotesController extends Controller
         $validated = $request->validated();
 
         try {
-            $Quote = Quotes::withTemplates()->findOrFail($request->id);
-            $Quote->fill($validated);
-            $Quote->save();
+            $Quote = DB::transaction(function () use ($request, $validated) {
+                $record = Quotes::withTemplates()->whereKey($request->id)->lockForUpdate()->firstOrFail();
+                if ($request->filled('_jn_revision')) {
+                    abort_unless(hash_equals(hash('sha256', json_encode($record->getAttributes())), (string) $request->input('_jn_revision')), 409, '报价已更新，请核对最新记录后再保存。');
+                }
+                $record->fill($validated); $record->save(); return $record;
+            });
 
             Log::channel('quotes')->info(__('general_content.quote_updated_log_trans_key'), [
                 'user_id' => $request->user()?->id,
@@ -486,7 +490,7 @@ class QuotesController extends Controller
         $query = Quotes::withCount(['QuoteLines' => fn ($q) => $q->articles()])
             ->selectRaw("quotes.*, {$totalSub} as total_amount")
             ->with(['companie:id,label,code', 'contact:id,first_name,name'])
-            ->when($search, fn ($q) => $q->where('label', 'like', '%'.$search.'%'))
+            ->when($search, fn ($q) => $q->where(fn ($match) => $match->where('quotes.label', 'like', '%'.$search.'%')->orWhere('quotes.code', 'like', '%'.$search.'%')->orWhereHas('companie', fn ($c) => $c->where('label', 'like', '%'.$search.'%'))))
             ->when($statuses, fn ($q) => $q->whereIn('statu', $statuses))
             ->when($companyId, fn ($q) => $q->where('companies_id', $companyId));
 
