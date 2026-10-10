@@ -1,4 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Segments, SurfaceDialog, readPreference, savePreference } from '../ui/WorkspaceKit';
+import { PanelLeftClose, PanelLeftOpen, ArrowLeft, FileSearch, Check, Clock3, ChevronRight } from 'lucide-react';
+import PrivateFilePreview from './PrivateFilePreview';
 
 const KINDS = { cabinet: '成套', sheet_metal: '钣金' };
 const FIELDS = { customer_name: '客户名称', expected_date: '期望交期', requirements: '需求说明' };
@@ -7,11 +10,7 @@ const BLANK = { title: '', kind: 'cabinet', customer_name: '', expected_date: ''
 const time = value => value ? new Date(value.replace(' ', 'T') + (/Z|[+]\d\d:\d\d$/.test(value) ? '' : '+08:00')).toLocaleString('zh-CN', { hour12: false }) : '—';
 
 function Modal({ title, children, onClose }) {
-    const ref = useRef();
-    useEffect(() => { ref.current.showModal(); }, []);
-    return <dialog className="ps-modal" ref={ref} onCancel={e => { e.preventDefault(); onClose(); }} aria-label={title}>
-        <header><h2>{title}</h2><button type="button" className="ps-icon" aria-label="关闭窗口" onClick={onClose}>×</button></header>{children}
-    </dialog>;
+    return <SurfaceDialog title={title} onClose={onClose} className="ps-modal jn-form-dialog">{children}</SurfaceDialog>;
 }
 
 function InquiryForm({ initial, busy, errors, onSave, onClose, onDirty }) {
@@ -40,7 +39,10 @@ export default function PresalesWorkspace({ base, initialId = null }) {
     const [busy, setBusy] = useState(false), [error, setError] = useState(''), [errors, setErrors] = useState({}), [notice, setNotice] = useState('');
     const [editorRecord, setEditorRecord] = useState(null);
     const [modal, setModal] = useState(null), [dirty, setDirty] = useState(false), [confirm, setConfirm] = useState(null);
-    const [selectedFiles, setSelectedFiles] = useState([]), [selectedRun, setSelectedRun] = useState(null), [source, setSource] = useState(null);
+    const [selectedFiles, setSelectedFiles] = useState([]), [selectedRun, setSelectedRun] = useState(Number(params.get('run')) || null), [source, setSource] = useState(null);
+    const [focused, setFocused] = useState(params.get('focus') === '1'), [split, setSplit] = useState(Math.min(65,Math.max(35,Number(readPreference('review.split',48))||48))), [preview, setPreview] = useState(null), [listLoading,setListLoading] = useState(true);
+    const sourceRef = useRef(null);
+    const fromInbox = params.get('return') === 'inbox';
     const [fields, setFields] = useState({}), [checked, setChecked] = useState({}), [note, setNote] = useState('');
     const [uploadDocument, setUploadDocument] = useState(null), [users, setUsers] = useState([]), [members, setMembers] = useState([]);
     const fileInput = useRef(), pending = useRef(null), listSequence = useRef(0), detailSequence = useRef(0);
@@ -51,6 +53,7 @@ export default function PresalesWorkspace({ base, initialId = null }) {
     const record = data?.record;
     const urlFor = (recordId, targetTab = tab) => {
         const p = new URLSearchParams({ tab: targetTab, kind, q: query, page: String(page) });
+        if (selectedRun) p.set('run',String(selectedRun)); if (focused) p.set('focus','1'); if (fromInbox) p.set('return','inbox');
         return `${base}${recordId ? `/inquiries/${recordId}` : ''}?${p}`;
     };
     const guard = action => dirtyRef.current ? setConfirm({ text: '候选或表单有未保存的修改，是否放弃并继续？', action: () => { setDirty(false); setFields(Object.fromEntries(Object.entries(run?.output?.candidates || {}).map(([k, v]) => [k, v.value]))); setChecked({}); setNote(''); action(); } }) : action();
@@ -66,7 +69,7 @@ export default function PresalesWorkspace({ base, initialId = null }) {
     async function reloadList() {
         const seq = ++listSequence.current;
         const result = await api(`/inquiries?${new URLSearchParams({ q: query, kind, page })}`);
-        if (seq === listSequence.current) setList(result);
+        if (seq === listSequence.current) { setList(result); setListLoading(false); }
     }
     async function reloadDetail(target = id) {
         if (!target) return;
@@ -87,18 +90,32 @@ export default function PresalesWorkspace({ base, initialId = null }) {
             pending.current = null; setDirty(false); setNotice(message); await reloadList(); await reloadDetail(); return result;
         } catch (e) { fail(e); return null; } finally { setBusy(false); }
     }
-    useEffect(() => { const t = setTimeout(() => reloadList().catch(fail), 180); return () => { clearTimeout(t); listSequence.current++; }; }, [query, kind, page]);
-    useEffect(() => { setData(null); setSelectedFiles([]); setSelectedRun(null); setSource(null); setError(''); if (id) { setLoading(true); reloadDetail().catch(fail).finally(() => setLoading(false)); } }, [id]);
-    useEffect(() => { history.replaceState({}, '', urlFor(id)); }, [query, kind, page, tab]);
+    useEffect(() => { setListLoading(true); const t = setTimeout(() => reloadList().catch(e => {setListLoading(false);fail(e);}), 180); return () => { clearTimeout(t); listSequence.current++; }; }, [query, kind, page]);
+    useEffect(() => { setData(null); setSelectedFiles([]); setSelectedRun(Number(new URLSearchParams(location.search).get('run')) || null); setSource(null); setError(''); if (id) { setLoading(true); reloadDetail().catch(fail).finally(() => setLoading(false)); } }, [id]);
+    useEffect(() => { history.replaceState({}, '', urlFor(id)); }, [query, kind, page, tab, selectedRun, focused]);
     useEffect(() => {
         const handler = () => {
             const match = location.pathname.match(/\/inquiries\/(\d+)$/), target = match ? Number(match[1]) : null;
             if (dirtyRef.current) { history.pushState({}, '', urlFor(currentId.current)); guard(() => select(target)); return; }
-            setId(target); setTab(new URLSearchParams(location.search).get('tab') || 'overview');
+            const p = new URLSearchParams(location.search);
+            setId(target); setTab(['overview','files','ai','history'].includes(p.get('tab'))?p.get('tab'):'overview');
+            setKind(KINDS[p.get('kind')]?p.get('kind'):'');setQuery(p.get('q')||'');setPage(Math.max(1,Number(p.get('page'))||1));
+            setFocused(p.get('focus')==='1');setSelectedRun(Number(p.get('run'))||null);
         };
         window.addEventListener('popstate', handler); return () => window.removeEventListener('popstate', handler);
     }, [kind, query, page, tab]);
     useEffect(() => { const handler = e => { if (dirtyRef.current) { e.preventDefault(); e.returnValue = ''; } }; window.addEventListener('beforeunload', handler); return () => window.removeEventListener('beforeunload', handler); }, []);
+    useEffect(() => {
+        const leave = e => {
+            const link=e.target.closest('a[href]');
+            if(!dirtyRef.current || !link || e.button!==0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || link.hasAttribute('download') || link.target==='_blank')return;
+            const next=new URL(link.href,location.origin);
+            if(next.origin!==location.origin || next.pathname===location.pathname && next.search===location.search)return;
+            e.preventDefault();e.stopImmediatePropagation();
+            setConfirm({text:'候选或表单有未保存的修改，是否放弃并离开？',action:()=>{dirtyRef.current=false;setDirty(false);window.location.assign(next.href);}});
+        };
+        document.addEventListener('click',leave,true);return()=>document.removeEventListener('click',leave,true);
+    },[]);
     useEffect(() => {
         if (!data?.runs.some(r => ['queued', 'running'].includes(r.state))) return;
         const t = setInterval(() => reloadDetail().catch(fail), 2200); return () => clearInterval(t);
@@ -107,7 +124,13 @@ export default function PresalesWorkspace({ base, initialId = null }) {
         setFields(Object.fromEntries(Object.entries(run?.output?.candidates || {}).map(([k, v]) => [k, v.value]))); setChecked({}); setNote(''); setSource(null);
     }, [run?.id, run?.state]);
     useEffect(() => { if (!notice) return; const t = setTimeout(() => setNotice(''), 5000); return () => clearTimeout(t); }, [notice]);
-    function select(target) { setId(target); setTab('overview'); history.pushState({}, '', urlFor(target, 'overview')); }
+    useEffect(() => {
+        const pane=sourceRef.current, line=pane?.querySelector('.highlight'), list=pane?.querySelector('ol');if(!line||!list)return;
+        const behavior=window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth';
+        if(window.matchMedia('(min-width: 992px)').matches) list.scrollTo({top:list.scrollTop+line.getBoundingClientRect().top-list.getBoundingClientRect().top-8,behavior});
+        else pane.scrollIntoView({block:'nearest',behavior});
+    }, [source]);
+    function select(target) { setId(target); setTab('overview'); setSelectedRun(null); const url=new URL(urlFor(target,'overview'),location.origin);url.searchParams.delete('run');history.pushState({}, '', url); }
     async function save(values) {
         const result = await mutate(modal === 'create' ? '/inquiries' : `/inquiries/${id}`, { ...values, ...(modal === 'edit' ? { revision: editorRecord.revision } : {}) }, '询价已保存', modal === 'edit' ? 'PUT' : 'POST');
         if (result) { setModal(null); if (modal === 'create') select(result.id); }
@@ -130,17 +153,18 @@ export default function PresalesWorkspace({ base, initialId = null }) {
     const download = vid => `${endpoint(`/inquiries/${id}/versions/${vid}/download`)}`;
     const closeModal = () => !busy && guard(() => { setModal(null); setError(''); });
     const button = (label, action, primary = false, disabled = false) => <button type="button" className={primary ? 'ps-primary' : ''} onClick={action} disabled={busy || disabled}>{label}</button>;
-    return <div className={`ps-workspace ${id ? 'has-selection' : ''}`}>
+    return <div className={`ps-workspace ${id ? 'has-selection' : ''} ${focused && id ? 'is-focused' : ''}`} style={{'--review-split':`${split}%`}}>
+        <div className="ps-review-tools"><div>{fromInbox && <a className="ps-button" href={`${base.replace(/\/presales\/?$/, '/dashboard')}?view=today`}><ArrowLeft size={15}/> 返回待办</a>}{id && <button type="button" aria-pressed={focused} onClick={()=>setFocused(v=>!v)}>{focused?<PanelLeftOpen size={15}/>:<PanelLeftClose size={15}/>} {focused?'显示询价列表':'专注核对'}</button>}</div>{focused&&tab==='ai'&&<label className="ps-review-width">候选与来源比例<input type="range" aria-label="候选与来源比例" min="35" max="65" value={split} onChange={e=>{setSplit(Number(e.target.value));savePreference('review.split',Number(e.target.value));}}/></label>}</div>
         {notice && <div className="ps-notice" role="status">{notice}</div>}
         {error && <div className="ps-error" role="alert">{error}<button onClick={() => { setError(''); reloadDetail().catch(fail); reloadList().catch(fail); }}>刷新数据</button></div>}
         <aside className="ps-list-panel">
-            <div className="ps-list-title"><div><h2>询价与资料</h2><span className="ps-muted">共 {list.total} 项</span></div>{button('新建询价', () => guard(() => { setModal('create'); setErrors({}); }), true)}</div>
+            <div className="ps-list-title"><div><h2>询价与资料</h2><span className="ps-muted">{listLoading?'正在读取…':`共 ${list.total} 项`}</span></div>{button('新建询价', () => guard(() => { setModal('create'); setErrors({}); }), true)}</div>
             <label className="ps-search"><span className="ps-sr">搜索询价</span><input type="search" placeholder="搜索名称、客户或编号" value={query} onChange={e => { setQuery(e.target.value); setPage(1); }} /></label>
             <div className="ps-filter" aria-label="筛选业务类型">{[['', '全部'], ...Object.entries(KINDS)].map(([key, name]) => <button key={key} aria-pressed={kind === key} className={kind === key ? 'is-active' : ''} onClick={() => { setKind(key); setPage(1); }}>{name}</button>)}</div>
             <div className="ps-records">{list.items.map(item => <button key={item.id} className={`ps-record ${item.id === id ? 'selected' : ''}`} onClick={() => guard(() => select(item.id))}>
                 <span className="ps-record-heading"><strong>{item.title}</strong><span className="ps-kind">{KINDS[item.kind]}</span></span>
                 <span className="ps-muted">{item.customer_name || '客户待补充'}</span><span className="ps-record-meta">{item.document_count} 份资料<span>{item.review_count > 0 ? <b>{item.review_count} 项待核对</b> : item.owner_name}</span></span>
-            </button>)}{!list.items.length && <p className="ps-empty">{query || kind ? '没有匹配的询价，试试调整筛选。' : '从一条询价开始，集中整理需求与资料。'}</p>}</div>
+            </button>)}{listLoading&&!list.items.length&&<p className="ps-empty" role="status">正在读取询价…</p>}{!listLoading&&!list.items.length && <p className="ps-empty">{query || kind ? '没有匹配的询价，试试调整筛选。' : '从一条询价开始，集中整理需求与资料。'}</p>}</div>
             {list.total > 20 && <div className="ps-pagination">{button('上一页', () => setPage(p => p - 1), false, page === 1)}<span>第 {page} 页</span>{button('下一页', () => setPage(p => p + 1), false, page * 20 >= list.total)}</div>}
         </aside>
         <main className="ps-detail" aria-busy={loading}>
@@ -148,23 +172,24 @@ export default function PresalesWorkspace({ base, initialId = null }) {
             {!id ? <div className="ps-welcome"><span className="ps-kind">售前协同</span><h2>把需求、资料和核对放在一起</h2><p>选择左侧询价，或新建一条成套、钣金询价。</p><ol><li>整理客户需求</li><li>上传并保留资料版本</li><li>核对候选后确认写入</li></ol>{button('新建询价', () => setModal('create'), true)}</div>
             : !record ? <p className="ps-empty">{loading ? '正在读取询价…' : '无法读取该询价，请返回列表或刷新。'}</p> : <>
                 <header className="ps-detail-header"><div><span className="ps-kind">{KINDS[record.kind]}</span><h2>{record.title}</h2><p>{record.customer_name || '客户待补充'}<span>负责人：{record.owner_name}</span></p></div><div className="ps-actions">{data.can_manage && button('编辑信息', () => guard(() => { setErrors({}); setEditorRecord(record); setModal('edit'); }))}{data.can_manage && button('协作者', async () => { try { setUsers(await api(`/inquiries/${id}/users`)); setMembers(data.members.map(m => m.id)); guard(() => setModal('members')); } catch (e) { fail(e); } })}</div></header>
-                <nav className="ps-tabs" aria-label="询价内容">{[['overview', '需求概览'], ['files', `资料 ${data.documents.length}`], ['ai', 'AI 辅助'], ['history', '操作记录']].map(([key, label]) => <button key={key} className={tab === key ? 'active' : ''} aria-current={tab === key ? 'page' : undefined} onClick={() => guard(() => setTab(key))}>{label}</button>)}</nav>
+                <Segments className="ps-tabs" value={tab} onChange={key=>guard(()=>setTab(key))} label="询价内容" items={[["overview","需求概览"],["files",`资料 ${data.documents.length}`],["ai","AI 辅助"],["history","操作记录"]]}/>
+
                 <div className="ps-tab-content">
                     {tab === 'overview' && <><dl className="ps-summary"><div><dt>客户名称</dt><dd>{record.customer_name || '待补充'}</dd></div><div><dt>期望交期</dt><dd>{record.expected_date || '待补充'}</dd></div><div className="ps-span"><dt>需求说明</dt><dd className="ps-prewrap">{record.requirements || '尚未填写需求，可手工补充或从资料生成候选。'}</dd></div><div><dt>协作者</dt><dd>{data.members.map(m => m.name).join('、') || '尚未指定'}</dd></div><div><dt>最近更新</dt><dd>{time(record.updated_at)}</dd></div></dl><div className="ps-next"><div><strong>{data.documents.length ? '资料已归集，继续核对关键信息' : '下一步：上传客户需求与图纸'}</strong><p>原件保留版本，确认后的内容才会更新询价。</p></div>{button(data.documents.length ? '进入 AI 辅助' : '整理资料', () => setTab(data.documents.length ? 'ai' : 'files'), true)}</div></>}
                     {tab === 'files' && <><div className="ps-section-head"><div><h3>资料与版本</h3><p>上传新版本会保留旧原件，供后续追溯。</p></div>{button('上传资料', () => { setUploadDocument(null); fileInput.current.click(); }, true)}</div><input ref={fileInput} className="ps-sr" type="file" aria-label="选择资料文件" onChange={upload} accept=".txt,.csv,.pdf,.png,.jpg,.jpeg,.xlsx,.docx,.dxf,.step,.stp" />
                         {!data.documents.length && <p className="ps-empty">还没有资料。支持文本、文档、表格、图片及工程文件，单个文件不超过 25 MB。</p>}
-                        {data.documents.map(doc => <section key={doc.id} className="ps-file"><div><strong>{doc.name}</strong><span className="ps-muted">当前第 {doc.versions[0].version} 版 · {(doc.versions[0].size / 1024).toFixed(1)} KB</span></div><div className="ps-actions"><a className="ps-button" href={download(doc.versions[0].id)}>下载原件</a>{button('上传新版本', () => { setUploadDocument(doc.id); fileInput.current.click(); })}</div><details><summary>版本记录（{doc.versions.length}）</summary>{doc.versions.map(v => <div className="ps-version" key={v.id}><span>第 {v.version} 版 · {time(v.created_at)}</span><a href={download(v.id)}>下载</a></div>)}</details></section>)}
+                        {data.documents.map(doc => <section key={doc.id} className="ps-file"><div><strong>{doc.name}</strong><span className="ps-muted">当前第 {doc.versions[0].version} 版 · {(doc.versions[0].size / 1024).toFixed(1)} KB</span></div><div className="ps-actions">{button('预览资料',()=>setPreview(doc.versions[0]))}<a className="ps-button" href={download(doc.versions[0].id)}>下载原件</a>{button('上传新版本', () => { setUploadDocument(doc.id); fileInput.current.click(); })}</div><details><summary>版本记录（{doc.versions.length}）</summary>{doc.versions.map(v => <div className="ps-version" key={v.id}><span>第 {v.version} 版 · {time(v.created_at)}</span><a href={download(v.id)}>下载</a></div>)}</details></section>)}
                         <div className="ps-example"><strong>试用资料</strong><p>下载带固定标签的虚构文本，上传后可以验证模拟审核流程。</p><a href={`${base}/examples/cabinet`}>下载成套示例</a><a href={`${base}/examples/sheet_metal`}>下载钣金示例</a></div>
                     </>}
                     {tab === 'ai' && <><div className="ps-section-head"><div><h3>资料核对 <span className="ps-simulation">模拟测试</span></h3><p>当前按固定标签提取文本；尚未接入真实模型或图纸识别。</p></div></div>
-                        <details className="ps-extract" open={!data.runs.length || undefined}><summary>选择资料并开始提取</summary><div className="ps-file-choices">{data.documents.filter(d => ['txt', 'csv'].includes(d.versions[0].extension)).map(d => <label key={d.id}><input type="checkbox" checked={selectedFiles.includes(d.versions[0].id)} onChange={e => setSelectedFiles(s => e.target.checked ? [...s, d.versions[0].id] : s.filter(v => v !== d.versions[0].id))} />{d.name}<span className="ps-muted">第 {d.versions[0].version} 版</span></label>)}</div>{!data.documents.some(d => ['txt', 'csv'].includes(d.versions[0].extension)) && <p>请先在“资料”上传 UTF-8 文本或 CSV。其他文件本批仅保存原件。</p>}{button('开始模拟提取', () => guard(start), true, !selectedFiles.length || selectedFiles.length > 5)}<span className="ps-muted">每次最多 5 份当前版本</span></details>
-                        {data.runs.length > 0 && <><div className="ps-run-picker"><label>处理记录<select aria-label="选择处理记录" value={run.id} onChange={e => guard(() => setSelectedRun(Number(e.target.value)))}>{data.runs.map(r => <option key={r.id} value={r.id}>第 {r.id} 次 · {STATES[r.state]} · {time(r.created_at)}</option>)}</select></label><span className={`ps-state ps-state-${run.state}`}>{STATES[run.state]}</span></div>
+                        <details key={run?.id || 'new'} className="ps-extract" open={!data.runs.length || undefined}><summary>选择资料并开始提取</summary><div className="ps-file-choices">{data.documents.filter(d => ['txt', 'csv'].includes(d.versions[0].extension)).map(d => <label key={d.id}><input type="checkbox" checked={selectedFiles.includes(d.versions[0].id)} onChange={e => setSelectedFiles(s => e.target.checked ? [...s, d.versions[0].id] : s.filter(v => v !== d.versions[0].id))} />{d.name}<span className="ps-muted">第 {d.versions[0].version} 版</span></label>)}</div>{!data.documents.some(d => ['txt', 'csv'].includes(d.versions[0].extension)) && <p>请先在“资料”上传 UTF-8 文本或 CSV。其他文件本批仅保存原件。</p>}{button('开始模拟提取', () => guard(start), true, !selectedFiles.length || selectedFiles.length > 5)}<span className="ps-muted">每次最多 5 份当前版本</span></details>
+                        {data.runs.length > 0 && <><div className="ps-run-steps" aria-label="处理阶段"><span><Check size={13}/>资料已保存</span><ChevronRight size={12}/><span className={['queued','running'].includes(run.state)?'is-active':''}><Clock3 size={13}/>{['queued','running'].includes(run.state)?'后台提取':'提取记录'}</span><ChevronRight size={12}/><span className={run.state==='review'?'is-active':''}><FileSearch size={13}/>人工核对</span><ChevronRight size={12}/><span className={run.review?'is-active':''}>确认回执</span></div><div className="ps-run-picker"><label>处理记录<select aria-label="选择处理记录" value={run.id} onChange={e => guard(() => setSelectedRun(Number(e.target.value)))}>{data.runs.map(r => <option key={r.id} value={r.id}>第 {r.id} 次 · {STATES[r.state]} · {time(r.created_at)}</option>)}</select></label><span className={`ps-state ps-state-${run.state}`}>{STATES[run.state]}</span></div>
                             {['queued', 'running'].includes(run.state) && <p className="ps-empty" role="status">{run.state === 'queued' ? '任务已保存，正在等待后台处理。可以离开页面，稍后继续。' : '正在核对来源并生成候选…'}</p>}
                             {run.error && <div className="ps-error">{run.error}{run.state === 'failed' && !run.stale && run.attempts < 3 && button('重试', () => mutate(`/inquiries/${id}/runs/${run.id}/retry`, {}, '已重新提交'))}</div>}
                             {run.stale && run.state === 'review' && <p className="ps-warning">询价或资料已有更新，这份候选已过期。请重新提取；旧记录仍可核对和驳回。</p>}
                             {run.review && <section className="ps-receipt"><h4>{run.review.decision === 'accept' ? '确认回执' : '驳回记录'}</h4><p>{run.review.reviewer_name} · {time(run.review.reviewed_at)}</p><p>{run.review.note}</p>{Object.entries(run.review.after).map(([key, value]) => <div key={key}><strong>{FIELDS[key]}</strong><span>{run.review.before[key] || '未填写'} → {value}</span></div>)}</section>}
                             {run.output && <details key={`${run.id}-${run.state}`} className={`ps-review-disclosure ${run.state === 'review' ? 'is-review' : ''}`} open={run.state === 'review'}><summary>查看候选与来源</summary><div className="ps-review-grid"><section><h4>候选信息</h4>{Object.entries(run.output.candidates).map(([key, candidate]) => <div className="ps-candidate" key={key}><label><input type="checkbox" disabled={!data.can_manage || run.state !== 'review' || run.stale} checked={checked[key] || false} onChange={e => { setChecked(s => ({ ...s, [key]: e.target.checked })); setDirty(true); }} /><strong>{FIELDS[key]}</strong></label><span className="ps-muted">当前：{record[key] || '未填写'}</span>{key === 'requirements' ? <textarea aria-label={`${FIELDS[key]}候选`} rows="3" readOnly={!data.can_manage || run.state !== 'review' || run.stale} value={fields[key] || ''} onChange={e => { setFields(s => ({ ...s, [key]: e.target.value })); setDirty(true); }} /> : <input aria-label={`${FIELDS[key]}候选`} type={key === 'expected_date' ? 'date' : 'text'} readOnly={!data.can_manage || run.state !== 'review' || run.stale} value={fields[key] || ''} onChange={e => { setFields(s => ({ ...s, [key]: e.target.value })); setDirty(true); }} />}<div className="ps-source-links">{candidate.sources.map((s, n) => <button key={n} onClick={() => setSource(s)}>查看来源 · 第 {s.line} 行</button>)}</div></div>)}{!Object.keys(run.output.candidates).length && <p className="ps-empty">没有可确认的候选，请按下方提示补充资料。</p>}</section>
-                                <section className="ps-source"><h4>来源原文</h4>{source ? (() => { const doc = run.sources.find(s => s.version_id === source.version_id); if (!doc) return null; return <><p>{doc.filename} · 第 {doc.version} 版 <a href={download(doc.version_id)}>下载原件</a></p><ol>{doc.text.split('\n').map((line, n) => <li key={n} className={n + 1 === source.line ? 'highlight' : ''}>{line || ' '}</li>)}</ol></>; })() : <p className="ps-empty">点击候选下方的来源，定位原文与行号。</p>}</section></div>
+                                <section ref={sourceRef} className="ps-source"><h4>来源原文</h4>{source ? (() => { const doc = run.sources.find(s => s.version_id === source.version_id); if (!doc) return null; return <><p>{doc.filename} · 第 {doc.version} 版 <a href={download(doc.version_id)}>下载原件</a></p><ol>{doc.text.split('\n').map((line, n) => <li key={n} className={n + 1 === source.line ? 'highlight' : ''}>{line || ' '}</li>)}</ol></>; })() : <p className="ps-empty">点击候选下方的来源，定位原文与行号。</p>}</section></div>
                                 {run.output.questions.length > 0 && <div className="ps-questions"><strong>待补充</strong><ul>{run.output.questions.map(q => <li key={q}>{q}</li>)}</ul></div>}
                             </details>}
                             {run.state === 'review' && data.can_manage && <section className="ps-review-footer"><label>审核说明<textarea rows="2" placeholder="记录采纳、修订或驳回的原因" value={note} maxLength={1000} onChange={e => { setNote(e.target.value); setDirty(true); }} /></label><div><span>已选择 {Object.values(checked).filter(Boolean).length} 项；未选字段保持原值</span><div className="ps-actions">{button('驳回候选', () => setConfirm({ text: '确认驳回这次候选？询价内容不会改变。', action: () => submitReview('reject') }), false, !note.trim())}{button('确认并更新', () => submitReview('accept'), true, !note.trim() || !Object.values(checked).some(Boolean) || run.stale)}</div></div></section>}
@@ -176,6 +201,7 @@ export default function PresalesWorkspace({ base, initialId = null }) {
                 </div>
             </>}
         </main>
+        {preview && <PrivateFilePreview file={preview} url={download(preview.id)} onClose={()=>setPreview(null)}/>}
         {['create', 'edit'].includes(modal) && <Modal title={modal === 'create' ? '新建询价' : '编辑询价'} onClose={closeModal}>{error && <p className="ps-error" role="alert">{error}</p>}<InquiryForm initial={modal === 'edit' ? editorRecord : BLANK} busy={busy} errors={errors} onSave={save} onClose={closeModal} onDirty={setDirty} /></Modal>}
         {modal === 'members' && <Modal title="指定协作者" onClose={closeModal}><p className="ps-muted">协作者可查看、上传资料和发起模拟提取；不能确认写入。</p><div className="ps-member-list">{users.filter(u => u.id !== record.owner_id).map(u => <label key={u.id}><input type="checkbox" checked={members.includes(u.id)} onChange={e => { setMembers(s => e.target.checked ? [...s, u.id] : s.filter(v => v !== u.id)); setDirty(true); }} />{u.name}</label>)}{users.length <= 1 && <p>当前没有其他可选账号，请先在用户管理中创建并分配角色。</p>}</div>{error && <p className="ps-error">{error}</p>}<footer>{button('取消', closeModal)}{button('保存协作者', async () => { const r = await mutate(`/inquiries/${id}/members`, { user_ids: members, revision: record.revision }, '协作者已更新', 'PUT'); if (r) setModal(null); }, true)}</footer></Modal>}
         {confirm && <Modal title="请确认" onClose={() => setConfirm(null)}><p>{confirm.text}</p><footer>{button('继续编辑', () => setConfirm(null))}{button('确认继续', () => { const action = confirm.action; setConfirm(null); action(); }, true)}</footer></Modal>}

@@ -126,6 +126,11 @@ Route::group(['prefix' => LaravelLocalization::setLocale(),
         Route::put('/dashboard/config', 'App\Http\Controllers\DashboardConfigController@update')->name('dashboard.config.update');
     });
 
+    Route::middleware(['auth', 'verified', 'has.role', 'check.factory'])->prefix('workspace')->group(function () {
+        Route::get('/inbox', [\App\Http\Controllers\WorkspaceController::class, 'inbox'])->name('workspace.inbox');
+        Route::get('/search', [\App\Http\Controllers\WorkspaceController::class, 'search'])->name('workspace.search');
+    });
+
     // Vue du jour
     Route::middleware(['auth', 'verified', 'has.role', 'check.factory'])->prefix('today')->group(function () {
         Route::get('/config',              'App\Http\Controllers\TodayController@configShow')->name('today.config.show');

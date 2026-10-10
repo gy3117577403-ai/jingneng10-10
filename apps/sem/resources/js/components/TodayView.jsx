@@ -137,7 +137,7 @@ function TodayItem({ item, def }) {
                     fontSize: 10, fontWeight: 600, color,
                     textTransform: 'uppercase', minWidth: 50,
                 }}>
-                    {item.type}
+                    {{quote:'报价',order:'订单',delivery:'交付',invoice:'发票'}[item.type] || '业务记录'}
                 </span>
             )}
 

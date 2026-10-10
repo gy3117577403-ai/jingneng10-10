@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import DashboardGrid from './dashboard/DashboardGrid.jsx';
-import TodayView from './TodayView.jsx';
+import WorkInbox from './WorkInbox.jsx';
+import { Segments, Entrance } from '../ui/WorkspaceKit';
 
 const VIEW_KEY = 'jn.home.view';
-const VIEWS = { overview: '工作概览', today: '今日事项', kpi: '分析看板' };
-function preference() { try { const value = localStorage.getItem(VIEW_KEY); return VIEWS[value] ? value : 'overview'; } catch { return 'overview'; } }
+const VIEWS = { today: '待我处理', overview: '工作概览', kpi: '分析看板' };
+function preference() { const requested = new URLSearchParams(location.search).get('view'); if (VIEWS[requested]) return requested; try { const value = localStorage.getItem(VIEW_KEY); return VIEWS[value] ? value : 'today'; } catch { return 'today'; } }
 function permissions() { try { return JSON.parse(document.querySelector('meta[name="user-permissions"]')?.content || '[]'); } catch { return []; } }
 
 function RecentList({ title, rows = [], base, index, quote = false }) {
@@ -59,14 +60,14 @@ function WorkOverview({ kpi = {}, urls = {}, recentOrders, recentQuotes, deliver
 
 export default function HomeDashboard(props) {
     const [view, setView] = useState(preference), [editMode, setEditMode] = useState(false);
-    function switchView(value) { setView(value); setEditMode(false); try { localStorage.setItem(VIEW_KEY, value); } catch { /* optional preference */ } }
+    function switchView(value) { setView(value); setEditMode(false); const url = new URL(location.href); url.searchParams.set('view',value); history.replaceState({},'',url); window.dispatchEvent(new Event('jn-view-change')); try { localStorage.setItem(VIEW_KEY, value); } catch { /* optional preference */ } }
     const date = new Intl.DateTimeFormat('zh-CN', {month:'long',day:'numeric',weekday:'long'}).format(new Date());
     return <div className="jn-home">
         <header className="jn-home-header"><div><h1>工作台</h1><p>{date} · 继续处理今天的工作</p></div>
-            <div className="jn-home-tabs" role="tablist" aria-label="工作台视图">{Object.entries(VIEWS).map(([key,label]) => <button key={key} role="tab" aria-selected={key === view} className={key === view ? 'active' : ''} onClick={() => switchView(key)}>{label}</button>)}</div>
+            <Segments value={view} onChange={switchView} items={Object.entries(VIEWS)} label="工作台视图"/>
         </header>
-        {view === 'overview' && <WorkOverview {...props} />}
-        {view === 'today' && <TodayView endpoints={props.endpoints} />}
+        {view === 'overview' && <Entrance><WorkOverview {...props} /></Entrance>}
+        {view === 'today' && <Entrance><WorkInbox endpoint={props.endpoints?.workspace_inbox} /></Entrance>}
         {view === 'kpi' && <><div className="d-flex justify-content-end mb-3"><button className="btn btn-default" onClick={() => setEditMode(value => !value)}>{editMode ? '完成调整' : '调整看板'}</button></div><DashboardGrid dashProps={props} configEndpoint={props.endpoints?.dashboard_config ?? '/dashboard/config'} editMode={editMode} onEditModeChange={setEditMode} /></>}
     </div>;
 }

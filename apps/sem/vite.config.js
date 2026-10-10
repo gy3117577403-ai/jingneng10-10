@@ -1,6 +1,20 @@
 import { defineConfig } from 'vite';
 import laravel from 'laravel-vite-plugin';
 import react from '@vitejs/plugin-react';
+import {readdirSync, readFileSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
+
+function pdfAssets() {
+    const files=new Map();
+    for(const dir of ['cmaps','standard_fonts','wasm','iccs']){
+        const root=new URL(`./node_modules/pdfjs-dist/${dir}/`,import.meta.url);
+        for(const file of readdirSync(root))files.set(`pdfjs/${dir}/${file}`,fileURLToPath(new URL(file,root)));
+    }
+    return {name:'jn-private-pdf-assets',
+        generateBundle(){for(const [fileName,path] of files)this.emitFile({type:'asset',fileName,source:readFileSync(path)});},
+        configureServer(server){server.middlewares.use((request,response,next)=>{const path=files.get((request.url||'').split('?')[0].replace(/^\//,''));if(!path)return next();response.setHeader('Content-Type','application/octet-stream');response.end(readFileSync(path));});},
+    };
+}
 
 export default defineConfig({
     test: {
@@ -11,6 +25,7 @@ export default defineConfig({
         css: false,
     },
     plugins: [
+        pdfAssets(),
         react(),
         laravel({
             input: [
