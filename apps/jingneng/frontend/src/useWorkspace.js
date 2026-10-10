@@ -23,7 +23,7 @@ export function useWorkspace() {
   const formDirty=computed(()=>!!modal.value && (JSON.stringify(form)!==originalForm.value || !!file.value))
   const storageKey=()=>`jn.ui.v1.${user.value}`
   const modalTitle=computed(()=>({create:'新建询价',edit:'编辑询价',upload:form.document?'上传新版本':'上传资料',task:'分派任务',reply:'回复任务',return:'退回补充',hold:'挂起任务',archive:form.status==='已归档'?'归档询价':'恢复协作'}[modal.value]||''))
-  const conflictRows=computed(()=>conflict.value && form.data ? changeRows(form.data,conflict.value) : [])
+  const conflictRows=computed(()=>conflict.value && form.data ? changeRows(form.data,conflict.value).filter(row=>Object.hasOwn(form.data,row.field)) : [])
   const remaining=computed(()=>selected.value?.tasks.filter(t=>t.status!=='已完成').length||0)
   function notify(message) { notice.value=message; clearTimeout(noticeTimer); noticeTimer=setTimeout(()=>notice.value='',5500) }
   function persist() { if(!booted)return; try{localStorage.setItem(storageKey(),JSON.stringify({density:density.value,collapsed:collapsed.value,columns,listHash}))}catch{} }

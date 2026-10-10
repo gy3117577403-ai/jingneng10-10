@@ -4,6 +4,10 @@ Uses fictional DEMO records and archives them after successful verification.
 No business originals or external model calls.
 """
 import json
+import hashlib
+import re
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from dev import ROOT, read_env
 from smoke import Client, check
 from smoke_workbench import call, detail, action, payload, task_action, upload, uid, SALES, TECH
@@ -23,6 +27,23 @@ def main():
         return call(client, 'create_inquiry', {'data': data, 'request_id': uid()}, True)['name']
     for client, user, password in [(sales, SALES, env['DEMO_PASSWORD']), (tech, TECH, env['DEMO_PASSWORD']), (admin, 'Administrator', env['ADMIN_PASSWORD'])]:
         client.login(user, password)
+    for round_number in range(3):
+        barrier = Barrier(2)
+        def sign_in(_):
+            client = Client(base)
+            barrier.wait(timeout=10)
+            code, _ = client.request('/api/method/login', 'POST', {'usr': SALES, 'pwd': env['DEMO_PASSWORD']})
+            return code, client
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            attempts = list(pool.map(sign_in, range(2)))
+        verify(all(code == 200 for code, _ in attempts),
+               f'Concurrent same-account sign-ins complete without metadata races, round {round_number + 1}: {[code for code, _ in attempts]}')
+        verify(all(client.json('/api/method/frappe.auth.get_logged_user')['message'] == SALES for _, client in attempts),
+               f'Both concurrent sessions are authenticated, round {round_number + 1}')
+    invalid = Client(base)
+    code, _ = invalid.request('/api/method/login', 'POST', {'usr': SALES, 'pwd': 'wrong-' + uid()})
+    verify(code in (401, 403) and invalid.request('/api/method/jingneng.api.workbench.work_items')[0] in (401, 403),
+           'Invalid password remains rejected and cannot create an authenticated session')
     verify(guest.request('/api/method/jingneng.api.workbench.work_items')[0] in (401, 403), 'Inbox rejects unauthenticated access')
     call(sales, 'work_items', {'kind': 'unknown'}, expected=417)
     call(sales, 'work_items', {'page': 'invalid'}, expected=417)
@@ -77,6 +98,17 @@ def main():
     verify(call(sales, 'inquiries', {'q': prefix})['total'] == 0 and call(sales, 'inquiries', {'q': prefix, 'status': ''})['total'] == 1, 'All-status filtering includes archived records while default hides them')
     status, page = guest.request('/signin')
     verify(status == 200 and '登录工作空间'.encode() in page and b'csrf-token' in page, 'Custom sign-in renders and includes session CSRF protection')
+    for client, route in [(guest, '/signin'), (sales, '/workbench')]:
+        code, html = client.request(route)
+        assets = re.findall(rb'(?:href|src)="(/assets/jingneng/[^"?]+\.(?:css|js))\?v=([a-f0-9]{16})"', html)
+        digest = hashlib.sha256()
+        for path, version in assets:
+            asset_code, body = client.request(path.decode())
+            assert asset_code == 200
+            digest.update(body)
+        verify(code == 200 and len(assets) == (3 if route == '/signin' else 2) and
+               all(version.decode() == digest.hexdigest()[:16] for _, version in assets),
+               route + ': asset URLs match deployed content so fixes replace cached versions')
     destination = ROOT / '.local/acceptance/jn-0005-ui'
     destination.mkdir(parents=True, exist_ok=True)
     (destination / 'api-results.json').write_text(json.dumps({'checks': results, 'fixture_inquiries': [private, shared]}, ensure_ascii=False, indent=2), encoding='utf-8')

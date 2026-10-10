@@ -1,6 +1,9 @@
 """HTTP adapters; authorization and mutations live in the shared service."""
 import hashlib
 import json
+import mimetypes
+from urllib.parse import quote
+from werkzeug.wrappers import Response
 import frappe
 from jingneng.workbench import service as svc
 
@@ -167,9 +170,10 @@ def authorized_file(kind, name):
 
 @frappe.whitelist(methods=['GET'])
 def download(kind, name):
-    _, file, content = authorized_file(kind, name)
-    frappe.local.response.update(type='download', filename=svc.safe_filename(file.file_name),
-                                 filecontent=content, display_content_as='attachment')
+    record, file, content = authorized_file(kind, name)
+    filename = svc.safe_filename(record.filename if kind == 'revision' else file.file_name)
+    return Response(content, mimetype=mimetypes.guess_type(filename)[0] or 'application/octet-stream',
+                    headers={'Content-Disposition': "attachment; filename*=UTF-8''" + quote(filename, safe='')})
 
 
 @frappe.whitelist(methods=['GET'])

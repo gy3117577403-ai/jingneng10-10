@@ -174,6 +174,8 @@ def inquiry_data(data, current=None):
     values['collaborator'] = collaborator
     values['notes'] = text(data.get('notes'), '需求说明', 6000)
     expected = data.get('expected_date') or None
+    if isinstance(expected, date):
+        expected = expected.isoformat()
     if expected:
         try:
             date.fromisoformat(expected)

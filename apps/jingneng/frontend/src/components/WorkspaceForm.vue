@@ -5,9 +5,9 @@ import { fileSize } from '../utils'
 defineProps({ w:Object })
 </script>
 <template>
-  <dialog :ref="el => w.dialog = el" class="modal" :class="{ wide:['create','edit'].includes(w.modal) }" @cancel.prevent="w.closeModal()" @click="event => event.target === w.dialog && w.closeModal()">
+  <dialog :ref="el => w.dialog = el" class="modal" aria-labelledby="workspace-form-title" :class="{ wide:['create','edit'].includes(w.modal) }" @cancel.prevent="w.closeModal()" @click="event => event.target === w.dialog && w.closeModal()">
     <form v-if="w.modal" @submit.prevent="w.submit">
-      <header class="modal-header"><h2>{{ w.modalTitle }}</h2><UiButton variant="ghost" icon="close" aria-label="关闭窗口" :disabled="w.busy" @click="w.closeModal()" /></header>
+      <header class="modal-header"><h2 id="workspace-form-title">{{ w.modalTitle }}</h2><UiButton variant="ghost" icon="close" aria-label="关闭窗口" :disabled="w.busy" @click="w.closeModal()" /></header>
       <div class="modal-body">
         <div v-if="w.formError" class="message error" role="alert"><AppIcon name="warning" /><p>{{ w.formError }}</p></div>
         <div v-if="w.conflict" class="conflict-panel"><strong>最新记录已读取，你的输入仍保留。</strong><p>请核对以下差异。继续保存将使用当前输入覆盖对应内容。</p><div v-for="row in w.conflictRows" :key="row.field" class="change-row"><strong>{{ row.label }}</strong><div><small>你的输入</small><p>{{ row.before }}</p></div><div><small>当前记录</small><p>{{ row.after }}</p></div></div><UiButton :loading="w.busy" @click="w.retryConflict">已核对，按当前输入重试</UiButton></div>

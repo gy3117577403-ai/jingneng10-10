@@ -7,6 +7,7 @@ app_license = "Proprietary"
 
 home_page = "workbench"
 before_install = "jingneng.setup.ensure_role"
+before_login = "jingneng.authentication.serialize_login_metadata"
 
 permission_query_conditions = {
     'JN Inquiry': 'jingneng.workbench.permissions.inquiry_query',
