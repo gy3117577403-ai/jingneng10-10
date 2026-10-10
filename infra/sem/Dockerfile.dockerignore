@@ -1,0 +1,14 @@
+**
+!apps/
+!apps/sem/
+!apps/sem/**
+!infra/
+!infra/sem/
+!infra/sem/**
+**/.git/
+**/node_modules/
+apps/sem/vendor/
+**/.env*
+**/*.log
+apps/sem/storage/logs/*
+apps/sem/public/build/

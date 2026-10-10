@@ -1,0 +1,45 @@
+name: SEM complete demo
+
+on:
+  push:
+    paths: ['apps/sem/**', 'infra/sem/**', 'compose.sem.yaml', 'scripts/sem*.py', '.github/workflows/sem.yml']
+  pull_request:
+    paths: ['apps/sem/**', 'infra/sem/**', 'compose.sem.yaml', 'scripts/sem*.py', '.github/workflows/sem.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Build and initialize the isolated demo
+        run: python3 scripts/sem.py start
+      - name: Verify Chinese catalogs and compiled views
+        run: |
+          docker compose --env-file .local/sem/compose.env -f compose.sem.yaml exec -T app php /opt/jingneng-sem/check-chinese.php
+          docker compose --env-file .local/sem/compose.env -f compose.sem.yaml exec -T app php /opt/jingneng-sem/check-views.php
+      - name: Run frontend regression suite from the locked dependencies
+        run: |
+          docker build -f infra/sem/Dockerfile --target assets -t jingneng/sem-assets:ci .
+          docker run --rm --network none jingneng/sem-assets:ci npm test
+      - name: Verify real HTTP modules and fictional business flow
+        run: python3 scripts/sem_acceptance.py
+      - name: Run upstream backend suite without network or live database access
+        run: python3 scripts/sem.py test
+      - name: Verify restart persistence
+        run: |
+          python3 scripts/sem.py stop
+          docker compose --env-file .local/sem/compose.env -f compose.sem.yaml up -d --wait
+          python3 scripts/sem_acceptance.py --read-only
+      - name: Verify paired database and file restoration
+        run: |
+          python3 scripts/sem.py backup
+          python3 scripts/sem.py restore-check --backup "$(find .local/sem/backups -mindepth 1 -maxdepth 1 -type d | sort | tail -1)"
+      - name: Save service diagnostics on failure
+        if: failure()
+        run: python3 scripts/sem.py logs

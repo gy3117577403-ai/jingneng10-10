@@ -1,0 +1,232 @@
+
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>{{ $typeDocumentName}} - #{{ $Document->code }}</title>
+        <style type="text/css">
+            @page {
+                margin: 390px 25px 50px 25px;
+            }
+            body {
+                margin: 0px; 
+                border: 1px solid {{ $Factory->pdf_header_font_color }};
+            }
+            * {
+                font-family: Verdana, Arial, sans-serif;
+            }
+            a {
+                color: #000;
+                text-decoration: none;
+            }
+            table {
+                font-size: smaller;
+                border-collapse:collapse;
+            }
+            tfoot tr td {
+                font-weight: bold;
+                font-size: smaller;
+            }
+            table th
+            {
+                padding: 10px;
+                margin-top:30px;
+            }
+            header { position: fixed; top: -390px; left: 0px; right: 0px; height: 390px; }
+            footer { position: fixed; bottom: -50px; left: 0px; right: 0px; background-color: {{ $Factory->pdf_header_font_color }}; height: 50px; }
+            footer .pagenum:before {
+                content: counter(page);
+            }
+        </style>
+        @include('print.partials.custom-styles')
+    </head>
+    <body>
+        <header>
+            <table style="width: 100%; border: none;">
+                <tr>
+                    <td align="left" style="width: 50%; background-color: {{ $Factory->pdf_header_font_color }}">
+                        @if($image)
+                            <img src="data:image/png;base64,{{ $image }}" alt="{{ __('Logo') }}" style="height: 120px;"/>
+                        @endif
+                    </td>
+                    <td align="center" style="width: 50%; background-color: {{ $Factory->pdf_header_font_color }}">
+                        <h2>{{ $typeDocumentName }}</h2>
+                        <h3>{{ $Document->code }}</h3>
+                    </td>
+                </tr>
+                <tr>
+                    <td align="left" style="width: 40%;">
+                        <h3>{{ $Factory->name }}</h3>
+                        <pre>
+{{ $Factory->address }}
+{{ $Factory->zipcode }} {{ $Factory->city }}
+{{ __('general_content.phone_trans_key') }} : {{ $Factory->phone_number }}
+{{ __('general_content.email_trans_key') }} : {{ $Factory->mail }}
+<br />
+<br />
+{{ __('general_content.date_trans_key') }} : {{ date('Y-m-d') }}
+                        </pre>
+                    </td>
+                    <td align="left" style="width: 50%;">
+                        @if($Document->type == 1 || empty($Document->type))
+                            <h3>{{ optional($Document->companie)['label'] }} </h3>
+                            <pre>
+{{ optional($Document->contact)['civility'] }} {{ optional($Document->contact)['first_name'] }} {{ optional($Document->contact)['name'] }}
+{{ optional($Document->adresse)['adress'] }}
+{{ optional($Document->adresse)['zipcode'] }} {{ optional($Document->adresse)['city'] }} {{ optional($Document->adresse)['province'] ?? '' }}
+{{ optional($Document->adresse)['country'] }}
+{{ __('general_content.phone_trans_key') }} : {{ optional($Document->contact)['number'] }}
+{{ __('general_content.email_trans_key') }} : {{ optional($Document->contact)['mail'] }}
+<br />
+{{ __('general_content.identifier_trans_key') }}: {{ $Document->customer_reference }}
+                            </pre>
+                        @else
+<h1>{{ __('general_content.internal_order_trans_key') }}</h1>
+                        @endif
+                    </td>
+                </tr>
+            </table>
+        </header>
+
+        <footer>
+            <div>
+                <table width="100%">
+                    <tr>
+                        <td align="left" style="width: 40%;">
+                            &copy; {{ date('Y') }} - {{ $Factory->name }}
+                        </td>
+                        <td align="right" style="width: 40%;">
+                            <div class="pagenum-container">{{ __('Page') }} <span class="pagenum"></span></div>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </footer>
+
+        <main>
+            <table style="width: 100%; " >
+                <thead >
+                    <tr style="background-color: grey;">
+                        <th align="center">{{ __('general_content.description_trans_key') }}</th>
+                        <th align="center">{{ __('general_content.material_trans_key') }}</th>
+                        <th align="center">{{ __('general_content.thickness_trans_key') }}</th>
+                        <th align="center">{{ __('general_content.qty_trans_key') }}</th>
+                        <th align="center">{{ __('general_content.unit_trans_key') }}</th>
+                        <th align="center">{{ __('general_content.price_trans_key') }}</th>
+                        <th align="center">{{ __('general_content.discount_trans_key') }}</th>
+                        <th align="center">{{ __('general_content.delivery_date_trans_key') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+@if(!empty($printRows ?? null))
+@foreach($printRows as $row)
+@if($row['type'] === 'article')
+<?php $DocumentLine = $row['line']; ?>
+<?php $lineDetails = $DocumentLine->QuoteLineDetails ?? $DocumentLine->OrderLineDetails; ?>
+                    <tr>
+                        <td align="center">
+                            {{ $DocumentLine->label }}<br>
+                            <span style="color: #6c757d">{{ $DocumentLine->code }}</span>
+                        </td>
+                        <td align="center">{{ $lineDetails?->material ?? '-' }}</td>
+                        <td align="center">{{ $lineDetails?->thickness ?? '-' }}</td>
+                        <td align="center">{{ $DocumentLine->qty }}</td>
+                        <td>{{ optional($DocumentLine->Unit)['label'] }}</td>
+                        <td>{{ $normalizeCurrency($DocumentLine->formatted_selling_price) }}</td>
+                        <td align="center">{{ $DocumentLine->discount }} %</td>
+                        <td align="center">{{ $DocumentLine->delivery_date ?: '-' }}</td>
+                    </tr>
+@elseif($row['type'] === 'package')
+<?php $DocumentLine = $row['line']; ?>
+                    <tr class="line-package">
+                        <td align="center">
+                            <strong>{{ $DocumentLine->label }}</strong>
+                            @if($DocumentLine->code)<br><span style="color: #6c757d">{{ $DocumentLine->code }}</span>@endif
+                        </td>
+                        <td align="center">-</td>
+                        <td align="center">-</td>
+                        <td align="center">{{ $row['show_qty'] ? 1 : '' }}</td>
+                        <td>{{ $row['show_qty'] ? optional($DocumentLine->Unit)['label'] : '' }}</td>
+                        <td>{{ $normalizeCurrency($DocumentLine->formatted_selling_price) }}</td>
+                        <td align="center">-</td>
+                        <td align="center">{{ $DocumentLine->delivery_date ?: '-' }}</td>
+                    </tr>
+@else
+@include('print.partials.sales-presentation-row', ['row' => $row, 'columns' => 8, 'amountColumn' => 6])
+@endif
+@endforeach
+@else
+                    @forelse($Document->Lines as $DocumentLine)
+                    @php
+                        $lineDetails = $DocumentLine->QuoteLineDetails ?? $DocumentLine->OrderLineDetails;
+                    @endphp
+                    <tr>
+                        <td align="center">
+                            {{ $DocumentLine->label }}<br>
+                            <span style="color: #6c757d">{{ $DocumentLine->code }}</span>
+                        </td>
+                        <td align="center">{{ $lineDetails?->material ?? '-' }}</td>
+                        <td align="center">{{ $lineDetails?->thickness ?? '-' }}</td>
+                        <td align="center">{{ $DocumentLine->qty }}</td>
+                        <td>{{ optional($DocumentLine->Unit)['label'] }}</td>
+                        <td>{{ $normalizeCurrency($DocumentLine->formatted_selling_price) }}</td>
+                        <td align="center">{{ $DocumentLine->discount }} %</td>
+                        @if($DocumentLine->delivery_date )
+                        <td align="center">{{ $DocumentLine->delivery_date }}</td>
+                        @else
+                        <td>-</td>
+                        @endif
+                        
+                    </tr>
+                    @empty
+                        <x-EmptyDataLine col="9" text="{{ __('general_content.no_data_trans_key') }}"  />
+                    @endforelse
+@endif
+                </tbody>
+            </table>
+            <hr style="color: #6c757d">
+            <table width="100%">
+                <tr>
+                    <td align="left" style="width: 50%;">
+                        @if($Document->type == 1)
+                        <p class="lead"><strong>{{ __('general_content.payment_methods_trans_key') }}:</strong> {{ optional($Document->payment_method)['label'] }}</p>
+                        <p class="lead"><strong>{{ __('general_content.payment_conditions_trans_key')}}:</strong> {{ optional($Document->payment_condition)['label'] }}</p>
+                        @endif
+                        @if($Document->comment)
+                        <p class="lead"><strong>{{ __('general_content.comment_trans_key') }} :</strong></p>
+                        <p class="text-muted well well-sm shadow-none" style="margin-top: 10px;">
+                            {{  $Document->comment }}
+                        </p>
+                        @endif
+                        <p class="lead">
+                            <a href="{{ Request::root() }}/guest/quote/{{ $Document->uuid }}"> {{ __('general_content.public_link_trans_key') }}</a>
+                        </p>
+                    </td>
+                    <td align="right" style="width: 50%;">
+                        <table width="80%">
+                            <tr>
+                                <th align="right" style="width:50%">{{ __('general_content.sub_total_trans_key') }}:</th> 
+                                <td align="right" style="width:30%">{{ $normalizeCurrency($formattedSubPrice) }} </td>
+                            </tr>
+                            @forelse($vatPrice as $key => $value)
+                            <tr>
+                                <td align="right" style="width:50%">{{ __('general_content.tax_trans_key') }} <?= $vatPrice[$key][0] ?> %</td> 
+                                <td align="right" style="width:30%"><?= number_format( $vatPrice[$key][1], 2, '.', ',') ?> {{ $Factory->curency }}</td>
+                            </tr>
+                            @empty
+                            <tr>
+                                <td align="right" style="width:50%">{{ __('general_content.no_tax_trans_key') }}</td> 
+                                <td align="right" style="width:30%"> </td>
+                            </tr>
+                            @endforelse
+                            <tr  style=" background-color: {{ $Factory->pdf_header_font_color }}">
+                                <th align="right" style="width:50%">{{ __('general_content.total_trans_key') }} :</th> 
+                                <td align="right" style="width:30%">{{ $normalizeCurrency($formattedTotalPrice) }}</td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </main>
+    </body>
+</html>

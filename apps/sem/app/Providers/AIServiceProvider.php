@@ -1,0 +1,77 @@
+<?php
+
+namespace App\Providers;
+
+use App\Services\AI\AIGateway;
+use App\Services\AI\AISettingsResolver;
+use App\Services\AI\Modules\ERPAssistantModule;
+use App\Services\AI\Providers\ClaudeProvider;
+use App\Services\AI\Providers\PythonMLProvider;
+use App\Services\AI\Providers\ToolAwareClaudeProvider;
+use App\Services\AI\Providers\ToolAwareOpenAICompatibleProvider;
+use App\Services\AI\Tools\ERPToolRegistry;
+use App\Services\AI\Tools\InvoiceQueryTool;
+use App\Services\AI\Tools\OrderQueryTool;
+use App\Services\AI\Tools\DailyJournalTool;
+use App\Services\AI\Tools\QuoteQueryTool;
+use App\Services\AI\Tools\StockQueryTool;
+use App\Services\AI\Tools\UniversalQueryTool;
+use Illuminate\Support\ServiceProvider;
+
+class AIServiceProvider extends ServiceProvider
+{
+    public function register(): void
+    {
+        // Resolver de config (DB → .env fallback)
+        $this->app->singleton(AISettingsResolver::class);
+
+        // Tools
+        $this->app->singleton(OrderQueryTool::class);
+        $this->app->singleton(StockQueryTool::class);
+        $this->app->singleton(InvoiceQueryTool::class);
+        $this->app->singleton(QuoteQueryTool::class);
+        $this->app->singleton(DailyJournalTool::class);
+        $this->app->singleton(UniversalQueryTool::class);
+
+        $this->app->singleton(ERPToolRegistry::class, fn ($app) => new ERPToolRegistry(
+            $app->make(OrderQueryTool::class),
+            $app->make(StockQueryTool::class),
+            $app->make(InvoiceQueryTool::class),
+            $app->make(QuoteQueryTool::class),
+            $app->make(DailyJournalTool::class),
+            $app->make(UniversalQueryTool::class),
+        ));
+
+        // Gateway avec tous les providers
+        $this->app->singleton(AIGateway::class, function ($app) {
+            $gateway  = new AIGateway();
+            $resolver = $app->make(AISettingsResolver::class);
+            $gateway->registerProvider(new ClaudeProvider($resolver));
+            $gateway->registerProvider(new PythonMLProvider());
+            $gateway->registerProvider(new ToolAwareClaudeProvider(
+                $app->make(ERPToolRegistry::class),
+                $resolver,
+            ));
+            foreach (AISettingsResolver::OPENAI_COMPATIBLE as $key) {
+                $gateway->registerProvider(new ToolAwareOpenAICompatibleProvider(
+                    $key,
+                    $app->make(ERPToolRegistry::class),
+                    $resolver,
+                ));
+            }
+            return $gateway;
+        });
+
+        // Module assistant ERP
+        $this->app->singleton(ERPAssistantModule::class, fn ($app) => new ERPAssistantModule(
+            $app->make(AIGateway::class),
+            $app->make(ERPToolRegistry::class),
+            $app->make(AISettingsResolver::class),
+        ));
+    }
+
+    public function boot(): void
+    {
+        $this->mergeConfigFrom(__DIR__ . '/../../config/ai.php', 'ai');
+    }
+}

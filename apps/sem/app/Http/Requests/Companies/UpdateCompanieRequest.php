@@ -1,0 +1,65 @@
+<?php
+
+namespace App\Http\Requests\Companies;
+
+use Illuminate\Foundation\Http\FormRequest;
+use App\Rules\ValidVatNumber;
+use App\Services\CompanyService;
+
+class UpdateCompanieRequest extends FormRequest
+{
+    /**
+     * Determine if the user is authorized to make this request.
+     *
+     * @return bool
+     */
+    public function authorize()
+    {
+        return true;
+    }
+
+    /**
+     * Get the validation rules that apply to the request.
+     *
+     * @return array
+     */
+    public function rules()
+    {
+        return [
+            'label'=>'required',
+            'user_id'=>'required',
+            'civility' => 'nullable|string',
+            'last_name'=> 'nullable|string',
+            'website'=> 'nullable|string',
+            'fbsite'=> 'nullable|string',
+            'twittersite'=> 'nullable|string', 
+            'lkdsite'=> 'nullable|string',
+            'siren'=> 'nullable|string', 
+            'naf_code'=> 'nullable|string', 
+            'intra_community_vat'=> ['nullable', 'string', new ValidVatNumber(app(CompanyService::class))],
+            // Régime de TVA du tiers (axe de la matrice) + attestation de franchise (art. 275).
+            'vat_regime_id'=> 'nullable|exists:vat_regimes,id',
+            'vat_attestation_ref'=> 'nullable|string|max:255',
+            'vat_attestation_valid_until'=> 'nullable|date',
+            // Adresse électronique de facturation (BT-49). Les règles DGFiP et
+            // Peppol réunies n'autorisent que chiffres, lettres non accentuées
+            // et le souligné — un caractère de plus et l'adresse est introuvable.
+            'electronic_address'=> ['nullable', 'string', 'max:100', 'regex:/^[A-Za-z0-9_]+$/'],
+            'electronic_address_scheme'=> ['nullable', 'string', 'max:4'],
+            'statu_customer'=>'required',
+            'discount'=> 'nullable|numeric',
+            'account_general_customer'=> 'nullable|string',
+            'account_auxiliary_customer'=> 'nullable|string',
+            'statu_supplier'=>'required',
+            'account_general_supplier'=> 'nullable|string',
+            'account_auxiliary_supplier'=> 'nullable|string',
+            'recept_controle'=>'required',
+            'comment'=> 'nullable|string',
+            'barcode_value'=> 'nullable|string',
+            'longitude'=> 'nullable|string',
+            'latitude'=> 'nullable|string',
+            'delivery_constraint'=>'numeric',
+            'tolerance_days'=>'nullable|string',
+        ];
+    }
+}

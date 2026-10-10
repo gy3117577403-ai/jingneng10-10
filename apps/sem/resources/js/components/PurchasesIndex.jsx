@@ -1,0 +1,953 @@
+import { translateUiText, uiCurrency, uiLocale } from '../lib/i18n.js';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { DataTable, Pagination, StatusBadge, StatusFilter, MobileFilters, useIndexTab } from './table';
+import { apiFetchOrThrow as apiFetch } from '../lib/http';
+import { formatDate, formatCurrency } from '../utils';
+import { CreateAddressSubModal, CreateContactSubModal } from './company/CompanySubModals';
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const STATUS_CONFIG = {
+    1: { badge: 'badge-info',    label: 'in_progress'     },
+    2: { badge: 'badge-warning', label: 'ordered'         },
+    3: { badge: 'badge-primary', label: 'partly_received' },
+    4: { badge: 'badge-success', label: 'received'        },
+    5: { badge: 'badge-dark',    label: 'canceled'        },
+};
+
+const STATUS_COLORS = { 1: '#17a2b8', 2: '#ffc107', 3: '#007bff', 4: '#28a745', 5: '#343a40' };
+
+const LS_COL_ORDER   = 'purchases_table_col_order';
+const LS_HIDDEN_COLS = 'purchases_table_hidden_cols';
+const LS_FILTERS     = 'purchases_list_filters';
+
+
+// ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+
+function shortAmount(v) {
+    if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+    if (v >= 1_000)     return `${(v / 1_000).toFixed(0)}k`;
+    return String(Math.round(v));
+}
+
+function niceMax(value) {
+    if (value <= 0) return 100;
+    const exp = Math.pow(10, Math.floor(Math.log10(value)));
+    return Math.ceil(value / exp) * exp;
+}
+
+// ---------------------------------------------------------------------------
+// KPI Cards
+// ---------------------------------------------------------------------------
+
+function KPICards({ kpi, trans, currency, locale }) {
+    return (
+        <div className="row">
+            <div className="col-lg-4">
+                <div className="small-box bg-teal">
+                    <div className="inner">
+                        <h3>{formatCurrency(kpi.averageAmount ?? 0, currency, locale)}</h3>
+                        <p>{trans.average_purchase_price ?? translateUiText("Average purchase price")}</p>
+                    </div>
+                    <div className="icon"><i className="fas fa-chart-bar" /></div>
+                </div>
+            </div>
+            <div className="col-lg-4">
+                <div className="small-box bg-danger">
+                    <div className="inner">
+                        <h3>{formatCurrency(kpi.totalPurchasesAmount ?? 0, currency, locale)}</h3>
+                        <p>{trans.total_price ?? translateUiText("Total purchases")}</p>
+                    </div>
+                    <div className="icon"><i className="fas fa-shopping-cart" /></div>
+                </div>
+            </div>
+            <div className="col-lg-4">
+                <div className="small-box bg-purple">
+                    <div className="inner">
+                        <h3>{kpi.totalPurchaseLineCount ?? 0}</h3>
+                        <p>{trans.lines_count ?? translateUiText("Purchase lines")}</p>
+                    </div>
+                    <div className="icon"><i className="fas fa-list" /></div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// PieChart — pur React SVG
+// ---------------------------------------------------------------------------
+
+function PieChart({ data, trans }) {
+    const [hovered, setHovered] = useState(null);
+
+    const items = (data ?? []).filter(d => (d.PurchaseCountRate ?? 0) > 0);
+    const total = items.reduce((s, d) => s + Number(d.PurchaseCountRate), 0);
+
+    if (!items.length) return <p className="text-muted text-center small py-3">—</p>;
+
+    const R = 80, r = 44, cx = 110, cy = 110, size = 220;
+    let angle = -Math.PI / 2;
+
+    const slices = items.map(item => {
+        const value = Number(item.PurchaseCountRate);
+        const sweep = (value / total) * 2 * Math.PI;
+        const x1 = cx + R * Math.cos(angle), y1 = cy + R * Math.sin(angle);
+        angle += sweep;
+        const x2 = cx + R * Math.cos(angle), y2 = cy + R * Math.sin(angle);
+        const ix1 = cx + r * Math.cos(angle), iy1 = cy + r * Math.sin(angle);
+        const ix2 = cx + r * Math.cos(angle - sweep), iy2 = cy + r * Math.sin(angle - sweep);
+        const large    = sweep > Math.PI ? 1 : 0;
+        const midAngle = angle - sweep / 2;
+        const cfg      = STATUS_CONFIG[item.statu];
+        return {
+            statu: item.statu, value, midAngle,
+            color: STATUS_COLORS[item.statu] ?? '#aaa',
+            label: trans[cfg?.label] ?? item.statu,
+            path:  `M ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2} L ${ix1} ${iy1} A ${r} ${r} 0 ${large} 0 ${ix2} ${iy2} Z`,
+        };
+    });
+
+    const hov = hovered !== null ? slices[hovered] : null;
+
+    return (
+        <div>
+            <svg viewBox={`0 0 ${size} ${size}`} style={{ width: '100%', maxWidth: 220, display: 'block', margin: '0 auto' }}>
+                {slices.map((s, i) => {
+                    const isHov = hovered === i;
+                    const ox = isHov ? Math.cos(s.midAngle) * 6 : 0;
+                    const oy = isHov ? Math.sin(s.midAngle) * 6 : 0;
+                    return (
+                        <path key={i} d={s.path}
+                            fill={s.color} stroke="#fff" strokeWidth="2"
+                            transform={`translate(${ox}, ${oy})`}
+                            style={{ cursor: 'pointer', transition: 'transform 0.15s ease' }}
+                            onMouseEnter={() => setHovered(i)}
+                            onMouseLeave={() => setHovered(null)}
+                        />
+                    );
+                })}
+                <text x={cx} y={cy - 6} textAnchor="middle" fontSize="18" fontWeight="700" fill="#343a40">
+                    {hov ? hov.value : total}
+                </text>
+                <text x={cx} y={cy + 12} textAnchor="middle" fontSize="9" fill="#6c757d">
+                    {hov ? hov.label : (trans.purchases ?? 'achats')}
+                </text>
+            </svg>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginTop: '0.5rem' }}>
+                {slices.map((s, i) => (
+                    <div key={i} className="d-flex align-items-center"
+                        style={{ gap: '0.4rem', cursor: 'default', opacity: hovered !== null && hovered !== i ? 0.4 : 1, transition: 'opacity 0.15s' }}
+                        onMouseEnter={() => setHovered(i)}
+                        onMouseLeave={() => setHovered(null)}
+                    >
+                        <span style={{ width: 10, height: 10, borderRadius: 2, background: s.color, flexShrink: 0 }} />
+                        <span style={{ fontSize: '0.78rem', flex: 1 }}>{s.label}</span>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>
+                            {s.value} <span style={{ color: '#aaa', fontWeight: 400 }}>({Math.round(s.value / total * 100)}%)</span>
+                        </span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Line Chart — pur React SVG
+// ---------------------------------------------------------------------------
+
+const CHART_BLUE   = 'rgba(60,141,188,0.9)';
+const CHART_ORANGE = 'rgba(240,173,78,0.85)';
+
+const MONTH_KEYS_ORDERED = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+
+function buildMonthlyData(items, key = 'purchaseSum', startMonth = 1) {
+    return Array.from({ length: 12 }, (_, i) => {
+        const calMonth = ((startMonth - 1 + i) % 12) + 1;
+        const found = (items ?? []).find(d => d.month === calMonth);
+        return found ? parseFloat(found[key]) || 0 : 0;
+    });
+}
+
+function LineChart({ data, trans }) {
+    const [hovered, setHovered] = useState(null);
+    const startMonth = data.fiscalYearStartMonth ?? 1;
+
+    const MONTHS = Array.from({ length: 12 }, (_, i) => {
+        const key = MONTH_KEYS_ORDERED[((startMonth - 1) + i) % 12];
+        return trans[key] ?? key;
+    });
+
+    const current = buildMonthlyData(data.purchaseMonthlyRecap, 'purchaseSum', startMonth);
+
+    const W = 560, H = 260;
+    const PAD = { top: 16, right: 16, bottom: 36, left: 52 };
+    const plotW = W - PAD.left - PAD.right;
+    const plotH = H - PAD.top - PAD.bottom;
+
+    const maxVal  = niceMax(Math.max(...current, 1));
+    const Y_TICKS = 4;
+
+    const xPos = i => PAD.left + (i / 11) * plotW;
+    const yPos = v => PAD.top + plotH - Math.min(v / maxVal, 1) * plotH;
+
+    const linePath = d => d.map((v, i) => `${i === 0 ? 'M' : 'L'} ${xPos(i).toFixed(1)} ${yPos(v).toFixed(1)}`).join(' ');
+    const areaPath = d => `${linePath(d)} L ${xPos(11).toFixed(1)} ${(PAD.top + plotH).toFixed(1)} L ${xPos(0).toFixed(1)} ${(PAD.top + plotH).toFixed(1)} Z`;
+
+    return (
+        <div>
+            <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', display: 'block' }}>
+                {Array.from({ length: Y_TICKS + 1 }, (_, i) => {
+                    const v = (maxVal / Y_TICKS) * i;
+                    const y = yPos(v);
+                    return (
+                        <g key={i}>
+                            <line x1={PAD.left} y1={y} x2={PAD.left + plotW} y2={y}
+                                stroke={i === 0 ? '#ccc' : '#efefef'} strokeWidth="1" />
+                            <text x={PAD.left - 6} y={y + 4} textAnchor="end" fontSize="10" fill="#999">
+                                {shortAmount(v)}
+                            </text>
+                        </g>
+                    );
+                })}
+                <path d={areaPath(current)} fill="rgba(60,141,188,0.08)" />
+                <path d={linePath(current)} fill="none" stroke={CHART_BLUE} strokeWidth="2.5" />
+                {MONTHS.map((m, i) => (
+                    <g key={i}
+                        onMouseEnter={() => setHovered(i)}
+                        onMouseLeave={() => setHovered(null)}
+                        style={{ cursor: 'default' }}>
+                        <rect x={xPos(i) - plotW / 24} y={PAD.top} width={plotW / 12} height={plotH + 24} fill="transparent" />
+                        <text x={xPos(i)} y={H - 6} textAnchor="middle" fontSize="10" fill="#666">
+                            {(m ?? '').substring(0, 3)}
+                        </text>
+                        <circle cx={xPos(i)} cy={yPos(current[i])} r={hovered === i ? 5 : 3} fill={CHART_BLUE} stroke="#fff" strokeWidth="1.5" style={{ transition: 'r 0.1s' }} />
+                        {hovered === i && (
+                            <g pointerEvents="none">
+                                <line x1={xPos(i)} y1={PAD.top} x2={xPos(i)} y2={PAD.top + plotH} stroke="#ccc" strokeWidth="1" strokeDasharray="4,2" />
+                                <rect x={i > 8 ? xPos(i) - 88 : xPos(i) + 8} y={PAD.top + 4} width={80} height={30} rx="4"
+                                    fill="white" stroke="#ddd" strokeWidth="1" style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,.12))' }} />
+                                <text x={i > 8 ? xPos(i) - 80 : xPos(i) + 16} y={PAD.top + 16} fontSize="10" fontWeight="700" fill="#333">{MONTHS[i]}</text>
+                                <circle cx={i > 8 ? xPos(i) - 72 : xPos(i) + 18} cy={PAD.top + 26} r={4} fill={CHART_BLUE} />
+                                <text x={i > 8 ? xPos(i) - 64 : xPos(i) + 26} y={PAD.top + 30} fontSize="10" fill="#333">{shortAmount(current[i])}</text>
+                            </g>
+                        )}
+                    </g>
+                ))}
+            </svg>
+            <div className="d-flex justify-content-center mt-1" style={{ gap: '1.5rem' }}>
+                <div className="d-flex align-items-center" style={{ gap: '6px', fontSize: '0.78rem', color: '#555' }}>
+                    <svg width="22" height="10"><line x1="0" y1="5" x2="22" y2="5" stroke={CHART_BLUE} strokeWidth="2" /></svg>
+                    {trans.purchase_forecast ?? translateUiText("Achats (année)")}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Top Suppliers card
+// ---------------------------------------------------------------------------
+
+function TopSuppliersCard({ suppliers, trans }) {
+    if (!suppliers?.length) return <p className="text-muted small">—</p>;
+    return (
+        <div>
+            {suppliers.map((s, i) => (
+                <div key={i} className="d-flex align-items-center mb-2" style={{ gap: '0.5rem' }}>
+                    <span style={{ width: 22, textAlign: 'center' }}>
+                        {[1, 2, 3, 4, 5].map(star => (
+                            <i key={star} className={`fas fa-star`}
+                                style={{ fontSize: '0.6rem', color: star <= Math.round(s.avg_rating) ? '#ffc107' : '#dee2e6' }} />
+                        ))}
+                    </span>
+                    <span style={{ fontSize: '0.82rem', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.label}>
+                        {s.label}
+                    </span>
+                    <span className="badge badge-warning" style={{ fontSize: '0.7rem' }}>{s.avg_rating}</span>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Delivery times table
+// ---------------------------------------------------------------------------
+
+function DeliveryTimesCard({ suppliers, trans }) {
+    if (!suppliers?.length) return <p className="text-muted small">—</p>;
+    return (
+        <table className="table table-sm mb-0">
+            <thead>
+                <tr>
+                    <th>{trans.supplier ?? translateUiText("Fournisseur")}</th>
+                    <th className="text-right">{trans.delivery_time ?? translateUiText("Délai (j)")}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {suppliers.map((s, i) => (
+                    <tr key={i}>
+                        <td style={{ fontSize: '0.82rem' }}>{s.supplier_name}</td>
+                        <td className="text-right" style={{ fontSize: '0.82rem' }}>{s.avg_reception_delay}</td>
+                    </tr>
+                ))}
+            </tbody>
+        </table>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Top Products table
+// ---------------------------------------------------------------------------
+
+function TopProductsCard({ products, trans }) {
+    if (!products?.length) return <p className="text-muted small">—</p>;
+    return (
+        <table className="table table-sm mb-0">
+            <thead>
+                <tr>
+                    <th>{trans.product ?? translateUiText("Produit")}</th>
+                    <th className="text-right">{trans.qty_total ?? translateUiText("Qté")}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {products.map((p, i) => (
+                    <tr key={i}>
+                        <td style={{ fontSize: '0.82rem' }}>{p.label}</td>
+                        <td className="text-right" style={{ fontSize: '0.82rem' }}>{p.total_quantity}</td>
+                    </tr>
+                ))}
+            </tbody>
+        </table>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Composite Indicators table
+// ---------------------------------------------------------------------------
+
+function CompositeIndicatorsCard({ indicators, trans }) {
+    if (!indicators?.length) return <p className="text-muted small">—</p>;
+    return (
+        <table className="table table-sm mb-0">
+            <thead>
+                <tr>
+                    <th>{trans.supplier ?? translateUiText("Fournisseur")}</th>
+                    <th>{trans.composite_score ?? translateUiText("Score")}</th>
+                    <th>{trans.next_review_at ?? translateUiText("Révision")}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {indicators.map((s, i) => (
+                    <tr key={i}>
+                        <td style={{ fontSize: '0.82rem' }}>{s.label}</td>
+                        <td style={{ fontSize: '0.82rem' }}>{s.composite_score ?? '—'}</td>
+                        <td style={{ fontSize: '0.82rem' }}>{s.next_review_at ?? '—'}</td>
+                    </tr>
+                ))}
+            </tbody>
+        </table>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Suppliers to requalify table
+// ---------------------------------------------------------------------------
+
+function SuppliersToRequalifyCard({ suppliers, trans }) {
+    if (!suppliers?.length) return <p className="text-muted small">—</p>;
+    return (
+        <table className="table table-sm mb-0">
+            <thead>
+                <tr>
+                    <th>{trans.supplier ?? translateUiText("Fournisseur")}</th>
+                    <th>{trans.evaluation_status ?? translateUiText("Statut")}</th>
+                    <th>{trans.next_review_at ?? translateUiText("Révision")}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {suppliers.map((s, i) => (
+                    <tr key={i}>
+                        <td style={{ fontSize: '0.82rem' }}>{s.label}</td>
+                        <td style={{ fontSize: '0.82rem' }}>{s.evaluation_status ? s.evaluation_status.replace(/_/g, ' ') : '—'}</td>
+                        <td style={{ fontSize: '0.82rem' }}>{s.next_review_at ?? '—'}</td>
+                    </tr>
+                ))}
+            </tbody>
+        </table>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard Tab
+// ---------------------------------------------------------------------------
+
+function DashboardTab({ kpi, chartData, topSuppliers, fastestSuppliers, slowestSuppliers, compositeIndicators, suppliersToRequalify, topProducts, trans, currency, locale }) {
+    return (
+        <div>
+            <KPICards kpi={kpi} trans={trans} currency={currency} locale={locale} />
+
+            <div className="row">
+                {/* Pie chart */}
+                <div className="col-md-3">
+                    <div className="card card-teal">
+                        <div className="card-header">
+                            <h3 className="card-title">
+                                <i className="fas fa-chart-pie mr-1" />
+                                {trans.purchases_by_status ?? translateUiText("Par statut")}
+                            </h3>
+                        </div>
+                        <div className="card-body">
+                            <PieChart data={chartData.purchasesDataRate ?? []} trans={trans} />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Line chart */}
+                <div className="col-md-6">
+                    <div className="card card-purple">
+                        <div className="card-header">
+                            <h3 className="card-title">
+                                <i className="fas fa-chart-bar mr-1" />
+                                {trans.monthly_recap ?? translateUiText("Récap mensuel")}
+                            </h3>
+                        </div>
+                        <div className="card-body">
+                            <LineChart data={chartData} trans={trans} />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Top rated suppliers */}
+                <div className="col-md-3">
+                    <div className="card card-primary">
+                        <div className="card-header">
+                            <h3 className="card-title">
+                                <i className="fas fa-star mr-1" />
+                                {trans.top_rated_supplier ?? translateUiText("Top fournisseurs")}
+                            </h3>
+                        </div>
+                        <div className="card-body">
+                            <TopSuppliersCard suppliers={topSuppliers} trans={trans} />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="row">
+                {/* Fastest */}
+                <div className="col-md-3">
+                    <div className="card card-secondary">
+                        <div className="card-header">
+                            <h3 className="card-title">
+                                <i className="fas fa-bolt mr-1" />
+                                {trans.suppliers_fastest ?? translateUiText("Délais les plus courts")}
+                            </h3>
+                        </div>
+                        <div className="card-body p-2">
+                            <DeliveryTimesCard suppliers={fastestSuppliers} trans={trans} />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Slowest */}
+                <div className="col-md-3">
+                    <div className="card card-dark">
+                        <div className="card-header">
+                            <h3 className="card-title">
+                                <i className="fas fa-hourglass-half mr-1" />
+                                {trans.suppliers_slowest ?? translateUiText("Délais les plus longs")}
+                            </h3>
+                        </div>
+                        <div className="card-body p-2">
+                            <DeliveryTimesCard suppliers={slowestSuppliers} trans={trans} />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Top products */}
+                <div className="col-md-3">
+                    <div className="card card-success">
+                        <div className="card-header">
+                            <h3 className="card-title">
+                                <i className="fas fa-box mr-1" />
+                                {trans.most_purchased_products ?? translateUiText("Produits les + achetés")}
+                            </h3>
+                        </div>
+                        <div className="card-body p-2">
+                            <TopProductsCard products={topProducts} trans={trans} />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Composite indicators */}
+                <div className="col-md-3">
+                    <div className="card card-info">
+                        <div className="card-header">
+                            <h3 className="card-title">
+                                <i className="fas fa-chart-line mr-1" />
+                                {trans.composite_indicators ?? translateUiText("Indicateurs composites")}
+                            </h3>
+                        </div>
+                        <div className="card-body p-2">
+                            <CompositeIndicatorsCard indicators={compositeIndicators} trans={trans} />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Suppliers to requalify */}
+            {suppliersToRequalify?.length > 0 && (
+                <div className="row">
+                    <div className="col-md-6">
+                        <div className="card card-danger">
+                            <div className="card-header">
+                                <h3 className="card-title">
+                                    <i className="fas fa-exclamation-triangle mr-1" />
+                                    {trans.suppliers_to_requalify ?? translateUiText("Fournisseurs à requalifier")}
+                                </h3>
+                            </div>
+                            <div className="card-body p-2">
+                                <SuppliersToRequalifyCard suppliers={suppliersToRequalify} trans={trans} />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// PurchasesTable — colonnes déclarées, rendu par le DataTable partagé
+// ---------------------------------------------------------------------------
+
+function purchaseColumns(trans, currency, locale) {
+    return [
+        { key: 'code',                 label: trans.code         ?? translateUiText("Code"),        sortable: true, bold: true,
+          render: p => <code>{p.code}</code>, filter: 'text', mobile: 'title', mobileRender: p => p.code },
+        { key: 'label',                label: trans.label        ?? translateUiText("Label"),       sortable: true,
+          filter: 'text', mobile: 'subtitle' },
+        { key: 'companie',             label: trans.company      ?? translateUiText("Fournisseur"), sortable: true,
+          render: p => p.companie?.label ?? '—', filterValue: p => p.companie?.label, filter: 'text', mobile: 'subtitle', mobileOrder: 1 },
+        { key: 'contact',              label: trans.contact      ?? translateUiText("Contact"),     sortable: true,
+          render: p => p.contact?.name ?? '—', filterValue: p => p.contact?.name, filter: 'text' },
+        { key: 'statu',                label: trans.status       ?? translateUiText("Statut"),      sortable: true, align: 'center',
+          render: p => <StatusBadge statu={p.statu} config={STATUS_CONFIG} trans={trans} />, mobile: 'badge' },
+        { key: 'created_at',           label: trans.created_at   ?? translateUiText("Créé le"),     sortable: true, align: 'center',
+          filter: 'date' },
+        { key: 'purchase_lines_count', label: trans.lines        ?? translateUiText("Lignes"),      sortable: true, align: 'center',
+          render: p => <span className="badge badge-secondary">{p.purchase_lines_count}</span> },
+        { key: 'total_amount',         label: trans.total_amount ?? translateUiText("Total"),       sortable: true, align: 'right', bold: true,
+          render: p => (p.total_amount > 0 ? formatCurrency(p.total_amount, currency, locale) : <span className="text-muted">—</span>),
+          total: { value: p => p.total_amount ?? 0, format: sum => formatCurrency(sum, currency, locale) },
+          mobile: 'amount', mobileRender: p => (p.total_amount > 0 ? formatCurrency(p.total_amount, currency, locale) : null) },
+    ];
+}
+
+function PurchasesTable({ purchases, loading, trans, onSort, sortField, sortAsc, currency, locale }) {
+    return (
+        <DataTable
+            rows={purchases}
+            columns={purchaseColumns(trans, currency, locale)}
+            loading={loading}
+            trans={trans}
+            sortField={sortField}
+            sortAsc={sortAsc}
+            onSort={onSort}
+            storage={{ order: LS_COL_ORDER, hidden: LS_HIDDEN_COLS }}
+            rowHref={p => p.url}
+            emptyText={trans.no_results ?? translateUiText("Aucun résultat")}
+            totalLabel={trans.total ?? translateUiText("Total")}
+        />
+    );
+}
+
+// ---------------------------------------------------------------------------
+// CreateModal
+// ---------------------------------------------------------------------------
+
+function CreateModal({ endpoints, trans, onClose }) {
+    const [selectData, setSelectData]   = useState(null);
+    const [loadingData, setLoadingData] = useState(true);
+    const [form, setForm] = useState({
+        code: '', label: '', comment: '',
+        companies_id: '', companies_contacts_id: '', companies_addresses_id: '',
+    });
+    const [errors, setErrors]               = useState({});
+    const [saving, setSaving]               = useState(false);
+    const [addressOptions, setAddressOptions] = useState([]);
+    const [contactOptions, setContactOptions] = useState([]);
+    const [showAddressModal, setShowAddressModal] = useState(false);
+    const [showContactModal, setShowContactModal] = useState(false);
+
+    useEffect(() => {
+        apiFetch(endpoints.selectData)
+            .then(data => {
+                setSelectData(data);
+                setForm(f => ({ ...f, code: data.next_code ?? '', label: data.next_code ?? '' }));
+            })
+            .catch(() => {})
+            .finally(() => setLoadingData(false));
+    }, []);
+
+    useEffect(() => {
+        if (!form.companies_id) { setAddressOptions([]); setContactOptions([]); return; }
+        const addrUrl = endpoints.addresses.replace('__ID__', form.companies_id);
+        const contUrl = endpoints.contacts.replace('__ID__', form.companies_id);
+        Promise.all([apiFetch(addrUrl), apiFetch(contUrl)])
+            .then(([addr, cont]) => {
+                setAddressOptions(addr ?? []);
+                setContactOptions(cont ?? []);
+                setForm(f => ({
+                    ...f,
+                    companies_addresses_id: addr?.[0]?.id ? String(addr[0].id) : '',
+                    companies_contacts_id:  cont?.[0]?.id ? String(cont[0].id) : '',
+                }));
+            })
+            .catch(() => {});
+    }, [form.companies_id]);
+
+    const set  = (k, v) => setForm(f => ({ ...f, [k]: v }));
+    const save = async () => {
+        setSaving(true); setErrors({});
+        try {
+            const data = await apiFetch(endpoints.store, { method: 'POST', body: JSON.stringify(form) });
+            if (data.redirect) window.location.href = data.redirect;
+        } catch (e) { setErrors(e.errors ?? {}); }
+        finally { setSaving(false); }
+    };
+
+    if (loadingData) return (
+        <div className="modal show d-block" tabIndex="-1" style={{ zIndex: 1050 }}>
+            <div className="modal-dialog"><div className="modal-content"><div className="modal-body text-center py-4"><i className="fas fa-spinner fa-spin fa-2x"></i></div></div></div>
+        </div>
+    );
+
+    return (
+        <>
+            <div className="modal-backdrop fade show" style={{ zIndex: 1040 }} onClick={onClose}></div>
+            <div className="modal show d-block" tabIndex="-1" style={{ zIndex: 1050 }}>
+                <div className="modal-dialog modal-lg">
+                    <div className="modal-content">
+                        <div className="modal-header bg-success">
+                            <h5 className="modal-title">{trans.new_purchase ?? translateUiText("Nouvel achat")}</h5>
+                            <button className="close" onClick={onClose}><span>×</span></button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="row">
+                                {/* Code */}
+                                <div className="col-md-4 mb-2">
+                                    <label className="mb-0 small">{trans.code ?? translateUiText("Code")} *</label>
+                                    <input className={`form-control form-control-sm ${errors.code ? 'is-invalid' : ''}`}
+                                        value={form.code} onChange={e => set('code', e.target.value)} />
+                                    {errors.code && <div className="invalid-feedback">{errors.code[0]}</div>}
+                                </div>
+                                {/* Label */}
+                                <div className="col-md-8 mb-2">
+                                    <label className="mb-0 small">{trans.label ?? translateUiText("Libellé")} *</label>
+                                    <input className={`form-control form-control-sm ${errors.label ? 'is-invalid' : ''}`}
+                                        value={form.label} onChange={e => set('label', e.target.value)} />
+                                    {errors.label && <div className="invalid-feedback">{errors.label[0]}</div>}
+                                </div>
+                                {/* Supplier */}
+                                <div className="col-md-6 mb-2">
+                                    <label className="mb-0 small">{trans.company ?? translateUiText("Fournisseur")} *</label>
+                                    <select className={`form-control form-control-sm ${errors.companies_id ? 'is-invalid' : ''}`}
+                                        value={form.companies_id} onChange={e => set('companies_id', e.target.value)}>
+                                        <option value="">—</option>
+                                        {(selectData?.suppliers ?? []).map(c => (
+                                            <option key={c.id} value={c.id}>{c.label ?? c.code}</option>
+                                        ))}
+                                    </select>
+                                    {errors.companies_id && <div className="invalid-feedback">{errors.companies_id[0]}</div>}
+                                </div>
+                                {/* Contact */}
+                                <div className="col-md-6 mb-2">
+                                    <label className="mb-0 small">{trans.contact ?? translateUiText("Contact")} *</label>
+                                    <div className="input-group input-group-sm">
+                                        <select className={`form-control form-control-sm ${errors.companies_contacts_id ? 'is-invalid' : ''}`}
+                                            value={form.companies_contacts_id}
+                                            onChange={e => set('companies_contacts_id', e.target.value)}
+                                            disabled={!form.companies_id}>
+                                            <option value="">—</option>
+                                            {contactOptions.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                        </select>
+                                        {form.companies_id && (
+                                            <div className="input-group-append">
+                                                <button className="btn btn-outline-secondary btn-sm" type="button" onClick={() => setShowContactModal(true)}>+</button>
+                                            </div>
+                                        )}
+                                    </div>
+                                    {errors.companies_contacts_id && <div className="invalid-feedback d-block">{errors.companies_contacts_id[0]}</div>}
+                                </div>
+                                {/* Address */}
+                                <div className="col-md-6 mb-2">
+                                    <label className="mb-0 small">{trans.address ?? translateUiText("Adresse")} *</label>
+                                    <div className="input-group input-group-sm">
+                                        <select className={`form-control form-control-sm ${errors.companies_addresses_id ? 'is-invalid' : ''}`}
+                                            value={form.companies_addresses_id}
+                                            onChange={e => set('companies_addresses_id', e.target.value)}
+                                            disabled={!form.companies_id}>
+                                            <option value="">—</option>
+                                            {addressOptions.map(a => <option key={a.id} value={a.id}>{a.label} — {a.adress}</option>)}
+                                        </select>
+                                        {form.companies_id && (
+                                            <div className="input-group-append">
+                                                <button className="btn btn-outline-secondary btn-sm" type="button" onClick={() => setShowAddressModal(true)}>+</button>
+                                            </div>
+                                        )}
+                                    </div>
+                                    {errors.companies_addresses_id && <div className="invalid-feedback d-block">{errors.companies_addresses_id[0]}</div>}
+                                </div>
+                                {/* Comment */}
+                                <div className="col-12 mb-2">
+                                    <label className="mb-0 small">{trans.comment ?? translateUiText("Commentaire")}</label>
+                                    <textarea className="form-control form-control-sm" rows={2}
+                                        value={form.comment} onChange={e => set('comment', e.target.value)} />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary btn-sm" onClick={onClose}>{trans.cancel ?? translateUiText("Annuler")}</button>
+                            <button className="btn btn-success btn-sm" onClick={save} disabled={saving}>
+                                {saving ? (trans.saving ?? translateUiText("Enregistrement…")) : (trans.save ?? translateUiText("Enregistrer"))}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {showAddressModal && (
+                <CreateAddressSubModal
+                    show
+                    companiesId={form.companies_id}
+                    storeUrl={endpoints.storeAddress}
+                    trans={trans}
+                    onCreated={addr => {
+                        setAddressOptions(a => [...a, addr]);
+                        set('companies_addresses_id', String(addr.id));
+                        setShowAddressModal(false);
+                    }}
+                    onClose={() => setShowAddressModal(false)}
+                />
+            )}
+            {showContactModal && (
+                <CreateContactSubModal
+                    show
+                    companiesId={form.companies_id}
+                    storeUrl={endpoints.storeContact}
+                    trans={trans}
+                    onCreated={contact => {
+                        setContactOptions(c => [...c, contact]);
+                        set('companies_contacts_id', String(contact.id));
+                        setShowContactModal(false);
+                    }}
+                    onClose={() => setShowContactModal(false)}
+                />
+            )}
+        </>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// ListTab
+// ---------------------------------------------------------------------------
+
+function ListTab({ endpoints, trans, currency, locale, companieId }) {
+    const [purchases, setPurchases] = useState([]);
+    const [meta, setMeta]           = useState(null);
+    const [loading, setLoading]     = useState(false);
+    const [search, setSearch]       = useState('');
+    const [statuses, setStatuses]   = useState([1, 2]);
+    const [sortField, setSortField] = useState('created_at');
+    const [sortAsc, setSortAsc]     = useState(false);
+    const [page, setPage]           = useState(1);
+    const [showModal, setShowModal] = useState(false);
+    const debounceRef = useRef(null);
+
+    // Restore filters
+    useEffect(() => {
+        try {
+            const saved = localStorage.getItem(LS_FILTERS);
+            if (saved) {
+                const f = JSON.parse(saved);
+                if (f.search    !== undefined) setSearch(f.search);
+                if (f.statuses  !== undefined) setStatuses(f.statuses);
+                if (f.sortField !== undefined) setSortField(f.sortField);
+                if (f.sortAsc   !== undefined) setSortAsc(f.sortAsc);
+            }
+        } catch {}
+    }, []);
+
+    // Persist filters
+    useEffect(() => {
+        localStorage.setItem(LS_FILTERS, JSON.stringify({ search, statuses, sortField, sortAsc }));
+    }, [search, statuses, sortField, sortAsc]);
+
+    const fetchPurchases = useCallback(async (overrides = {}) => {
+        setLoading(true);
+        const p  = overrides.page      ?? page;
+        const q  = overrides.search    ?? search;
+        const s  = overrides.statuses  ?? statuses;
+        const sf = overrides.sortField ?? sortField;
+        const sa = overrides.sortAsc   ?? sortAsc;
+
+        const params = new URLSearchParams({ search: q, sort: sf, asc: sa ? '1' : '0', page: p });
+        s.forEach(id => params.append('statuses[]', id));
+        if (companieId) params.set('company_id', companieId);
+
+        try {
+            const data = await apiFetch(`${endpoints.list}?${params}`);
+            setPurchases(data.data ?? []);
+            setMeta(data.meta ?? null);
+        } catch {}
+        finally { setLoading(false); }
+    }, [endpoints.list, page, search, statuses, sortField, sortAsc, companieId]);
+
+    useEffect(() => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => fetchPurchases(), 200);
+        return () => clearTimeout(debounceRef.current);
+    }, [fetchPurchases]);
+
+    const handleSort = field => {
+        const newAsc = sortField === field ? !sortAsc : true;
+        setSortField(field);
+        setSortAsc(newAsc);
+        setPage(1);
+    };
+    const handleStatusToggle = sid => {
+        setStatuses(s => s.includes(sid) ? s.filter(x => x !== sid) : [...s, sid]);
+        setPage(1);
+    };
+    const handleSearch = val => { setSearch(val); setPage(1); };
+    const handlePage   = p   => setPage(p);
+
+    return (
+        <div>
+            <div className="d-flex flex-wrap align-items-center mb-2" style={{ gap: '0.5rem' }}>
+                {/* Search */}
+                <div className="input-group input-group-sm flex-shrink-0" style={{ width: 200 }}>
+                    <div className="input-group-prepend">
+                        <span className="input-group-text"><i className="fas fa-search" /></span>
+                    </div>
+                    <input type="text" className="form-control"
+                        placeholder={trans.search ?? translateUiText("Rechercher…")}
+                        value={search}
+                        onChange={e => handleSearch(e.target.value)}
+                    />
+                </div>
+
+                {/* Status filter */}
+                <MobileFilters count={statuses.length} trans={trans}>
+                    <StatusFilter config={STATUS_CONFIG} selected={statuses} onToggle={handleStatusToggle} trans={trans} />
+                </MobileFilters>
+
+                <div className="flex-grow-1" />
+
+                {/* New purchase */}
+                <button className="btn btn-sm btn-success flex-shrink-0" onClick={() => setShowModal(true)}>
+                    <i className="fas fa-plus mr-1" />{trans.new_purchase ?? translateUiText("Nouvel achat")}
+                </button>
+            </div>
+
+            <PurchasesTable
+                purchases={purchases}
+                loading={loading}
+                trans={trans}
+                onSort={handleSort}
+                sortField={sortField}
+                sortAsc={sortAsc}
+                currency={currency}
+                locale={locale}
+            />
+
+            {meta && (
+                <div className="d-flex justify-content-between align-items-center mt-2">
+                    <small className="text-muted">
+                        {meta.total} {trans.purchases ?? 'achats'} — {trans.page ?? translateUiText("Page")} {meta.current_page}/{meta.last_page}
+                    </small>
+                    <Pagination meta={meta} around={2} jumpButtons ulClassName="pagination pagination-sm mb-0" onPage={handlePage} />
+                </div>
+            )}
+
+            {showModal && (
+                <CreateModal
+                    endpoints={endpoints}
+                    trans={trans}
+                    currency={currency}
+                    locale={locale}
+                    onClose={() => setShowModal(false)}
+                />
+            )}
+        </div>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+
+export default function PurchasesIndex({
+    kpi, chartData, topSuppliers, fastestSuppliers, slowestSuppliers,
+    compositeIndicators, suppliersToRequalify, topProducts,
+    endpoints, trans, companieId = null,
+}) {
+    const [activeTab, setActiveTab] = useIndexTab('purchases_index_tab', { forced: companieId ? 'list' : null });
+    const currency = trans.currency ?? uiCurrency();
+    const locale   = trans.locale   ?? uiLocale();
+
+    return (
+        <div className="card card-outline card-orange">
+            <div className="card-header p-2">
+                <ul className="nav nav-pills">
+                    <li className="nav-item">
+                        <a className={`nav-link ${activeTab === 'dashboard' ? 'active' : ''}`}
+                            href="#" onClick={e => { e.preventDefault(); setActiveTab('dashboard'); }}>
+                            {trans.dashboard ?? translateUiText("Dashboard")}
+                        </a>
+                    </li>
+                    <li className="nav-item">
+                        <a className={`nav-link ${activeTab === 'list' ? 'active' : ''}`}
+                            href="#" onClick={e => { e.preventDefault(); setActiveTab('list'); }}>
+                            {trans.purchases_list ?? translateUiText("Liste achats")}
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <div className="card-body">
+                {activeTab === 'dashboard' && (
+                    <DashboardTab
+                        kpi={kpi}
+                        chartData={chartData}
+                        topSuppliers={topSuppliers}
+                        fastestSuppliers={fastestSuppliers}
+                        slowestSuppliers={slowestSuppliers}
+                        compositeIndicators={compositeIndicators}
+                        suppliersToRequalify={suppliersToRequalify}
+                        topProducts={topProducts}
+                        trans={trans}
+                        currency={currency}
+                        locale={locale}
+                    />
+                )}
+                {activeTab === 'list' && (
+                    <ListTab
+                        endpoints={endpoints}
+                        trans={trans}
+                        currency={currency}
+                        locale={locale}
+                        companieId={companieId}
+                    />
+                )}
+            </div>
+        </div>
+    );
+}

@@ -1,0 +1,27 @@
+@extends('adminlte::page')
+
+@section('title', __('general_content.purchase_request_trans_key'))
+
+@section('content_header')
+  <div class="row mb-2">
+    <div class="col-sm-6">
+        <h1>{{ __('general_content.purchase_request_trans_key') }}</h1>
+    </div>
+  </div>
+@stop
+
+@section('content')
+<div
+    id="purchases-request-app"
+    data-last-purchase-code="{{ $reactProps['lastPurchaseCode'] }}"
+    data-last-quotation-code="{{ $reactProps['lastQuotationCode'] }}"
+    data-suppliers='@json($reactProps['suppliers'], JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_HEX_TAG)'
+    data-endpoints='@json($reactEndpoints, JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_HEX_TAG)'
+    data-trans='@json($reactTrans, JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_HEX_TAG)'>
+</div>
+@stop
+
+@section('css')
+@viteReactRefresh
+@vite(['resources/sass/app.scss', 'resources/js/app.js'])
+@stop

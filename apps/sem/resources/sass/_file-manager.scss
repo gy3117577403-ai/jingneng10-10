@@ -1,0 +1,131 @@
+//
+// Unified document manager (resources/js/components/files)
+//
+// Kept deliberately small: everything that Bootstrap/AdminLTE already provides
+// is reused, and only the drop area and the viewer panes need custom rules.
+//
+
+.wem-dropzone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 170px;
+    padding: 1.25rem 1rem;
+    border: 2px dashed #adb5bd;
+    border-radius: .5rem;
+    background-color: #fafbfc;
+    color: #6c757d;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s ease-in-out, background-color .15s ease-in-out;
+
+    &:hover,
+    &:focus {
+        border-color: #007bff;
+        background-color: rgba(0, 123, 255, .04);
+        outline: none;
+    }
+
+    &.is-over {
+        border-color: #28a745;
+        background-color: rgba(40, 167, 69, .08);
+        color: #28a745;
+    }
+
+    &.is-busy {
+        cursor: progress;
+        border-style: solid;
+    }
+}
+
+.wem-dropzone-form {
+    label {
+        font-weight: 600;
+        color: #495057;
+        margin-bottom: .15rem;
+    }
+}
+
+.wem-file-manager {
+    .list-group-item {
+        cursor: pointer;
+        border-radius: .25rem;
+        margin-bottom: .25rem;
+        border: 1px solid transparent;
+        background-color: #f8f9fa;
+
+        &:hover {
+            background-color: #eef2f6;
+        }
+
+        &.active-file {
+            background-color: rgba(0, 123, 255, .08);
+            border-color: rgba(0, 123, 255, .35);
+            border-left: 3px solid #007bff;
+        }
+    }
+
+    &__list-header {
+        gap: .5rem;
+
+        h6 {
+            font-size: .8rem;
+            letter-spacing: .02em;
+        }
+    }
+
+    .min-width-0 {
+        min-width: 0;
+    }
+}
+
+.wem-viewer-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 320px;
+    padding: 2rem 1rem;
+    background-color: #f8f9fa;
+    border: 1px dashed #dee2e6;
+    border-radius: .5rem;
+}
+
+.wem-viewer {
+    // Couleur de fond du canevas 3D, relue par Viewer3D. Chaque écran peut la
+    // redéfinir pour que la scène se fonde dans la carte qui l'accueille.
+    --wem-viewer-bg: #f7f8fa;
+
+    canvas {
+        display: block;
+        border-radius: .25rem;
+    }
+}
+
+.wem-viewer-pane {
+    position: relative;
+    overflow: hidden;
+    height: 620px;
+    background-color: var(--wem-viewer-bg, #f7f8fa);
+    border-radius: .25rem;
+
+    img {
+        position: absolute;
+        top: 0;
+        left: 0;
+    }
+}
+
+.wem-viewer-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(248, 249, 250, .88);
+    color: #46525f;
+    text-align: center;
+    padding: 1rem;
+}

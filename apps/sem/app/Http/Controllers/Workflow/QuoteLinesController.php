@@ -1,0 +1,1140 @@
+<?php
+
+namespace App\Http\Controllers\Workflow;
+
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+use App\Enums\SalesLineType;
+use Illuminate\Support\Number;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use App\Events\OrderCreated;
+use App\Services\Cad\CadImportService;
+use App\Services\ImportCsvService;
+use App\Services\CustomFieldService;
+use App\Services\OrderService;
+use App\Services\Quotes\QuoteLineCopier;
+use App\Services\Planning\BillOfMaterialsCopier;
+use App\Services\Quotes\QuoteLineToOrderLineConverter;
+use App\Services\SelectDataService;
+use App\Http\Controllers\Controller;
+use App\Models\Admin\Factory;
+use App\Models\Admin\CustomField;
+use App\Models\Admin\CustomFieldValue;
+use App\Models\Workflow\Quotes;
+use App\Models\Workflow\Orders;
+use App\Models\Workflow\QuoteLines;
+use App\Models\Workflow\QuoteLineDetails;
+use App\Models\Products\Products;
+use App\Models\Products\CustomerPriceList;
+use App\Models\Methods\MethodsUnits;
+use App\Models\Methods\MethodsFamilies;
+use App\Models\Methods\MethodsServices;
+use App\Models\Accounting\AccountingVat;
+use App\Models\Planning\Task;
+use App\Models\Planning\SubAssembly;
+use App\Http\Requests\Workflow\UpdateQuoteLineDetailsRequest;
+
+class QuoteLinesController extends Controller
+{
+    protected SelectDataService $selectDataService;
+
+    public function __construct(SelectDataService $selectDataService)
+    {
+        $this->selectDataService = $selectDataService;
+    }
+
+    /**
+     * @return \Illuminate\Contracts\View\View
+     */
+    public function index()
+    {
+        return view('workflow/quotes-lines-index');
+    }
+
+    public function listJson(Request $request)
+    {
+        $search    = $request->get('search', '');
+        $sortField = $request->get('sort', 'label');
+        $sortAsc   = $request->boolean('asc', true);
+        $productId = $request->get('product_id');
+        $statuses  = array_filter(array_map('intval', (array) $request->get('statuses', [])));
+
+        $allowed = ['label', 'code', 'quotes_id', 'qty', 'selling_price', 'delivery_date', 'statu', 'created_at', 'ordre'];
+        if (!in_array($sortField, $allowed)) {
+            $sortField = 'label';
+        }
+
+        $dir = $sortAsc ? 'asc' : 'desc';
+
+        $query = QuoteLines::with(['quote:id,code', 'Unit:id,label', 'VAT:id,label'])
+            ->excludingTemplates()
+            ->articles()
+            ->withCount(['Task', 'SubAssembly'])
+            ->when($search, fn ($q) => $q->where('label', 'like', '%'.$search.'%'))
+            ->when(is_numeric($productId), fn ($q) => $q->where('product_id', $productId))
+            ->when(!empty($statuses), fn ($q) => $q->whereIn('statu', $statuses))
+            ->orderBy($sortField, $dir);
+
+        $lines = $query->paginate(15);
+
+        return response()->json([
+            'data' => $lines->map(fn ($l) => [
+                'id'                   => $l->id,
+                'quotes_id'            => $l->quotes_id,
+                'quote_code'           => $l->quote?->code,
+                'quote_url'            => route('quotes.show', ['id' => $l->quotes_id]),
+                'ordre'                => $l->ordre,
+                'code'                 => $l->code,
+                'product_id'           => $l->product_id,
+                'product_url'          => $l->product_id ? route('products.show', ['id' => $l->product_id]) : null,
+                'label'                => $l->label,
+                'qty'                  => $l->qty,
+                'unit_label'           => $l->Unit?->label,
+                'selling_price'        => (float) ($l->getRawOriginal('selling_price') ?? 0),
+                'use_calculated_price' => (bool) $l->use_calculated_price,
+                'discount'             => $l->discount,
+                'vat_label'            => $l->VAT?->label,
+                'delivery_date'        => $l->delivery_date,
+                'statu'                => $l->statu,
+                'task_count'           => $l->task_count,
+                'sub_assembly_count'   => $l->sub_assembly_count,
+                'task_url'             => route('task.manage', ['id_type' => 'quote_lines_id', 'id_page' => $l->quotes_id, 'id_line' => $l->id]),
+            ]),
+            'meta' => [
+                'total'        => $lines->total(),
+                'per_page'     => $lines->perPage(),
+                'current_page' => $lines->currentPage(),
+                'last_page'    => $lines->lastPage(),
+            ],
+        ]);
+    }
+
+    /**
+     * @param \App\Http\Requests\Workflow\UpdateQuoteLineDetailsRequest $request
+     * @param int $idQuote
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function update($idQuote, UpdateQuoteLineDetailsRequest $request)
+    {
+        $QuoteLineDetails = QuoteLineDetails::findOrFail($request->id);
+        $validated = $request->validated();
+        $validated['custom_requirements'] = $this->sanitizeCustomRequirements($request->input('custom_requirements', []));
+        unset($validated['product_custom_fields']);
+
+        $QuoteLineDetails->update($validated);
+        $this->syncProductCustomFields(
+            $QuoteLineDetails->quote_lines_id,
+            $request->input('product_custom_fields', [])
+        );
+
+        return redirect()->route('quotes.show', ['id' => $idQuote])->with('success', __('Successfully updated quote detail line'));
+    }
+
+    private function sanitizeCustomRequirements(array $requirements): array
+    {
+        return collect($requirements)
+            ->map(function ($requirement) {
+                return [
+                    'label' => isset($requirement['label']) ? trim($requirement['label']) : '',
+                    'value' => isset($requirement['value']) ? trim($requirement['value']) : '',
+                ];
+            })
+            ->filter(function ($requirement) {
+                return $requirement['label'] !== '' || $requirement['value'] !== '';
+            })
+            ->values()
+            ->all();
+    }
+
+    private function syncProductCustomFields(int $quoteLineId, array $fields): void
+    {
+        if (empty($fields)) {
+            return;
+        }
+
+        $validIds = CustomField::where('related_type', 'product')->pluck('id')->all();
+
+        foreach ($fields as $fieldId => $fieldValue) {
+            if (!in_array((int) $fieldId, $validIds, true)) {
+                continue;
+            }
+
+            $existingValue = CustomFieldValue::where('custom_field_id', $fieldId)
+                ->where('entity_id', $quoteLineId)
+                ->where('entity_type', 'quote_line')
+                ->first();
+
+            if ($fieldValue === null || $fieldValue === '') {
+                if ($existingValue) {
+                    $existingValue->delete();
+                }
+                continue;
+            }
+
+            if ($existingValue) {
+                $existingValue->update(['value' => $fieldValue]);
+            } else {
+                CustomFieldValue::create([
+                    'custom_field_id' => $fieldId,
+                    'entity_id' => $quoteLineId,
+                    'entity_type' => 'quote_line',
+                    'value' => $fieldValue,
+                ]);
+            }
+        }
+    }
+    
+    /**
+     * @param \Illuminate\Http\Request $request
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function StoreImage($idQuote,Request $request)
+    {
+        
+        $request->validate([
+            'picture' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:10240',
+        ]);
+        
+        if($request->hasFile('picture')){
+            $QuoteLineDetails = QuoteLineDetails::findOrFail($request->id);
+            $file =  $request->file('picture');
+            $extension = $file->guessExtension() ?: 'bin';
+            $filename = time() . '_' . uniqid() . '.' . $extension;
+            $file->move(public_path('images/quote-lines'), $filename);
+            $QuoteLineDetails->update(['picture' => $filename]);
+            $QuoteLineDetails->save();
+            return redirect()->route('quotes.show', ['id' =>  $idQuote])->with('success', __('Successfully updated image'));
+        }
+        else{
+            return back()->withInput()->withErrors(['msg' => 'Error, no image selected']);
+        }
+    }
+
+    /**
+     * Imports quote lines from a CSV file.
+     *
+     * @param int $idQuote The ID of the quote to import lines into.
+     * @param \Illuminate\Http\Request $request The HTTP request object containing the CSV file.
+     * @param \App\Services\ImportCsvService $importCsvService The service used to import quote lines from the CSV file.
+     * @return \Illuminate\Http\RedirectResponse A redirect response back to the previous page.
+     */
+    public function import($idQuote, Request $request, ImportCsvService $importCsvService)
+    {
+        $importCsvService->importQuoteLines($idQuote, $request);
+        return redirect()->back();
+    }
+
+    // -------------------------------------------------------------------------
+    // JSON API — React QuoteLinesPage
+    // -------------------------------------------------------------------------
+
+    public function linesForQuoteJson($quoteId)
+    {
+        $quote = Quotes::withTemplates()->findOrFail($quoteId);
+        abort_unless(auth()->check(), 403);
+
+        $lines = QuoteLines::with([
+                'Unit:id,label,code',
+                'VAT:id,label,rate',
+                'Product:id,code,label,drawing_file',
+                'QuoteLineDetails:id,quote_lines_id,picture',
+                'orderLine:id,quote_lines_id,orders_id',
+                'orderLine.order:id,code',
+            ])
+            ->withCount(['Task', 'SubAssembly'])
+            ->where('quotes_id', $quoteId)
+            ->orderBy('ordre', 'asc')
+            ->get();
+
+        $factory  = app('Factory');
+        $currency = $factory->curency ?? 'EUR';
+        $locale   = config('app.locale', 'fr');
+
+        return response()->json([
+            'lines'       => $lines->map(fn ($l) => $this->formatLineJson($l, $currency, $locale)),
+            'quote_statu' => $quote->statu,
+        ]);
+    }
+
+    public function selectDataForQuoteJson($quoteId)
+    {
+        abort_unless(auth()->check(), 403);
+        $quote   = Quotes::withTemplates()->with('companie')->findOrFail($quoteId);
+        $factory = app('Factory');
+
+        return response()->json([
+            'units'            => $this->selectDataService->getUnitsSelect(),
+            'vats'             => $this->selectDataService->getVATSelect(),
+            'currency'         => $factory->curency ?? 'EUR',
+            'customer_discount'=> (float) ($quote->companie->discount ?? 0),
+            'customer_id'      => $quote->companie?->id,
+            'customer_type'    => $quote->companie?->client_type !== null ? (int) $quote->companie->client_type : null,
+            'default_delivery' => $quote->validity_date,
+        ]);
+    }
+
+    public function priceListForProductJson($quoteId, $productId)
+    {
+        abort_unless(auth()->check(), 403);
+        $quote       = Quotes::withTemplates()->with('companie')->findOrFail($quoteId);
+        $factory     = app('Factory');
+        $currency    = $factory->curency ?? 'EUR';
+        $locale      = config('app.locale', 'fr');
+        $customerId  = $quote->companie?->id;
+        $customerType = $quote->companie?->client_type !== null ? (int) $quote->companie->client_type : null;
+
+        $priceList = CustomerPriceList::with('company')
+            ->where('products_id', $productId)
+            ->get()
+            ->filter(function ($price) use ($customerId, $customerType) {
+                if ($price->companies_id && $customerId && (int) $price->companies_id === (int) $customerId) {
+                    return true;
+                }
+                if ($price->companies_id) {
+                    return false;
+                }
+                if ($price->customer_type !== null && $customerType !== null) {
+                    return (int) $price->customer_type === (int) $customerType;
+                }
+                return $price->companies_id === null && $price->customer_type === null;
+            })
+            ->values()
+            ->map(fn ($p) => [
+                'id'              => $p->id,
+                'min_qty'         => (int) $p->min_qty,
+                'max_qty'         => $p->max_qty !== null ? (int) $p->max_qty : null,
+                'price'           => (float) $p->price,
+                'formatted_price' => Number::currency($p->price, $currency, $locale),
+                'scope'           => $p->companies_id ? 'company' : ($p->customer_type !== null ? 'segment' : 'general'),
+                'scope_label'     => $p->companies_id
+                    ? ('Client - ' . ($p->company?->label ?? '#' . $p->companies_id))
+                    : ($p->customer_type !== null ? 'Segment ' . $p->customer_type : 'Général'),
+            ]);
+
+        return response()->json(['price_list' => $priceList]);
+    }
+
+    public function storeLineJson($quoteId, Request $request)
+    {
+        abort_unless(auth()->check(), 403);
+        $quote = Quotes::withTemplates()->findOrFail($quoteId);
+        abort_if($quote->statu != 1, 403);
+
+        if ($request->input('line_type', SalesLineType::Article->value) !== SalesLineType::Article->value) {
+            return $this->storePresentationLine($quote, $request);
+        }
+
+        $validated = $request->validate([
+            'ordre'              => 'required|numeric|min:1',
+            'label'              => 'required|string|max:255',
+            'qty'                => 'required|numeric|min:0',
+            'selling_price'      => 'required|numeric|min:0',
+            'discount'           => 'required|numeric|min:0|max:100',
+            'product_id'         => 'nullable|exists:products,id',
+            'code'               => 'nullable|string|max:255',
+            'methods_units_id'   => 'nullable|exists:methods_units,id',
+            'accounting_vats_id' => 'nullable|exists:accounting_vats,id',
+            'delivery_date'      => 'nullable|date',
+        ]);
+
+        $defaultVat  = AccountingVat::getDefault();
+        $defaultUnit = MethodsUnits::getDefault();
+
+        if (! $defaultVat || ! $defaultUnit) {
+            return response()->json(['error' => __('No default VAT or Unit configured')], 422);
+        }
+
+        $line = QuoteLines::create([
+            'quotes_id'          => $quoteId,
+            'ordre'              => $validated['ordre'],
+            'code'               => $validated['code'] ?? '',
+            'product_id'         => $validated['product_id'] ?? null,
+            'label'              => $validated['label'],
+            'qty'                => $validated['qty'],
+            'methods_units_id'   => $validated['methods_units_id'] ?? $defaultUnit->id,
+            'selling_price'      => $validated['selling_price'],
+            'discount'           => $validated['discount'],
+            'accounting_vats_id' => $validated['accounting_vats_id'] ?? $defaultVat->id,
+            'delivery_date'      => $validated['delivery_date'] ?? null,
+        ]);
+
+        $detailData = ['quote_lines_id' => $line->id];
+        if ($line->product_id) {
+            $product = Products::find($line->product_id);
+            if ($product) {
+                $detailData = array_merge($detailData, $this->buildDetailDataFromProduct($product));
+            }
+        }
+        QuoteLineDetails::create($detailData);
+
+        $line->load(['Unit:id,label,code', 'VAT:id,label,rate', 'Product:id,code,label,drawing_file', 'QuoteLineDetails:id,quote_lines_id,picture']);
+        $line->loadCount(['Task', 'SubAssembly']);
+
+        $factory  = app('Factory');
+        $currency = $factory->curency ?? 'EUR';
+
+        return response()->json(['line' => $this->formatLineJson($line, $currency, config('app.locale'))], 201);
+    }
+
+    public function updateLineJson($quoteId, $id, Request $request)
+    {
+        abort_unless(auth()->check(), 403);
+        $line = QuoteLines::where('id', $id)->where('quotes_id', $quoteId)->firstOrFail();
+
+        if (!$line->isArticle()) {
+            $validated = $request->validate([
+                'ordre' => 'required|numeric|min:0',
+                'label' => $line->line_type === SalesLineType::Subtotal->value ? 'nullable|string|max:255' : 'required|string|max:255',
+            ]);
+            $line->update(['ordre' => $validated['ordre'], 'label' => $validated['label'] ?? '']);
+
+            return response()->json(['line' => $this->formatLineJson($line->fresh(['Unit:id,label,code']), app('Factory')->curency ?? 'EUR', config('app.locale'))]);
+        }
+
+        $validated = $request->validate([
+            'ordre'              => 'required|numeric|min:0',
+            'label'              => 'required|string|max:255',
+            'qty'                => 'required|numeric|min:0',
+            'selling_price'      => 'required|numeric|min:0',
+            'discount'           => 'required|numeric|min:0|max:100',
+            'product_id'         => 'nullable|exists:products,id',
+            'code'               => 'nullable|string|max:255',
+            'methods_units_id'   => 'nullable|exists:methods_units,id',
+            'accounting_vats_id' => 'nullable|exists:accounting_vats,id',
+            'delivery_date'      => 'nullable|date',
+            'statu'              => 'nullable|integer|min:1|max:6',
+        ]);
+
+        $line->update($validated);
+        $line->load(['Unit:id,label,code', 'VAT:id,label,rate', 'Product:id,code,label,drawing_file', 'QuoteLineDetails:id,quote_lines_id,picture']);
+        $line->loadCount(['Task', 'SubAssembly']);
+
+        $factory  = app('Factory');
+        $currency = $factory->curency ?? 'EUR';
+
+        return response()->json(['line' => $this->formatLineJson($line, $currency, config('app.locale'))]);
+    }
+
+    public function destroyLineJson($quoteId, $id)
+    {
+        abort_unless(auth()->check(), 403);
+        $line = QuoteLines::where('id', $id)->where('quotes_id', $quoteId)->firstOrFail();
+        $line->delete();
+        Task::where('quote_lines_id', $id)->delete();
+
+        return response()->json(['success' => true]);
+    }
+
+    public function breakDownLineJson($quoteId, $id)
+    {
+        abort_unless(auth()->check(), 403);
+        $line = QuoteLines::where('id', $id)->where('quotes_id', $quoteId)->firstOrFail();
+
+        abort_if(!$line->product_id, 422);
+
+        $firstStatus = \App\Models\Planning\Status::select('id')->orderBy('order')->first();
+        $statusId    = $firstStatus?->id;
+
+        app(BillOfMaterialsCopier::class)
+            ->copy('products_id', $line->product_id, 'quote_lines_id', $line->id, '3', $statusId ? ['status_id' => $statusId] : []);
+
+        $line->loadCount(['Task', 'SubAssembly']);
+        $factory  = app('Factory');
+        $currency = $factory->curency ?? 'EUR';
+
+        return response()->json(['line' => $this->formatLineJson($line, $currency, config('app.locale'))]);
+    }
+
+    public function duplicateLineJson($quoteId, $id, QuoteLineCopier $copier)
+    {
+        abort_unless(auth()->check(), 403);
+        $quote = Quotes::withTemplates()->findOrFail($quoteId);
+        abort_if($quote->statu != 1, 403);
+        $line = QuoteLines::where('id', $id)->where('quotes_id', $quoteId)->firstOrFail();
+
+        $newLine = DB::transaction(function () use ($line, $quoteId, $copier) {
+            // La copie s'insère juste sous l'original : on décale la suite.
+            QuoteLines::where('quotes_id', $quoteId)
+                ->where('ordre', '>', $line->ordre)
+                ->increment('ordre');
+
+            return $copier->copy($line, (int) $quoteId, $line->ordre + 1, $line->isArticle() ? [
+                'code'  => $line->code . '#dup' . $line->id,
+                'label' => $line->label . '#dup' . $line->id,
+            ] : []);
+        });
+
+        $newLine->load(['Unit:id,label,code', 'VAT:id,label,rate', 'Product:id,code,label,drawing_file', 'QuoteLineDetails:id,quote_lines_id,picture']);
+        $newLine->loadCount(['Task', 'SubAssembly']);
+
+        $factory  = app('Factory');
+        $currency = $factory->curency ?? 'EUR';
+
+        return response()->json(['line' => $this->formatLineJson($newLine, $currency, config('app.locale'))], 201);
+    }
+
+    /**
+     * Devis et trames dont on peut reprendre des lignes, avec leurs lignes.
+     */
+    public function importSourcesJson($quoteId, Request $request)
+    {
+        abort_unless(auth()->check(), 403);
+        Quotes::withTemplates()->findOrFail($quoteId);
+
+        $search = trim((string) $request->get('search', ''));
+
+        $sources = Quotes::withTemplates()
+            ->where('id', '!=', $quoteId)
+            ->whereHas('QuoteLines', fn ($l) => $l->articles())
+            ->with([
+                'companie:id,label',
+                'QuoteLines' => fn ($l) => $l->articles()->select(['id', 'quotes_id', 'ordre', 'code', 'label', 'qty', 'selling_price', 'discount']),
+            ])
+            ->when($search !== '', fn ($q) => $q->where(fn ($w) => $w
+                ->where('code', 'like', '%' . $search . '%')
+                ->orWhere('label', 'like', '%' . $search . '%')
+                ->orWhereHas('companie', fn ($c) => $c->where('label', 'like', '%' . $search . '%'))
+                ->orWhereHas('QuoteLines', fn ($l) => $l->articles()->where(fn ($w) => $w
+                    ->where('label', 'like', '%' . $search . '%')
+                    ->orWhere('code', 'like', '%' . $search . '%')))))
+            // Les trames d'abord, puis les devis les plus récents.
+            ->orderByDesc('is_template')
+            ->orderByDesc('id')
+            ->limit(20)
+            ->get();
+
+        return response()->json([
+            'data' => $sources->map(fn ($q) => [
+                'id'          => $q->id,
+                'code'        => $q->code,
+                'label'       => $q->label,
+                'is_template' => (bool) $q->is_template,
+                'companie'    => $q->is_template ? null : $q->companie?->label,
+                'lines'       => $q->QuoteLines->map(fn ($l) => [
+                    'id'            => $l->id,
+                    'code'          => $l->code,
+                    'label'         => $l->label,
+                    'qty'           => $l->qty,
+                    'selling_price' => (float) $l->getRawOriginal('selling_price'),
+                    'discount'      => $l->discount,
+                ])->values(),
+            ]),
+        ]);
+    }
+
+    /**
+     * Recopie en fin de devis des lignes prises dans un autre devis ou une
+     * trame, avec leur gamme, leur nomenclature et leurs fichiers.
+     */
+    public function importFromJson($quoteId, Request $request, QuoteLineCopier $copier)
+    {
+        abort_unless(auth()->check(), 403);
+        $quote = Quotes::withTemplates()->findOrFail($quoteId);
+        abort_if($quote->statu != 1, 403);
+
+        $validated = $request->validate([
+            'line_ids'   => 'required|array|min:1',
+            'line_ids.*' => 'integer',
+        ]);
+
+        $sources = QuoteLines::whereIn('id', $validated['line_ids'])
+            ->articles()
+            ->where('quotes_id', '!=', $quote->id)
+            ->orderBy('quotes_id')
+            ->orderBy('ordre')
+            ->get();
+
+        $copied = DB::transaction(function () use ($sources, $quote, $copier) {
+            $ordre = (int) QuoteLines::where('quotes_id', $quote->id)->max('ordre');
+
+            return $sources->map(fn (QuoteLines $line) => $copier->copy($line, $quote->id, ++$ordre, [
+                'statu'         => 1,
+                'delivery_date' => null,
+            ]));
+        });
+
+        $factory  = app('Factory');
+        $currency = $factory->curency ?? 'EUR';
+
+        $lines = $copied->map(function (QuoteLines $line) use ($currency) {
+            $line->load(['Unit:id,label,code', 'VAT:id,label,rate', 'Product:id,code,label,drawing_file', 'QuoteLineDetails:id,quote_lines_id,picture']);
+            $line->loadCount(['Task', 'SubAssembly']);
+
+            return $this->formatLineJson($line, $currency, config('app.locale'));
+        });
+
+        return response()->json(['lines' => $lines->values()], 201);
+    }
+
+    public function moveLineJson($quoteId, $id, Request $request)
+    {
+        abort_unless(auth()->check(), 403);
+        $line      = QuoteLines::where('id', $id)->where('quotes_id', $quoteId)->firstOrFail();
+        $direction = $request->input('direction');
+
+        if ($direction === 'up') {
+            $line->increment('ordre', 1);
+        } else {
+            $line->decrement('ordre', 1);
+        }
+
+        return response()->json(['ordre' => $line->fresh()->ordre]);
+    }
+
+    public function reorderJson($quoteId, Request $request)
+    {
+        abort_unless(auth()->check(), 403);
+        $quote = Quotes::withTemplates()->findOrFail($quoteId);
+        abort_if($quote->statu != 1, 403);
+
+        $request->validate([
+            'order'          => 'required|array',
+            'order.*.id'     => 'required|integer',
+            'order.*.ordre'  => 'required|integer|min:1',
+        ]);
+
+        foreach ($request->order as $item) {
+            QuoteLines::where('id', $item['id'])
+                ->where('quotes_id', $quoteId)
+                ->update(['ordre' => $item['ordre']]);
+        }
+
+        return response()->json(['success' => true]);
+    }
+
+    public function priceIncreaseJson($quoteId, Request $request)
+    {
+        abort_unless(auth()->check(), 403);
+        $quote = Quotes::withTemplates()->findOrFail($quoteId);
+        abort_if($quote->statu != 1, 403);
+
+        $request->validate(['amount' => 'required|numeric|gt:0']);
+        $count = QuoteLines::where('quotes_id', $quoteId)->articles()->increment('selling_price', (float) $request->amount);
+
+        return response()->json(['updated' => $count]);
+    }
+
+    public function detailEdit($idQuote, $id)
+    {
+        abort_unless(auth()->check(), 403);
+        $line = QuoteLines::with(['QuoteLineDetails', 'Product'])
+            ->where('id', $id)
+            ->where('quotes_id', $idQuote)
+            ->firstOrFail();
+
+        $factory              = app('Factory');
+        $customFieldService   = app(CustomFieldService::class);
+        $productCustomFields  = $customFieldService->getProductCustomFieldsForQuoteLine(
+            $line->product_id ? (int) $line->product_id : null,
+            $line->id
+        );
+
+        return view('workflow.quote-line-detail-edit', compact('line', 'idQuote', 'factory', 'productCustomFields'));
+    }
+
+    private function formatLineJson(QuoteLines $l, string $currency, string $locale): array
+    {
+        $rawPrice       = (float) ($l->getRawOriginal('selling_price') ?? 0);
+        $effectivePrice = (float) $l->selling_price;
+
+        return [
+            'id'                   => $l->id,
+            'quotes_id'            => $l->quotes_id,
+            'ordre'                => $l->ordre,
+            'code'                 => $l->code,
+            'product_id'           => $l->product_id,
+            'product_code'         => $l->Product?->code,
+            'product_url'          => $l->product_id ? route('products.show', ['id' => $l->product_id]) : null,
+            'product_drawing_file' => $l->Product?->drawing_file,
+            'label'                => $l->label,
+            'qty'                  => $l->qty,
+            'methods_units_id'     => $l->methods_units_id,
+            'unit_label'           => $l->Unit?->label,
+            'unit_code'            => $l->Unit?->code,
+            'selling_price'        => $rawPrice,
+            'effective_price'      => $effectivePrice,
+            'use_calculated_price' => (bool) $l->use_calculated_price,
+            'formatted_price'      => Number::currency($effectivePrice, $currency, $locale),
+            'discount'             => $l->discount,
+            'accounting_vats_id'   => $l->accounting_vats_id,
+            'vat_label'            => $l->VAT?->label,
+            'delivery_date'        => $l->delivery_date,
+            'statu'                => $l->statu,
+            'task_count'           => $l->task_count,
+            'sub_assembly_count'   => $l->sub_assembly_count,
+            'detail_id'            => $l->QuoteLineDetails?->id,
+            'picture'              => $l->QuoteLineDetails?->picture,
+            'task_url'             => route('task.manage', ['id_type' => 'quote_lines_id', 'id_page' => $l->quotes_id, 'id_line' => $l->id]),
+            'detail_url'           => route('quotes.lines.detail.edit', ['idQuote' => $l->quotes_id, 'id' => $l->id]),
+            'order_code'           => $l->orderLine?->order?->code,
+            'order_url'            => $l->orderLine?->order ? route('orders.show', ['id' => $l->orderLine->orders_id]) : null,
+            'line_type'            => $l->line_type ?? SalesLineType::Article->value,
+            'hide_on_pdf'          => (bool) $l->hide_on_pdf,
+            'pdf_package'          => (int) $l->pdf_package,
+        ];
+    }
+
+    /**
+     * Section, sous-total ou texte : ni quantité, ni prix, ni TVA (voir
+     * HasSalesLineType). Insérée à la position demandée, la suite est décalée.
+     */
+    private function storePresentationLine(Quotes $quote, Request $request)
+    {
+        $validated = $request->validate([
+            'line_type' => ['required', Rule::in([SalesLineType::Section->value, SalesLineType::Subtotal->value, SalesLineType::Text->value])],
+            'ordre'     => 'required|integer|min:1',
+            'label'     => $request->input('line_type') === SalesLineType::Subtotal->value ? 'nullable|string|max:255' : 'required|string|max:255',
+        ]);
+
+        $defaultVat  = AccountingVat::getDefault();
+        $defaultUnit = MethodsUnits::getDefault();
+        if (! $defaultVat || ! $defaultUnit) {
+            return response()->json(['error' => __('No default VAT or Unit configured')], 422);
+        }
+
+        $line = DB::transaction(function () use ($quote, $validated, $defaultVat, $defaultUnit) {
+            QuoteLines::where('quotes_id', $quote->id)
+                ->where('ordre', '>=', $validated['ordre'])
+                ->increment('ordre');
+
+            // Colonnes NOT NULL héritées des articles : unité et TVA par défaut, montants à zéro.
+            return QuoteLines::create([
+                'quotes_id'          => $quote->id,
+                'ordre'              => $validated['ordre'],
+                'line_type'          => $validated['line_type'],
+                'code'               => '',
+                'label'              => $validated['label'] ?? '',
+                'qty'                => 0,
+                'selling_price'      => 0,
+                'discount'           => 0,
+                'methods_units_id'   => $defaultUnit->id,
+                'accounting_vats_id' => $defaultVat->id,
+            ]);
+        });
+
+        $line->load(['Unit:id,label,code']);
+
+        return response()->json(['line' => $this->formatLineJson($line, app('Factory')->curency ?? 'EUR', config('app.locale'))], 201);
+    }
+
+    /**
+     * Options d'impression d'une ligne : masquage d'un article, forfait d'une
+     * section (avec son unité). Aucune incidence sur les montants.
+     */
+    public function presentationJson(int $quoteId, int $id, Request $request)
+    {
+        abort_unless(auth()->check(), 403);
+        $quote = Quotes::withTemplates()->findOrFail($quoteId);
+        abort_if($quote->statu != 1, 403);
+        $line = QuoteLines::where('id', $id)->where('quotes_id', $quoteId)->firstOrFail();
+
+        $validated = $request->validate([
+            'hide_on_pdf'      => 'sometimes|boolean',
+            'pdf_package'      => ['sometimes', 'integer', Rule::in([QuoteLines::PACKAGE_NONE, QuoteLines::PACKAGE_AMOUNT, QuoteLines::PACKAGE_UNIT])],
+            'methods_units_id' => 'sometimes|exists:methods_units,id',
+        ]);
+
+        if ($line->isArticle()) {
+            abort_if(array_key_exists('pdf_package', $validated), 422, 'Seule une section peut être imprimée au forfait.');
+            $line->update(array_intersect_key($validated, ['hide_on_pdf' => true]));
+        } elseif ($line->line_type === SalesLineType::Section->value) {
+            abort_if(array_key_exists('hide_on_pdf', $validated), 422, 'Seul un article peut être masqué.');
+            $line->update(array_intersect_key($validated, ['pdf_package' => true, 'methods_units_id' => true]));
+        } else {
+            abort(422, __('Ni masquage ni forfait sur un sous-total ou un texte.'));
+        }
+
+        $line->load(['Unit:id,label,code', 'VAT:id,label,rate', 'Product:id,code,label,drawing_file', 'QuoteLineDetails:id,quote_lines_id,picture']);
+        $line->loadCount(['Task', 'SubAssembly']);
+
+        return response()->json(['line' => $this->formatLineJson($line, app('Factory')->curency ?? 'EUR', config('app.locale'))]);
+    }
+
+    public function storeOrderJson(Request $request, int $quoteId)
+    {
+        $lineIds = $request->input('line_ids', []);
+        if (empty($lineIds)) {
+            return response()->json(['error' => __('Aucune ligne sélectionnée.')], 422);
+        }
+        $presentation = $request->input('presentation', QuoteLineToOrderLineConverter::PRESENTATION_KEEP);
+        if (!in_array($presentation, [QuoteLineToOrderLineConverter::PRESENTATION_KEEP, QuoteLineToOrderLineConverter::PRESENTATION_DROP], true)) {
+            return response()->json(['error' => __('Choix de report des sections invalide.')], 422);
+        }
+
+        $quote = Quotes::withTemplates()->findOrFail($quoteId);
+        abort_unless($quote->user_id === Auth::id() || Auth::user()->hasRole(['admin','manager']), 403);
+
+        if ($quote->is_template) {
+            return response()->json(['error' => __("Une trame de devis ne se convertit pas en commande : créez d'abord un devis à partir de la trame.")], 422);
+        }
+
+        if (!in_array($quote->statu, [1, 2])) {
+            return response()->json(['error' => __('Ce devis ne peut plus être converti en commande (statut invalide).')], 422);
+        }
+
+        $converter = app(QuoteLineToOrderLineConverter::class);
+
+        $order = DB::transaction(function () use ($quote, $lineIds, $converter, $presentation) {
+            $lastOrder = Orders::latest('id')->first();
+            $orderCode = $lastOrder ? 'OR-' . ($lastOrder->id + 1) : 'OR-1';
+
+            $orderService = app(OrderService::class);
+            $newOrder = $orderService->createOrder(
+                $orderCode,
+                $quote->label,
+                $quote->customer_reference,
+                $quote->companies_id,
+                $quote->companies_contacts_id,
+                $quote->companies_addresses_id,
+                $quote->validity_date,
+                1,
+                Auth::id(),
+                $quote->accounting_payment_conditions_id,
+                $quote->accounting_payment_methods_id,
+                $quote->accounting_deliveries_id,
+                $quote->comment,
+                1,
+                $quote->id,
+                null
+            );
+
+            $toConvert = $converter->linesToConvert(
+                QuoteLines::with(['QuoteLineDetails', 'Task', 'files'])->where('quotes_id', $quote->id)->get(),
+                $lineIds,
+                $presentation,
+            );
+
+            $quote->loadMissing('files');
+            $quotePivots = $quote->files->mapWithKeys(fn ($file) => [
+                $file->id => [
+                    'role' => $file->pivot->role,
+                    'is_primary' => (bool) $file->pivot->is_primary,
+                ],
+            ])->all();
+
+            if (!empty($quotePivots)) {
+                $newOrder->files()->attach($quotePivots);
+            }
+
+            foreach ($toConvert as $quoteLine) {
+                $converter->convert($quoteLine, $newOrder->id, 7);
+
+                QuoteLines::where('id', $quoteLine->id)->update(['statu' => 3]);
+            }
+
+            Quotes::where('id', $quote->id)->update(['statu' => 3]);
+
+            return $newOrder;
+        });
+
+        event(new OrderCreated($order));
+
+        return response()->json([
+            'redirect' => route('orders.show', ['id' => $order->id]),
+        ]);
+    }
+
+    public function tasksForLineJson(int $quoteId, int $id)
+    {
+        abort_unless(auth()->check(), 403);
+        $line = QuoteLines::where('id', $id)->where('quotes_id', $quoteId)->firstOrFail();
+
+        $factory  = app('Factory');
+        $currency = $factory->curency ?? 'EUR';
+        $locale   = config('app.locale');
+
+        $tasks = \App\Models\Planning\Task::with('service:id,label,color,picture,hourly_rate')
+            ->where('quote_lines_id', $id)
+            ->orderBy('ordre')
+            ->get()
+            ->map(fn($t) => [
+                'id'          => $t->id,
+                'ordre'       => $t->ordre,
+                'label'       => $t->label,
+                'service'     => $t->service ? [
+                    'label'   => $t->service->label,
+                    'color'   => $t->service->color,
+                    'picture' => $t->service->picture,
+                ] : null,
+                'total_time'  => $t->TotalTime(),
+                'qty'         => $t->qty,
+                'unit_price'  => \Illuminate\Support\Number::currency((float) $t->unit_price,  $currency, $locale),
+                'unit_cost'   => \Illuminate\Support\Number::currency((float) $t->unit_cost,   $currency, $locale),
+                'margin'      => $t->unit_cost > 0 ? $t->Margin() : null,
+            ]);
+
+        return response()->json([
+            'tasks'                => $tasks,
+            'use_calculated_price' => (bool) $line->use_calculated_price,
+            'task_url'             => route('task.manage', ['id_type' => 'quote_lines_id', 'id_page' => $quoteId, 'id_line' => $id]),
+        ]);
+    }
+
+    public function toggleCalculatedPriceJson(int $quoteId, int $id, Request $request)
+    {
+        abort_unless(auth()->check(), 403);
+        $line = QuoteLines::where('id', $id)->where('quotes_id', $quoteId)->firstOrFail();
+
+        $enable = (bool) $request->input('enable');
+        $line->update(['use_calculated_price' => $enable ? 1 : 0]);
+
+        $line->load(['Unit:id,label,code', 'VAT:id,label,rate', 'Product:id,code,label', 'QuoteLineDetails:id,quote_lines_id,picture']);
+        $line->loadCount(['Task', 'SubAssembly']);
+        $factory  = app('Factory');
+        $currency = $factory->curency ?? 'EUR';
+
+        return response()->json(['line' => $this->formatLineJson($line, $currency, config('app.locale'))]);
+    }
+
+    public function createProductJson(int $quoteId, int $id)
+    {
+        $line = QuoteLines::with(['QuoteLineDetails', 'Task', 'SubAssembly'])
+            ->where('id', $id)
+            ->where('quotes_id', $quoteId)
+            ->firstOrFail();
+
+        abort_unless($line->isArticle() && $line->code && $line->label, 422);
+
+        $service = MethodsServices::where('type', 8)->first();
+        $family  = $service ? MethodsFamilies::where('methods_services_id', $service->id)->first() : null;
+
+        if (!$service || !$family) {
+            return response()->json(['error' => __('Service composant (type 8) ou famille introuvable.')], 422);
+        }
+
+        $product = Products::create([
+            'code'                => $line->code,
+            'label'               => $line->label,
+            'methods_services_id' => $service->id,
+            'methods_families_id' => $family->id,
+            'purchased'           => 2,
+            'purchased_price'     => 1,
+            'sold'                => 1,
+            'selling_price'       => $line->selling_price,
+            'methods_units_id'    => $line->methods_units_id,
+            'tracability_type'    => 1,
+        ]);
+
+        // Copy details from QuoteLineDetails to product
+        $detail = $line->QuoteLineDetails;
+        if ($detail) {
+            $product->material          = $detail->material;
+            $product->thickness         = $detail->thickness;
+            $product->finishing         = $detail->finishing;
+            $product->weight            = $detail->weight;
+            $product->bend_count        = $detail->bend_count;
+            $product->x_size            = $detail->x_size;
+            $product->y_size            = $detail->y_size;
+            $product->z_size            = $detail->z_size;
+            $product->x_oversize        = $detail->x_oversize;
+            $product->y_oversize        = $detail->y_oversize;
+            $product->z_oversize        = $detail->z_oversize;
+            $product->diameter          = $detail->diameter;
+            $product->diameter_oversize = $detail->diameter_oversize;
+            $product->cad_file_path     = $detail->cad_file_path;
+            $product->cam_file_path     = $detail->cam_file_path;
+            $product->save();
+        }
+
+        app(BillOfMaterialsCopier::class)
+            ->copy('quote_lines_id', $line->id, 'products_id', $product->id, '5');
+
+        // Link product back to the quote line
+        $line->product_id = $product->id;
+        $line->save();
+
+        return response()->json([
+            'product_id'   => $product->id,
+            'product_code' => $product->code,
+            'product_url'  => route('products.show', ['id' => $product->id]),
+        ]);
+    }
+
+    public function createProductsFromLinesJson(int $quoteId, Request $request)
+    {
+        abort_unless(auth()->check(), 403);
+
+        $request->validate([
+            'line_ids'   => 'required|array|min:1',
+            'line_ids.*' => 'integer',
+        ]);
+
+        $lineIds = $request->input('line_ids');
+
+        $service = MethodsServices::where('type', 8)->first();
+        $family  = $service ? MethodsFamilies::where('methods_services_id', $service->id)->first() : null;
+
+        if (! $service || ! $family) {
+            return response()->json(['error' => __('Service composant (type 8) ou famille introuvable.')], 422);
+        }
+
+        $created = [];
+        $skipped = [];
+        foreach ($lineIds as $lineId) {
+            $line = QuoteLines::with(['QuoteLineDetails', 'Task', 'SubAssembly'])
+                ->where('id', $lineId)
+                ->where('quotes_id', $quoteId)
+                ->first();
+
+            if (! $line || ! $line->isArticle() || ! $line->code || ! $line->label) continue;
+
+            if (Products::where('code', $line->code)->exists()) {
+                $skipped[] = ['line_id' => $line->id, 'code' => $line->code, 'label' => $line->label];
+                continue;
+            }
+
+            $product = Products::create([
+                'code'                => $line->code,
+                'label'               => $line->label,
+                'methods_services_id' => $service->id,
+                'methods_families_id' => $family->id,
+                'purchased'           => 2,
+                'purchased_price'     => 1,
+                'sold'                => 1,
+                'selling_price'       => $line->selling_price,
+                'methods_units_id'    => $line->methods_units_id,
+                'tracability_type'    => 1,
+            ]);
+
+            $detail = $line->QuoteLineDetails;
+            if ($detail) {
+                $product->material          = $detail->material;
+                $product->thickness         = $detail->thickness;
+                $product->finishing         = $detail->finishing;
+                $product->weight            = $detail->weight;
+                $product->bend_count        = $detail->bend_count;
+                $product->x_size            = $detail->x_size;
+                $product->y_size            = $detail->y_size;
+                $product->z_size            = $detail->z_size;
+                $product->x_oversize        = $detail->x_oversize;
+                $product->y_oversize        = $detail->y_oversize;
+                $product->z_oversize        = $detail->z_oversize;
+                $product->diameter          = $detail->diameter;
+                $product->diameter_oversize = $detail->diameter_oversize;
+                $product->cad_file_path     = $detail->cad_file_path;
+                $product->cam_file_path     = $detail->cam_file_path;
+                $product->save();
+            }
+
+            app(BillOfMaterialsCopier::class)
+                ->copy('quote_lines_id', $line->id, 'products_id', $product->id, '5');
+
+            $line->product_id = $product->id;
+            $line->save();
+
+            $created[] = [
+                'line_id'     => $line->id,
+                'product_id'  => $product->id,
+                'product_url' => route('products.show', ['id' => $product->id]),
+            ];
+        }
+
+        return response()->json(['created' => $created, 'skipped' => $skipped]);
+    }
+
+    private function buildDetailDataFromProduct(Products $product): array
+    {
+        return [
+            'x_size'            => $product->x_size,
+            'y_size'            => $product->y_size,
+            'z_size'            => $product->z_size,
+            'x_oversize'        => $product->x_oversize,
+            'y_oversize'        => $product->y_oversize,
+            'z_oversize'        => $product->z_oversize,
+            'diameter'          => $product->diameter,
+            'diameter_oversize' => $product->diameter_oversize,
+            'material'          => $product->material,
+            'thickness'         => $product->thickness,
+            'finishing'         => $product->finishing,
+            'weight'            => $product->weight,
+            'bend_count'        => $product->bend_count,
+            'cad_file_path'     => $product->cad_file_path,
+            'cam_file_path'     => $product->cam_file_path,
+        ];
+    }
+
+    // -------------------------------------------------------------------------
+    // CAD import — .sym, .geo, .dxf, .step and .svg dropped on the lines table
+    // -------------------------------------------------------------------------
+
+    public function importCadJson(Request $request, int $quoteId, CadImportService $cad)
+    {
+        abort_unless(auth()->check(), 403);
+
+        if (! $cad->isEnabled()) {
+            return response()->json(['error' => __('Import CAO désactivé')], 403);
+        }
+
+        $quote = Quotes::withTemplates()->findOrFail($quoteId);
+        abort_if($quote->statu != 1, 403);
+        abort_unless($quote->user_id === Auth::id() || Auth::user()->hasRole(['admin', 'manager']), 403);
+
+        $request->validate([
+            'files'   => 'required|array|min:1',
+            'files.*' => ['required', 'file', 'max:' . (int) config('files.max_size')],
+        ]);
+
+        $defaultVat  = AccountingVat::getDefault();
+        $defaultUnit = MethodsUnits::getDefault();
+
+        if (! $defaultVat || ! $defaultUnit) {
+            return response()->json(['error' => __('Aucune TVA ou unité par défaut configurée')], 422);
+        }
+
+        $factory  = app('Factory');
+        $currency = $factory->curency ?? 'EUR';
+        $locale   = config('app.locale');
+
+        $nextOrdre    = (QuoteLines::where('quotes_id', $quoteId)->max('ordre') ?? 0) + 1;
+        $createdLines = [];
+        $errors       = [];
+
+        foreach ($request->file('files') as $file) {
+            try {
+                $data = $cad->parse($file);
+
+                $line = DB::transaction(function () use ($quoteId, &$nextOrdre, $data, $defaultUnit, $defaultVat, $file, $cad) {
+                    $line = QuoteLines::create([
+                        'quotes_id'          => $quoteId,
+                        'ordre'              => $nextOrdre++,
+                        'code'               => $data['code'],
+                        'label'              => $data['label'],
+                        'qty'                => 1,
+                        'methods_units_id'   => $defaultUnit->id,
+                        'selling_price'      => 0,
+                        'discount'           => 0,
+                        'accounting_vats_id' => $defaultVat->id,
+                    ]);
+
+                    QuoteLineDetails::create([
+                        'quote_lines_id'      => $line->id,
+                        'material'            => $data['material'],
+                        'thickness'           => $data['thickness'],
+                        'x_size'              => $data['x_size'],
+                        'y_size'              => $data['y_size'],
+                        'weight'              => $data['weight'],
+                        'cad_file'            => $file->getClientOriginalName(),
+                        'picture'             => $data['picture'],
+                        'custom_requirements' => ! empty($data['extra']) ? $data['extra'] : null,
+                    ]);
+
+                    // Keep the source drawing on the line, in the GED.
+                    $cad->attachToGed($file, $line, $data);
+
+                    return $line;
+                });
+
+                $line->load(['Unit:id,label,code', 'VAT:id,label,rate', 'Product:id,code,label,drawing_file', 'QuoteLineDetails:id,quote_lines_id,picture']);
+                $line->loadCount(['Task', 'SubAssembly']);
+
+                $createdLines[] = $this->formatLineJson($line, $currency, $locale);
+            } catch (\Throwable $e) {
+                $errors[] = $file->getClientOriginalName() . ' : ' . $e->getMessage();
+            }
+        }
+
+        return response()->json(['lines' => $createdLines, 'errors' => $errors], 201);
+    }
+
+}

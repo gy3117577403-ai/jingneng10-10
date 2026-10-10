@@ -1,0 +1,24 @@
+<?php
+
+return [
+
+    'main_navigation'               => 'MENU PRINCIPALE',
+    'blog'                          => 'Blog',
+    'pages'                         => 'Pagine',
+    'account_settings'              => 'IMPOSTAZIONI ACCOUNT',
+    'profile'                       => 'Profilo',
+    'change_password'               => 'Modifica Password',
+    'multilevel'                    => 'Multi Livello',
+    'level_one'                     => 'Livello 1',
+    'level_two'                     => 'Livello 2',
+    'level_three'                   => 'Livello 3',
+    'labels'                        => 'ETICHETTE',
+    'important'                     => 'Importante',
+    'warning'                       => 'Avvertimento',
+    'information'                   => 'Informazione',
+    'process_diagrams_trans_key' => 'Cartographie processus',
+    'inspection_trans_key'                 => 'Inspection',
+    'internal_audits_trans_key'                => 'Internal Audits',
+    'methods_overview_trans_key'               => 'Methods overview',
+    'assets_trans_key'                         => 'Assets',
+];

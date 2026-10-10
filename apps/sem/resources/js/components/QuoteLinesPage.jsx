@@ -1,0 +1,1761 @@
+import { translateUiText, uiLocale, uiCurrency } from '../lib/i18n.js';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { formatQty, formatDate } from '../utils';
+import useProductSearch from '../hooks/useProductSearch';
+import CadDropzone from './CadDropzone.jsx';
+import { LINE_TYPES, PACKAGE, isArticle, computeLayout, moveLine } from '../lib/salesLineLayout';
+import { apiRequest as apiFetch } from '../lib/http';
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const STATUS_CONFIG = {
+    1: { badge: 'badge-info',      label: translateUiText("Ouvert") },
+    2: { badge: 'badge-warning',   label: translateUiText("Envoyé") },
+    3: { badge: 'badge-success',   label: translateUiText("Gagné") },
+    4: { badge: 'badge-danger',    label: translateUiText("Perdu") },
+    5: { badge: 'badge-secondary', label: translateUiText("Fermé") },
+    6: { badge: 'badge-dark',      label: translateUiText("Obsolète") },
+};
+
+const EMPTY_FORM = {
+    ordre: 1,
+    product_id: '',
+    code: '',
+    label: '',
+    qty: 1,
+    methods_units_id: '',
+    selling_price: 0,
+    discount: 0,
+    accounting_vats_id: '',
+    delivery_date: '',
+    statu: 1,
+};
+
+// ---------------------------------------------------------------------------
+// PriceGrid
+// ---------------------------------------------------------------------------
+
+function PriceGrid({ priceList, currentQty, onApplyPrice }) {
+    if (!priceList || priceList.length === 0) return null;
+
+    const qty  = parseFloat(currentQty) || 0;
+    const rows = priceList.map((e) => ({
+        ...e,
+        matches: qty >= e.min_qty && (e.max_qty === null || qty <= e.max_qty),
+    }));
+
+    return (
+        <div className="mt-3">
+            <div className="card card-outline card-info mb-0">
+                <div className="card-header py-2">
+                    <h6 className="card-title mb-0">
+                        <i className="fas fa-tag mr-1 text-info" />
+                        {translateUiText("Grille tarifaire client")}
+                    </h6>
+                </div>
+                <div className="card-body p-0">
+                    <table className="table table-sm table-striped mb-0">
+                        <thead>
+                            <tr>
+                                <th>{translateUiText("Source")}</th><th>{translateUiText("Qté min")}</th><th>{translateUiText("Qté max")}</th><th>{translateUiText("Prix")}</th><th />
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {rows.map((e) => (
+                                <tr key={e.id} className={e.matches ? 'table-success' : ''}>
+                                    <td>{e.scope_label}</td>
+                                    <td>{e.min_qty}</td>
+                                    <td>{e.max_qty ?? '∞'}</td>
+                                    <td>{e.formatted_price}</td>
+                                    <td>
+                                        <button
+                                            type="button"
+                                            className="btn btn-xs btn-outline-primary"
+                                            onClick={() => onApplyPrice(e.price)}
+                                        >
+                                            {translateUiText("Appliquer")}
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// TaskModal
+// ---------------------------------------------------------------------------
+
+function TaskModal({ lineId, lineLabel, endpoints, quoteStatu, useCalculatedPrice, onLineUpdated, onClose }) {
+    const [tasks, setTasks]         = useState(null); // null = loading
+    const [taskUrl, setTaskUrl]     = useState('#');
+    const [calcPrice, setCalcPrice] = useState(useCalculatedPrice);
+    const [toggling, setToggling]   = useState(false);
+
+    useEffect(() => {
+        if (!lineId || !endpoints.tasks) return;
+        setTasks(null);
+        fetch(endpoints.tasks.replace('__ID__', lineId), { headers: { Accept: 'application/json' } })
+            .then((r) => r.json())
+            .then((d) => {
+                setTasks(d.tasks ?? []);
+                setTaskUrl(d.task_url ?? '#');
+                setCalcPrice(d.use_calculated_price ?? false);
+            })
+            .catch(() => setTasks([]));
+    }, [lineId]);
+
+    const handleToggle = async () => {
+        setToggling(true);
+        const res  = await apiFetch(endpoints.calculatedPrice.replace('__ID__', lineId), {
+            method: 'PATCH',
+            body: JSON.stringify({ enable: !calcPrice }),
+        });
+        if (res.ok) {
+            const data = await res.json();
+            setCalcPrice(!calcPrice);
+            onLineUpdated(data.line);
+        }
+        setToggling(false);
+    };
+
+    return (
+        <>
+            {/* Backdrop */}
+            <div onClick={onClose} style={{
+                position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+                zIndex: 1055, cursor: 'pointer',
+            }} />
+
+            {/* Modal */}
+            <div style={{
+                position: 'fixed', top: '10%', left: '50%', transform: 'translateX(-50%)',
+                width: '90%', maxWidth: 780, maxHeight: '80vh',
+                background: '#fff', borderRadius: 6, zIndex: 1060,
+                display: 'flex', flexDirection: 'column',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
+            }}>
+                {/* Header */}
+                <div className="d-flex align-items-center justify-content-between px-3 py-2 border-bottom"
+                    style={{ background: '#ffc107', borderRadius: '6px 6px 0 0' }}>
+                    <strong className="text-dark">
+                        <i className="fas fa-list mr-2" />
+                        {translateUiText("Tâches —")} {lineLabel}
+                    </strong>
+                    <button type="button" className="btn btn-sm btn-outline-dark" onClick={onClose}>
+                        <i className="fas fa-times" />
+                    </button>
+                </div>
+
+                {/* Body */}
+                <div className="flex-grow-1 overflow-auto p-3">
+                    {tasks === null ? (
+                        <div className="text-center py-4">
+                            <i className="fas fa-spinner fa-spin mr-2" />{translateUiText("Chargement…")}
+                        </div>
+                    ) : tasks.length === 0 ? (
+                        <p className="text-muted text-center py-4">{translateUiText("Aucune tâche pour cette ligne.")}</p>
+                    ) : (
+                        <table className="table table-hover table-sm mb-0">
+                            <thead className="thead-light">
+                                <tr>
+                                    <th>{translateUiText("Ordre")}</th>
+                                    <th>{translateUiText("Libellé")}</th>
+                                    <th>{translateUiText("Service")}</th>
+                                    <th className="text-right">{translateUiText("Temps")}</th>
+                                    <th className="text-right">{translateUiText("Qté")}</th>
+                                    <th className="text-right">{translateUiText("Coût")}</th>
+                                    <th className="text-right">{translateUiText("Marge")}</th>
+                                    <th className="text-right">{translateUiText("Prix")}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {tasks.map((t) => (
+                                    <tr key={t.id}>
+                                        <td>{t.ordre}</td>
+                                        <td>{t.label}</td>
+                                        <td style={{ background: t.service?.color ?? undefined }}>
+                                            {t.service?.label ?? '—'}
+                                        </td>
+                                        <td className="text-right">{t.total_time} {translateUiText("h")}</td>
+                                        <td className="text-right">{formatQty(t.qty)}</td>
+                                        <td className="text-right">{t.unit_cost}</td>
+                                        <td className="text-right">{t.margin != null ? `${t.margin} %` : '—'}</td>
+                                        <td className="text-right">{t.unit_price}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+
+                {/* Footer */}
+                <div className="border-top px-3 py-2 d-flex align-items-center justify-content-between flex-wrap" style={{ gap: '0.5rem' }}>
+                    <a href={taskUrl} className="btn btn-sm btn-info">
+                        <i className="fas fa-folder mr-1" />{translateUiText("Gérer les tâches")}
+                    </a>
+                    {quoteStatu === 1 && (
+                        <button
+                            type="button"
+                            className={`btn btn-sm ${calcPrice ? 'btn-warning' : 'btn-success'}`}
+                            onClick={handleToggle}
+                            disabled={toggling}
+                        >
+                            {toggling
+                                ? <i className="fas fa-spinner fa-spin mr-1" />
+                                : <i className={`fas ${calcPrice ? 'fa-toggle-on' : 'fa-toggle-off'} mr-1`} />}
+                            {calcPrice ? translateUiText("Désactiver prix calculé") : translateUiText("Activer prix calculé")}
+                        </button>
+                    )}
+                </div>
+            </div>
+        </>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// LineDrawer
+// ---------------------------------------------------------------------------
+
+function LineDrawer({ open, onClose, onOpenCreate, editingLine, selectData, endpoints, onSaved, quoteStatu }) {
+    const [form, setForm]                   = useState(EMPTY_FORM);
+    const [priceList, setPriceList]         = useState([]);
+    const [saving, setSaving]               = useState(false);
+    const [errors, setErrors]               = useState({});
+    const [productSearch, setProductSearch] = useState('');
+    const [showProductList, setShowProductList] = useState(false);
+
+    const isReadOnly = quoteStatu !== 1;
+
+    useEffect(() => {
+        if (!open) return;
+
+        if (editingLine) {
+            setForm({
+                ordre:              editingLine.ordre              ?? 1,
+                product_id:         editingLine.product_id         ?? '',
+                code:               editingLine.code               ?? '',
+                label:              editingLine.label              ?? '',
+                qty:                editingLine.qty                ?? 1,
+                methods_units_id:   editingLine.methods_units_id   ?? '',
+                selling_price:      editingLine.selling_price      ?? 0,
+                discount:           editingLine.discount           ?? 0,
+                accounting_vats_id: editingLine.accounting_vats_id ?? '',
+                delivery_date:      editingLine.delivery_date      ?? '',
+                statu:              editingLine.statu              ?? 1,
+            });
+            setProductSearch(
+                editingLine.product_code
+                    ? `${editingLine.product_code} — ${editingLine.label}`
+                    : ''
+            );
+        } else {
+            const defaultUnit = selectData.units?.find((u) => u.default) ?? selectData.units?.[0];
+            const defaultVat  = selectData.vats?.find((v)  => v.default) ?? selectData.vats?.[0];
+            setForm({
+                ...EMPTY_FORM,
+                ordre:              selectData._nextOrdre          ?? 1,
+                methods_units_id:   defaultUnit?.id               ?? '',
+                accounting_vats_id: defaultVat?.id                ?? '',
+                discount:           selectData.customer_discount  ?? 0,
+                delivery_date:      selectData.default_delivery   ?? '',
+            });
+            setProductSearch('');
+        }
+        setErrors({});
+        setPriceList([]);
+    }, [open, editingLine]);
+
+    // Load price list when product changes
+    useEffect(() => {
+        if (!form.product_id || !open) { setPriceList([]); return; }
+        const url = endpoints.priceList.replace('__PRODUCT__', form.product_id);
+        fetch(url, { headers: { Accept: 'application/json' } })
+            .then((r) => r.json())
+            .then((d) => setPriceList(d.price_list ?? []))
+            .catch(() => setPriceList([]));
+    }, [form.product_id, open]);
+
+    const set = (field, value) => setForm((f) => ({ ...f, [field]: value }));
+
+    const handleProductSelect = (product) => {
+        setForm((f) => ({
+            ...f,
+            product_id:       product.id,
+            code:             product.code,
+            label:            product.label ?? f.label,
+            methods_units_id: product.methods_units_id ?? f.methods_units_id,
+            selling_price:    product.selling_price     ?? f.selling_price,
+        }));
+        setProductSearch(`${product.code} — ${product.label}`);
+        setShowProductList(false);
+    };
+
+    const handleProductClear = () => {
+        set('product_id', '');
+        setProductSearch('');
+        setPriceList([]);
+    };
+
+    const filteredProducts = useProductSearch(endpoints.productSearch, productSearch, open && showProductList);
+
+    const resetFormForCreate = (nextOrdre) => {
+        const defaultUnit = selectData.units?.find((u) => u.default) ?? selectData.units?.[0];
+        const defaultVat  = selectData.vats?.find((v)  => v.default) ?? selectData.vats?.[0];
+        setForm({
+            ...EMPTY_FORM,
+            ordre:              nextOrdre,
+            methods_units_id:   defaultUnit?.id              ?? '',
+            accounting_vats_id: defaultVat?.id               ?? '',
+            discount:           selectData.customer_discount ?? 0,
+            delivery_date:      selectData.default_delivery  ?? '',
+        });
+        setProductSearch('');
+        setErrors({});
+        setPriceList([]);
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (isReadOnly) return;
+        setSaving(true);
+        setErrors({});
+        const isEdit = !!editingLine;
+        const url    = isEdit
+            ? endpoints.update.replace('__ID__', editingLine.id)
+            : endpoints.store;
+        try {
+            const res  = await apiFetch(url, { method: isEdit ? 'PUT' : 'POST', body: JSON.stringify(form) });
+            const data = await res.json();
+            if (!res.ok) { setErrors(data.errors ?? { _global: data.message ?? translateUiText("Erreur") }); return; }
+            onSaved(data.line, isEdit);
+            if (isEdit) {
+                onClose();
+            } else {
+                resetFormForCreate((data.line.ordre ?? form.ordre) + 1);
+            }
+        } catch {
+            setErrors({ _global: translateUiText("Erreur réseau") });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const canAdd = quoteStatu === 1;
+
+    return (
+        <>
+            {/* Backdrop */}
+            <div onClick={onClose} style={{
+                position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)',
+                zIndex: 1040, opacity: open ? 1 : 0,
+                pointerEvents: open ? 'auto' : 'none',
+                transition: 'opacity 0.2s',
+            }} />
+
+            {/* Tab handle — independent fixed element, visible only when drawer is closed */}
+            {canAdd && (
+                <button
+                    type="button"
+                    onClick={onOpenCreate}
+                    style={{
+                        position: 'fixed',
+                        right: 0,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        width: 40,
+                        padding: '18px 0',
+                        background: '#28a745',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '6px 0 0 6px',
+                        boxShadow: '-3px 0 8px rgba(0,0,0,0.18)',
+                        cursor: 'pointer',
+                        opacity: open ? 0 : 1,
+                        pointerEvents: open ? 'none' : 'auto',
+                        transition: 'opacity 0.2s',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: 8,
+                        zIndex: 1049,
+                    }}
+                    title={translateUiText("Ajouter une ligne")}
+                >
+                    <i className="fas fa-plus" style={{ fontSize: 14 }} />
+                    <span style={{
+                        writingMode: 'vertical-rl',
+                        transform: 'rotate(180deg)',
+                        fontSize: 10,
+                        fontWeight: 700,
+                        letterSpacing: 1,
+                        textTransform: 'uppercase',
+                    }}>{translateUiText("Ajouter")}</span>
+                </button>
+            )}
+
+            {/* Panel — fully off-screen when closed */}
+            <div style={{
+                position: 'fixed', top: 0, right: 0, bottom: 0,
+                width: 460, maxWidth: '95vw',
+                background: '#fff', zIndex: 1050,
+                display: 'flex', flexDirection: 'column',
+                transform: open ? 'translateX(0)' : 'translateX(100%)',
+                transition: 'transform 0.25s ease',
+                boxShadow: '-4px 0 24px rgba(0,0,0,0.15)',
+            }}>
+
+                {/* Header */}
+                <div className="d-flex align-items-center justify-content-between px-3 py-2 border-bottom bg-light">
+                    <strong>
+                        {editingLine
+                            ? <><i className="fas fa-edit mr-2 text-warning" />{translateUiText("Modifier la ligne")}</>
+                            : <><i className="fas fa-plus-circle mr-2 text-success" />{translateUiText("Nouvelle ligne")}</>}
+                    </strong>
+                    <button type="button" className="btn btn-sm btn-outline-secondary" onClick={onClose}>
+                        <i className="fas fa-times" />
+                    </button>
+                </div>
+
+                {/* Body */}
+                <div className="flex-grow-1 overflow-auto p-3">
+                    {errors._global && <div className="alert alert-danger py-2">{errors._global}</div>}
+
+                    <form id="line-drawer-form" onSubmit={handleSubmit}>
+
+                        {/* Product */}
+                        <div className="form-group mb-2 position-relative">
+                            <label className="mb-1 small font-weight-bold">{translateUiText("Produit")}</label>
+                            <div className="input-group input-group-sm">
+                                <div className="input-group-prepend">
+                                    <span className="input-group-text"><i className="fas fa-barcode" /></span>
+                                </div>
+                                <input
+                                    type="text"
+                                    className="form-control"
+                                    placeholder={translateUiText("Rechercher un produit…")}
+                                    value={productSearch}
+                                    onChange={(e) => { setProductSearch(e.target.value); setShowProductList(true); if (!e.target.value) handleProductClear(); }}
+                                    onFocus={() => setShowProductList(true)}
+                                    onBlur={() => setTimeout(() => setShowProductList(false), 150)}
+                                    disabled={isReadOnly}
+                                />
+                                {form.product_id && (
+                                    <div className="input-group-append">
+                                        <button type="button" className="btn btn-sm btn-outline-secondary" onClick={handleProductClear}>
+                                            <i className="fas fa-times" />
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                            {showProductList && filteredProducts.length > 0 && (
+                                <div style={{
+                                    position: 'absolute', zIndex: 1060, left: 0, right: 0,
+                                    background: '#fff', border: '1px solid #ccc',
+                                    borderRadius: '0 0 4px 4px', maxHeight: 200, overflowY: 'auto',
+                                    boxShadow: '0 4px 8px rgba(0,0,0,0.12)',
+                                }}>
+                                    {filteredProducts.map((p) => (
+                                        <div key={p.id} className="px-3 py-2"
+                                            style={{ cursor: 'pointer', fontSize: '0.85rem' }}
+                                            onMouseDown={() => handleProductSelect(p)}
+                                            onMouseEnter={(e) => e.currentTarget.style.background = '#f0f4ff'}
+                                            onMouseLeave={(e) => e.currentTarget.style.background = ''}>
+                                            <strong>{p.code}</strong>
+                                            <span className="text-muted ml-2">{p.label}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Code + Ordre */}
+                        <div className="form-row">
+                            <div className="form-group col-8 mb-2">
+                                <label className="mb-1 small font-weight-bold">{translateUiText("Réf. externe")}</label>
+                                <div className="input-group input-group-sm">
+                                    <div className="input-group-prepend"><span className="input-group-text"><i className="fas fa-external-link-square-alt" /></span></div>
+                                    <input type="text" className={`form-control ${errors.code ? 'is-invalid' : ''}`}
+                                        placeholder={translateUiText("Code externe")} value={form.code}
+                                        onChange={(e) => set('code', e.target.value)} disabled={isReadOnly} />
+                                </div>
+                            </div>
+                            <div className="form-group col-4 mb-2">
+                                <label className="mb-1 small font-weight-bold">{translateUiText("Ordre")}</label>
+                                <input type="number" className={`form-control form-control-sm ${errors.ordre ? 'is-invalid' : ''}`}
+                                    min="1" value={form.ordre}
+                                    onChange={(e) => set('ordre', e.target.value)} disabled={isReadOnly} />
+                            </div>
+                        </div>
+
+                        {/* Label */}
+                        <div className="form-group mb-2">
+                            <label className="mb-1 small font-weight-bold">{translateUiText("Description")} <span className="text-danger">*</span></label>
+                            <div className="input-group input-group-sm">
+                                <div className="input-group-prepend"><span className="input-group-text"><i className="fas fa-tags" /></span></div>
+                                <input type="text" className={`form-control ${errors.label ? 'is-invalid' : ''}`}
+                                    placeholder={translateUiText("Description de la ligne")} value={form.label}
+                                    onChange={(e) => set('label', e.target.value)} disabled={isReadOnly} />
+                            </div>
+                            {errors.label && <div className="invalid-feedback d-block">{errors.label[0]}</div>}
+                        </div>
+
+                        {/* Qty + Unit */}
+                        <div className="form-row">
+                            <div className="form-group col-5 mb-2">
+                                <label className="mb-1 small font-weight-bold">{translateUiText("Quantité")} <span className="text-danger">*</span></label>
+                                <div className="input-group input-group-sm">
+                                    <div className="input-group-prepend"><span className="input-group-text"><i className="fas fa-times" /></span></div>
+                                    <input type="number" className={`form-control ${errors.qty ? 'is-invalid' : ''}`}
+                                        min="0" step="0.001" value={form.qty}
+                                        onChange={(e) => set('qty', e.target.value)} disabled={isReadOnly} />
+                                </div>
+                                {errors.qty && <div className="invalid-feedback d-block">{errors.qty[0]}</div>}
+                            </div>
+                            <div className="form-group col-7 mb-2">
+                                <label className="mb-1 small font-weight-bold">{translateUiText("Unité")}</label>
+                                <select className="form-control form-control-sm" value={form.methods_units_id}
+                                    onChange={(e) => set('methods_units_id', e.target.value)} disabled={isReadOnly}>
+                                    <option value="">{translateUiText("— Unité —")}</option>
+                                    {(selectData.units ?? []).map((u) => (
+                                        <option key={u.id} value={u.id}>{u.code} - {u.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* Price + Discount */}
+                        <div className="form-row">
+                            <div className="form-group col-6 mb-2">
+                                <label className="mb-1 small font-weight-bold">{translateUiText("Prix unitaire")} <span className="text-danger">*</span></label>
+                                <div className="input-group input-group-sm">
+                                    <div className="input-group-prepend"><span className="input-group-text">{selectData.currency ?? '€'}</span></div>
+                                    <input type="number" className={`form-control ${errors.selling_price ? 'is-invalid' : ''}`}
+                                        min="0" step="0.001" value={form.selling_price}
+                                        onChange={(e) => set('selling_price', e.target.value)} disabled={isReadOnly} />
+                                </div>
+                                {errors.selling_price && <div className="invalid-feedback d-block">{errors.selling_price[0]}</div>}
+                            </div>
+                            <div className="form-group col-6 mb-2">
+                                <label className="mb-1 small font-weight-bold">{translateUiText("Remise %")}</label>
+                                <div className="input-group input-group-sm">
+                                    <div className="input-group-prepend"><span className="input-group-text"><i className="fas fa-percentage" /></span></div>
+                                    <input type="number" className={`form-control ${errors.discount ? 'is-invalid' : ''}`}
+                                        min="0" max="100" step="0.01" value={form.discount}
+                                        onChange={(e) => set('discount', e.target.value)} disabled={isReadOnly} />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* VAT + Delivery */}
+                        <div className="form-row">
+                            <div className="form-group col-6 mb-2">
+                                <label className="mb-1 small font-weight-bold">{translateUiText("TVA")}</label>
+                                <select className="form-control form-control-sm" value={form.accounting_vats_id}
+                                    onChange={(e) => set('accounting_vats_id', e.target.value)} disabled={isReadOnly}>
+                                    <option value="">{translateUiText("— TVA —")}</option>
+                                    {(selectData.vats ?? []).map((v) => (
+                                        <option key={v.id} value={v.id}>{v.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="form-group col-6 mb-2">
+                                <label className="mb-1 small font-weight-bold">{translateUiText("Date livraison")}</label>
+                                <input type="date" className="form-control form-control-sm" value={form.delivery_date}
+                                    onChange={(e) => set('delivery_date', e.target.value)} disabled={isReadOnly} />
+                            </div>
+                        </div>
+
+                        {/* Statut (edit only) */}
+                        {editingLine && (
+                            <div className="form-group mb-2">
+                                <label className="mb-1 small font-weight-bold">{translateUiText("Statut")}</label>
+                                <select className="form-control form-control-sm" value={form.statu}
+                                    onChange={(e) => set('statu', Number(e.target.value))} disabled={isReadOnly}>
+                                    {Object.entries(STATUS_CONFIG).map(([id, cfg]) => (
+                                        <option key={id} value={id}>{cfg.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
+                        <PriceGrid priceList={priceList} currentQty={form.qty}
+                            onApplyPrice={(price) => set('selling_price', price)} />
+                    </form>
+                </div>
+
+                {/* Footer */}
+                <div className="border-top px-3 py-2 d-flex justify-content-between align-items-center bg-light">
+                    {editingLine?.detail_url ? (
+                        <a href={editingLine.detail_url} className="btn btn-sm btn-outline-info"
+                            target="_blank" rel="noreferrer">
+                            <i className="fas fa-info-circle mr-1" />{translateUiText("Détails techniques")}
+                        </a>
+                    ) : <span />}
+                    <div>
+                        <button type="button" className="btn btn-sm btn-outline-secondary mr-2" onClick={onClose}>
+                            {translateUiText("Annuler")}
+                        </button>
+                        {!isReadOnly && (
+                            <button type="submit" form="line-drawer-form" className="btn btn-sm btn-success" disabled={saving}>
+                                {editingLine
+                                    ? saving
+                                        ? <><i className="fas fa-spinner fa-spin mr-1" />{translateUiText("Enregistrement…")}</>
+                                        : <><i className="fas fa-save mr-1" />{translateUiText("Enregistrer")}</>
+                                    : saving
+                                        ? <><i className="fas fa-spinner fa-spin mr-1" />{translateUiText("Ajout…")}</>
+                                        : <><i className="fas fa-plus mr-1" />{translateUiText("Ajouter")}</>}
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// PresentationRow — section, sous-total ou texte (ni quantité, ni prix, ni TVA)
+// ---------------------------------------------------------------------------
+
+const PRESENTATION_LABELS = {
+    [LINE_TYPES.SECTION]:  translateUiText("Section"),
+    [LINE_TYPES.SUBTOTAL]: translateUiText("Sous-total"),
+    [LINE_TYPES.TEXT]:     translateUiText("Texte"),
+};
+
+function PresentationRow({
+    line, info, sectionLabel, quoteStatu, units, currency, autoEdit,
+    onSaveLabel, onDelete, onPresentation,
+    canDrag, onDragStart, onDragEnter, onDragEnd, isDragOver, isDragging,
+}) {
+    const [editing, setEditing] = useState(!!autoEdit);
+    const [label, setLabel]     = useState(line.label ?? '');
+    const editable = quoteStatu === 1;
+    const type     = line.line_type;
+
+    useEffect(() => { if (!editing) setLabel(line.label ?? ''); }, [line.label, editing]);
+
+    const money = (v) => Number(v ?? 0).toLocaleString(uiLocale(), { style: 'currency', currency: currency || uiCurrency() });
+
+    const save = async () => {
+        if (await onSaveLabel(line, label)) setEditing(false);
+    };
+    const onKeyDown = (e) => {
+        if (e.key === 'Escape') { setLabel(line.label ?? ''); setEditing(false); }
+        if (e.key === 'Enter' && (type !== LINE_TYPES.TEXT || e.ctrlKey)) { e.preventDefault(); save(); }
+    };
+
+    const rowStyle = {
+        opacity:    isDragging ? 0.4 : 1,
+        borderTop:  isDragOver ? '3px solid #007bff' : undefined,
+        transition: 'border-top 0.1s, opacity 0.15s',
+        background: type === LINE_TYPES.SECTION ? '#e9ecef' : type === LINE_TYPES.SUBTOTAL ? '#f8f9fa' : undefined,
+    };
+
+    const subtotalLabel = line.label || (sectionLabel ? `Sous-total ${sectionLabel}` : translateUiText("Sous-total"));
+
+    const editor = type === LINE_TYPES.TEXT ? (
+        <textarea className="form-control form-control-sm" rows={2} maxLength={255} autoFocus
+            value={label} onChange={(e) => setLabel(e.target.value)} onKeyDown={onKeyDown}
+            placeholder={translateUiText("Texte imprimé sur le devis (Ctrl+Entrée pour valider)")} />
+    ) : (
+        <input type="text" className="form-control form-control-sm" maxLength={255} autoFocus
+            value={label} onChange={(e) => setLabel(e.target.value)} onKeyDown={onKeyDown}
+            placeholder={type === LINE_TYPES.SUBTOTAL ? subtotalLabel : translateUiText("Titre de la section")} />
+    );
+
+    return (
+        <tr
+            className={`line-${type}`}
+            draggable={canDrag}
+            onDragStart={canDrag ? onDragStart : undefined}
+            onDragEnter={canDrag ? onDragEnter : undefined}
+            onDragEnd={canDrag ? onDragEnd : undefined}
+            onDragOver={canDrag ? (e) => e.preventDefault() : undefined}
+            style={rowStyle}
+        >
+            <td style={{ width: 52, cursor: canDrag ? 'grab' : 'default', userSelect: 'none', padding: '2px 4px', verticalAlign: 'middle' }}>
+                <i className="fas fa-grip-vertical mr-1" style={{ color: '#aaa' }} />
+                <span className="text-muted small">{line.ordre}</span>
+            </td>
+            <td colSpan={11}>
+                <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
+                    <span className="badge text-bg-light border" title={PRESENTATION_LABELS[type]}>
+                        <i className={`fas fa-fw ${type === LINE_TYPES.SECTION ? 'fa-heading' : type === LINE_TYPES.SUBTOTAL ? 'fa-equals' : 'fa-paragraph'}`} />
+                    </span>
+
+                    {editing ? (
+                        <div className="flex-grow-1 d-flex" style={{ gap: '0.25rem' }}>
+                            {editor}
+                            <button type="button" className="btn btn-xs btn-success" onClick={save} title={translateUiText("Enregistrer")}><i className="fas fa-check" /></button>
+                            <button type="button" className="btn btn-xs btn-default" title={translateUiText("Annuler")}
+                                onClick={() => { setLabel(line.label ?? ''); setEditing(false); }}><i className="fas fa-times" /></button>
+                        </div>
+                    ) : type === LINE_TYPES.SECTION ? (
+                        <span className="flex-grow-1">
+                            <strong className="text-uppercase">{line.label}</strong>
+                            {info?.empty && (
+                                <span className="badge text-bg-warning ml-2"
+                                    title={translateUiText("Une section regroupe les lignes placées en dessous d'elle, jusqu'à la section suivante")}>
+                                    <i className="fas fa-exclamation-triangle mr-1" />
+                                    {translateUiText("Section vide : placez-la au-dessus de ses lignes")}
+                                </span>
+                            )}
+                        </span>
+                    ) : type === LINE_TYPES.SUBTOTAL ? (
+                        <span className="flex-grow-1 text-right font-weight-bold">{subtotalLabel}</span>
+                    ) : (
+                        <span className="flex-grow-1 font-italic" style={{ whiteSpace: 'pre-wrap' }}>{line.label}</span>
+                    )}
+
+                    {type === LINE_TYPES.SECTION && (
+                        <>
+                            <select className="form-control form-control-sm" style={{ width: 'auto' }}
+                                value={Number(line.pdf_package ?? 0)} disabled={!editable}
+                                title={translateUiText("Impression de la section sur le devis")}
+                                onChange={(e) => onPresentation(line, { pdf_package: Number(e.target.value) })}>
+                                <option value={PACKAGE.NONE}>{translateUiText("Détail imprimé")}</option>
+                                <option value={PACKAGE.AMOUNT}>{translateUiText("Forfait : montant seul")}</option>
+                                <option value={PACKAGE.UNIT}>{translateUiText("Forfait : 1 × unité")}</option>
+                            </select>
+                            {Number(line.pdf_package) === PACKAGE.UNIT && (
+                                <select className="form-control form-control-sm" style={{ width: 'auto' }}
+                                    value={line.methods_units_id ?? ''} disabled={!editable}
+                                    title={translateUiText("Unité imprimée — créez une unité « Forfait » dans Méthodes > Unités si besoin")}
+                                    onChange={(e) => onPresentation(line, { methods_units_id: Number(e.target.value) })}>
+                                    {(units ?? []).map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
+                                </select>
+                            )}
+                            <span className="font-weight-bold text-nowrap" title={translateUiText("Total HT de la section, lignes masquées comprises")}>
+                                {money(info?.amount)}
+                            </span>
+                        </>
+                    )}
+
+                    {type === LINE_TYPES.SUBTOTAL && (
+                        <span className={`font-weight-bold text-nowrap ${info?.inPackage ? 'text-muted' : ''}`}
+                            title={info?.inPackage ? translateUiText("Non imprimé : la section est au forfait") : translateUiText("Calculé, jamais saisi")}>
+                            {money(info?.amount)}
+                        </span>
+                    )}
+                </div>
+            </td>
+            <td>
+                {editable && !editing && (
+                    <div className="btn-group btn-group-xs">
+                        <button type="button" className="btn btn-xs btn-default" title={translateUiText("Modifier le libellé")} onClick={() => setEditing(true)}>
+                            <i className="fas fa-edit text-warning" />
+                        </button>
+                        <button type="button" className="btn btn-xs btn-default" title={translateUiText("Supprimer")} onClick={() => onDelete(line.id)}>
+                            <i className="fas fa-trash text-danger" />
+                        </button>
+                    </div>
+                )}
+            </td>
+        </tr>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// LineRow  — avec drag-and-drop
+// ---------------------------------------------------------------------------
+
+function LineRow({
+    line, quoteStatu, onEdit, onDelete, onDuplicate, onBreakDown, onCreateProduct, onOpenTaskModal, onToggleSelect, selected,
+    info, onToggleHidden, onInsert,
+    // drag props
+    canDrag, onDragStart, onDragEnter, onDragEnd, isDragOver, isDragging,
+}) {
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [menuStyle, setMenuStyle] = useState({});
+    const menuRef   = useRef(null);
+    const toggleRef = useRef(null);
+
+    useEffect(() => {
+        if (!menuOpen) return;
+        const close = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false); };
+        document.addEventListener('mousedown', close);
+        return () => document.removeEventListener('mousedown', close);
+    }, [menuOpen]);
+
+    const handleToggleMenu = () => {
+        if (!menuOpen && toggleRef.current) {
+            const rect    = toggleRef.current.getBoundingClientRect();
+            const menuH   = 330; // estimated height
+            const openUp  = rect.bottom + menuH > window.innerHeight;
+            setMenuStyle(openUp
+                ? { position: 'fixed', bottom: window.innerHeight - rect.top, top: 'auto', left: 'auto', right: window.innerWidth - rect.right, width: 'auto', minWidth: 180, maxWidth: 220, zIndex: 1060 }
+                : { position: 'fixed', top: rect.bottom, bottom: 'auto', left: 'auto', right: window.innerWidth - rect.right, width: 'auto', minWidth: 180, maxWidth: 220, zIndex: 1060 }
+            );
+        }
+        setMenuOpen((v) => !v);
+    };
+
+    const cfg      = STATUS_CONFIG[line.statu] ?? { badge: 'badge-secondary', label: '—' };
+
+    const rowStyle = {
+        opacity:        isDragging  ? 0.4  : (line.hide_on_pdf ? 0.55 : 1),
+        borderTop:      isDragOver  ? '3px solid #007bff' : undefined,
+        transition:     'border-top 0.1s, opacity 0.15s',
+        background:     selected    ? '#eef4ff' : undefined,
+    };
+
+    return (
+        <tr
+            draggable={canDrag}
+            onDragStart={canDrag ? onDragStart : undefined}
+            onDragEnter={canDrag ? onDragEnter : undefined}
+            onDragEnd={canDrag ? onDragEnd : undefined}
+            onDragOver={canDrag ? (e) => e.preventDefault() : undefined}
+            style={rowStyle}
+        >
+            {/* Drag handle + thumbnail ou ordre */}
+            <td style={{ width: 52, cursor: canDrag ? 'grab' : 'default', userSelect: 'none', padding: '2px 4px', verticalAlign: 'middle' }}>
+                {line.picture ? (
+                    <div style={{ position: 'relative', display: 'inline-block' }}>
+                        <img
+                            src={`/images/quote-lines/${line.picture}`}
+                            alt=""
+                            style={{ width: 42, height: 42, objectFit: 'contain', background: '#f8f9fa', border: '1px solid #dee2e6', borderRadius: 3, display: 'block' }}
+                        />
+                        <span style={{ position: 'absolute', bottom: 0, right: 0, background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: '0.6rem', padding: '0 3px', borderRadius: '3px 0 3px 0', lineHeight: '1.5' }}>
+                            {line.ordre}
+                        </span>
+                    </div>
+                ) : (
+                    <>
+                        <i className="fas fa-grip-vertical mr-1" style={{ color: '#aaa' }} />
+                        <span className="text-muted small">{line.ordre}</span>
+                    </>
+                )}
+            </td>
+
+            {/* Select */}
+            <td style={{ width: 32 }}>
+                <input type="checkbox" checked={selected}
+                    onChange={() => onToggleSelect(line.id)}
+                    disabled={quoteStatu !== 1 && quoteStatu !== 2} />
+            </td>
+
+            {/* Code */}
+            <td className="small">{line.code || '—'}</td>
+
+            {/* Product link */}
+            <td style={{ width: 36 }}>
+                {line.product_id && line.product_url
+                    ? <a href={line.product_url} className="btn btn-xs btn-outline-secondary" target="_blank" rel="noreferrer"><i className="fas fa-cube" /></a>
+                    : null}
+            </td>
+
+            {/* Label */}
+            <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {line.hide_on_pdf && (
+                    <i className="fas fa-eye-slash text-muted mr-1" title={translateUiText("Masquée sur le PDF : comptée dans le total, non imprimée")} />
+                )}
+                <span title={line.label}>{line.label}</span>
+                {info?.inPackage && (
+                    <span className="badge text-bg-light border ml-1" title={translateUiText("Section au forfait : la ligne n'est pas détaillée sur le PDF")}>{translateUiText("forfait")}</span>
+                )}
+            </td>
+
+            {/* Qty */}
+            <td className="text-right">{formatQty(line.qty)}</td>
+
+            {/* Unit */}
+            <td className="small">{line.unit_label ?? '—'}</td>
+
+            {/* Price */}
+            <td className={`text-right font-weight-bold ${line.use_calculated_price ? 'bg-warning' : ''}`}
+                title={line.use_calculated_price ? translateUiText("Prix calculé") : ''}>
+                {line.formatted_price}
+            </td>
+
+            {/* Discount */}
+            <td className="text-right">{line.discount} %</td>
+
+            {/* VAT */}
+            <td className="small">{line.vat_label ?? '—'}</td>
+
+            {/* Delivery */}
+            <td className="small" style={{ whiteSpace: 'nowrap' }}>{formatDate(line.delivery_date)}</td>
+
+            {/* Status */}
+            <td>
+                <span className={`badge ${cfg.badge}`}>{cfg.label}</span>
+                {line.statu === 3 && line.order_url && (
+                    <a href={line.order_url} className="badge badge-primary ml-1" target="_blank" rel="noreferrer">
+                        <i className="fas fa-file-alt" /> {line.order_code}
+                    </a>
+                )}
+            </td>
+
+            {/* Actions */}
+            <td>
+                <div className="btn-group btn-group-xs" ref={menuRef}>
+                    {quoteStatu === 1 && (
+                        <button type="button" className="btn btn-xs btn-default"
+                            title={line.hide_on_pdf ? translateUiText("Afficher sur le PDF") : translateUiText("Masquer sur le PDF (reste comptée dans le total)")}
+                            onClick={() => onToggleHidden(line)}>
+                            <i className={`fas ${line.hide_on_pdf ? 'fa-eye-slash text-muted' : 'fa-eye'}`} />
+                        </button>
+                    )}
+                    <a href={line.detail_url} className="btn btn-xs bg-teal" target="_blank" rel="noreferrer" title={translateUiText("Détails techniques")}>
+                        <i className="fas fa-info-circle" />
+                    </a>
+                    {line.task_count > 0 && (
+                        <button type="button" className="btn btn-xs btn-warning"
+                            title={translateUiText("Tâches (:v0)", { v0: (line.task_count) })}
+                            onClick={() => onOpenTaskModal(line)}>
+                            <span className="badge badge-dark">{line.task_count}</span>
+                        </button>
+                    )}
+                    <button ref={toggleRef} className="btn btn-xs btn-default dropdown-toggle dropdown-toggle-split"
+                        onClick={handleToggleMenu} />
+                    {menuOpen && (
+                        <div className="dropdown-menu show" style={menuStyle}>
+                            {quoteStatu === 1 && (
+                                <button className="dropdown-item"
+                                    onClick={() => { onEdit(line); setMenuOpen(false); }}>
+                                    <i className="fas fa-edit fa-fw mr-2 text-warning" />{translateUiText("Modifier")}
+                                </button>
+                            )}
+                            {quoteStatu === 1 && (
+                                <button className="dropdown-item"
+                                    onClick={() => { onDuplicate(line.id); setMenuOpen(false); }}>
+                                    <i className="fas fa-copy fa-fw mr-2 text-info" />{translateUiText("Dupliquer")}
+                                </button>
+                            )}
+                            {quoteStatu === 1 && (
+                                <button className="dropdown-item text-danger"
+                                    onClick={() => { onDelete(line.id); setMenuOpen(false); }}>
+                                    <i className="fas fa-trash fa-fw mr-2" />{translateUiText("Supprimer")}
+                                </button>
+                            )}
+                            {quoteStatu === 1 && line.code && line.label && (
+                                <button className="dropdown-item"
+                                    onClick={() => { onCreateProduct(line.id); setMenuOpen(false); }}>
+                                    <i className="fas fa-barcode fa-fw mr-2 text-success" />{translateUiText("Créer un produit")}
+                                </button>
+                            )}
+                            {quoteStatu === 1 && (
+                                <>
+                                    <div className="dropdown-divider" />
+                                    <button className="dropdown-item"
+                                        onClick={() => { onInsert(LINE_TYPES.SECTION, line.ordre); setMenuOpen(false); }}>
+                                        <i className="fas fa-heading fa-fw mr-2 text-secondary" />{translateUiText("Insérer une section au-dessus")}
+                                    </button>
+                                    <button className="dropdown-item"
+                                        onClick={() => { onInsert(LINE_TYPES.TEXT, line.ordre); setMenuOpen(false); }}>
+                                        <i className="fas fa-paragraph fa-fw mr-2 text-secondary" />{translateUiText("Insérer un texte au-dessus")}
+                                    </button>
+                                    <button className="dropdown-item"
+                                        onClick={() => { onInsert(LINE_TYPES.SUBTOTAL, line.ordre + 1); setMenuOpen(false); }}>
+                                        <i className="fas fa-equals fa-fw mr-2 text-secondary" />{translateUiText("Insérer un sous-total en dessous")}
+                                    </button>
+                                </>
+                            )}
+                            <div className="dropdown-divider" />
+                            <a className="dropdown-item" href={line.detail_url} target="_blank" rel="noreferrer">
+                                <i className="fas fa-info-circle fa-fw mr-2 text-teal" />{translateUiText("Détails techniques")}
+                            </a>
+                            {quoteStatu === 1 && line.product_id && (
+                                <button className="dropdown-item"
+                                    onClick={() => { onBreakDown(line.id); setMenuOpen(false); }}>
+                                    <i className="fas fa-sitemap fa-fw mr-2 text-secondary" />{translateUiText("Découpage technique")}
+                                </button>
+                            )}
+                            <button className="dropdown-item"
+                                onClick={() => { onOpenTaskModal(line); setMenuOpen(false); }}>
+                                <i className="fas fa-list fa-fw mr-2 text-warning" />{translateUiText("Tâches (")}{line.task_count})
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </td>
+        </tr>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Conversion en commande d'un devis mis en page
+// ---------------------------------------------------------------------------
+
+function ConvertOrderModal({ count, onConfirm, onClose }) {
+    const [presentation, setPresentation] = useState('keep');
+
+    return (
+        <div className="modal d-block" tabIndex={-1} style={{ background: 'rgba(0,0,0,0.4)' }}>
+            <div className="modal-dialog">
+                <div className="modal-content">
+                    <div className="modal-header">
+                        <h5 className="modal-title">{translateUiText("Créer une commande (")}{count} {translateUiText("ligne")}{count > 1 ? translateUiText("s") : ''})</h5>
+                        <button type="button" className="close" onClick={onClose}><span>&times;</span></button>
+                    </div>
+                    <div className="modal-body">
+                        <p className="mb-2">{translateUiText("Ce devis contient des sections, sous-totaux ou textes. Sur la commande :")}</p>
+                        <div className="custom-control custom-radio mb-2">
+                            <input type="radio" id="presentation-keep" className="custom-control-input"
+                                checked={presentation === 'keep'} onChange={() => setPresentation('keep')} />
+                            <label className="custom-control-label" htmlFor="presentation-keep">
+                                <strong>{translateUiText("Reporter la mise en page")}</strong>
+                                <div className="small text-muted">
+                                    {translateUiText("Les sections des lignes choisies, leurs sous-totaux et textes, les forfaits et lignes masquées :\n                                    le PDF de commande ressemble au devis.")}
+                                </div>
+                            </label>
+                        </div>
+                        <div className="custom-control custom-radio">
+                            <input type="radio" id="presentation-drop" className="custom-control-input"
+                                checked={presentation === 'drop'} onChange={() => setPresentation('drop')} />
+                            <label className="custom-control-label" htmlFor="presentation-drop">
+                                <strong>{translateUiText("Articles seuls")}</strong>
+                                <div className="small text-muted">{translateUiText("La commande ne reprend que les lignes article.")}</div>
+                            </label>
+                        </div>
+                        <p className="small text-muted mt-3 mb-0">
+                            <i className="fas fa-info-circle mr-1" />
+                            {translateUiText("Dans les deux cas, seuls les articles se livrent et se facturent.")}
+                        </p>
+                    </div>
+                    <div className="modal-footer">
+                        <button type="button" className="btn btn-default btn-sm" onClick={onClose}>{translateUiText("Annuler")}</button>
+                        <button type="button" className="btn btn-primary btn-sm" onClick={() => onConfirm(presentation)}>
+                            <i className="fas fa-folder mr-1" />{translateUiText("Créer la commande")}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// QuoteLinesPage
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Import de lignes depuis un autre devis ou une trame
+// ---------------------------------------------------------------------------
+
+function ImportLinesModal({ endpoints, onImported, onClose }) {
+    const [search, setSearch]     = useState('');
+    const [sources, setSources]   = useState(null);
+    const [open, setOpen]         = useState(new Set());
+    const [picked, setPicked]     = useState(new Set());
+    const [saving, setSaving]     = useState(false);
+    const [error, setError]       = useState(null);
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setSources(null);
+            const params = new URLSearchParams(search ? { search } : {});
+            fetch(`${endpoints.importSources}?${params}`, { headers: { Accept: 'application/json' } })
+                .then((r) => r.json())
+                .then((data) => setSources(data.data ?? []))
+                .catch(() => setSources([]));
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [search]);
+
+    const toggle = (set, setter, id) => setter(() => { const ns = new Set(set); ns.has(id) ? ns.delete(id) : ns.add(id); return ns; });
+
+    const toggleQuote = (source) => {
+        const ids = source.lines.map((l) => l.id);
+        const all = ids.every((id) => picked.has(id));
+        setPicked(() => { const ns = new Set(picked); ids.forEach((id) => (all ? ns.delete(id) : ns.add(id))); return ns; });
+    };
+
+    const handleImport = async () => {
+        setSaving(true);
+        setError(null);
+        const res  = await apiFetch(endpoints.importFrom, { method: 'POST', body: JSON.stringify({ line_ids: [...picked] }) });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+            onImported(data.lines ?? []);
+        } else {
+            setError(data.message ?? translateUiText("Erreur lors de l'import des lignes"));
+            setSaving(false);
+        }
+    };
+
+    const money = (v) => Number(v ?? 0).toLocaleString(uiLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    return (
+        <div className="modal fade show d-block" tabIndex="-1" style={{ background: 'rgba(0,0,0,.5)' }}>
+            <div className="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+                <div className="modal-content">
+                    <div className="modal-header">
+                        <h5 className="modal-title"><i className="fas fa-file-import mr-2" />{translateUiText("Importer des lignes d'un autre devis")}</h5>
+                        <button type="button" className="close" onClick={onClose}>&times;</button>
+                    </div>
+                    <div className="modal-body">
+                        <div className="input-group input-group-sm mb-3">
+                            <div className="input-group-prepend"><span className="input-group-text"><i className="fas fa-search" /></span></div>
+                            <input type="text" className="form-control" autoFocus
+                                placeholder={translateUiText("Code, libellé, client ou ligne…")}
+                                value={search} onChange={(e) => setSearch(e.target.value)} />
+                        </div>
+                        <p className="text-muted small">
+                            {translateUiText("Les lignes sont recopiées en fin de devis avec leur détail technique, leur gamme, leur nomenclature et leurs fichiers.")}
+                        </p>
+                        {error && <div className="alert alert-danger py-2">{error}</div>}
+                        {sources === null ? (
+                            <div className="text-center py-4"><i className="fas fa-spinner fa-spin mr-2" />{translateUiText("Chargement…")}</div>
+                        ) : sources.length === 0 ? (
+                            <p className="text-muted text-center py-4">{translateUiText("Aucun devis ne correspond.")}</p>
+                        ) : sources.map((source) => {
+                            const isOpen   = open.has(source.id);
+                            const selected = source.lines.filter((l) => picked.has(l.id)).length;
+                            return (
+                                <div key={source.id} className="card card-outline card-secondary mb-2">
+                                    <div className="card-header py-2 d-flex align-items-center" style={{ cursor: 'pointer', gap: '.5rem' }}
+                                        onClick={() => toggle(open, setOpen, source.id)}>
+                                        <input type="checkbox" onClick={(e) => e.stopPropagation()}
+                                            checked={selected > 0 && selected === source.lines.length}
+                                            ref={(el) => { if (el) el.indeterminate = selected > 0 && selected < source.lines.length; }}
+                                            onChange={() => toggleQuote(source)} />
+                                        <i className={`fas fa-chevron-${isOpen ? 'down' : 'right'} text-muted`} />
+                                        {source.is_template
+                                            ? <span className="badge badge-info"><i className="fas fa-layer-group mr-1" />{translateUiText("Trame")}</span>
+                                            : <span className="badge badge-light">{source.code}</span>}
+                                        <strong className="text-truncate">{source.label}</strong>
+                                        {source.companie && <span className="text-muted small text-truncate">— {source.companie}</span>}
+                                        <span className="ml-auto badge badge-secondary">
+                                            {selected > 0 ? `${selected} / ` : ''}{source.lines.length} {translateUiText("ligne")}{source.lines.length > 1 ? translateUiText("s") : ''}
+                                        </span>
+                                    </div>
+                                    {isOpen && (
+                                        <div className="card-body p-0">
+                                            <table className="table table-sm table-hover mb-0">
+                                                <tbody>
+                                                    {source.lines.map((l) => (
+                                                        <tr key={l.id} style={{ cursor: 'pointer' }} onClick={() => toggle(picked, setPicked, l.id)}>
+                                                            <td style={{ width: 32 }}>
+                                                                <input type="checkbox" checked={picked.has(l.id)} readOnly />
+                                                            </td>
+                                                            <td className="text-muted small">{l.code}</td>
+                                                            <td>{l.label}</td>
+                                                            <td className="text-right">{formatQty(l.qty)}</td>
+                                                            <td className="text-right text-nowrap">{money(l.selling_price)}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <div className="modal-footer">
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={onClose}>{translateUiText("Annuler")}</button>
+                        <button type="button" className="btn btn-primary btn-sm" disabled={picked.size === 0 || saving} onClick={handleImport}>
+                            {saving ? <i className="fas fa-spinner fa-spin mr-1" /> : <i className="fas fa-file-import mr-1" />}
+                            {translateUiText("Importer")} {picked.size > 0 ? `${picked.size} ligne${picked.size > 1 ? 's' : ''}` : ''}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export default function QuoteLinesPage({ quoteId, quoteStatu: initialStatu, endpoints }) {
+    const [lines, setLines]             = useState([]);
+    const [quoteStatu, setQuoteStatu]   = useState(Number(initialStatu));
+    const [selectData, setSelectData]   = useState({});
+    const [loading, setLoading]         = useState(true);
+    const [drawerOpen, setDrawerOpen]   = useState(false);
+    const [editingLine, setEditingLine] = useState(null);
+    const [search, setSearch]           = useState('');
+    const [selected, setSelected]       = useState(new Set());
+    const [priceIncAmt, setPriceIncAmt]   = useState('');
+    const [flash, setFlash]               = useState(null);
+    const [taskModalLine, setTaskModalLine] = useState(null);
+    const [importOpen, setImportOpen]       = useState(false);
+    const [addMenuOpen, setAddMenuOpen]     = useState(false);
+    const [autoEditId, setAutoEditId]       = useState(null);   // ligne de présentation tout juste créée
+    const [convertOpen, setConvertOpen]     = useState(false);
+
+    const layout = useMemo(() => computeLayout(lines), [lines]);
+
+    // Drag-and-drop state
+    const dragIndexRef  = useRef(null);   // index in filteredLines
+    const [dragOver, setDragOver] = useState(null); // index with top-border indicator
+
+    const showFlash = (type, msg) => {
+        setFlash({ type, msg });
+        setTimeout(() => setFlash(null), 3500);
+    };
+
+    const refreshNextOrdre = (updated) => {
+        const next = updated.reduce((m, l) => Math.max(m, l.ordre), 0) + 1;
+        setSelectData((sd) => ({ ...sd, _nextOrdre: next }));
+    };
+
+    // Initial load
+    useEffect(() => {
+        Promise.all([
+            fetch(endpoints.lines,      { headers: { Accept: 'application/json' } }).then((r) => r.json()),
+            fetch(endpoints.selectData, { headers: { Accept: 'application/json' } }).then((r) => r.json()),
+        ])
+        .then(([linesData, sd]) => {
+            const ls = linesData.lines ?? [];
+            setLines(ls);
+            setQuoteStatu(Number(linesData.quote_statu ?? initialStatu));
+            const next = ls.reduce((m, l) => Math.max(m, l.ordre), 0) + 1;
+            setSelectData({ ...sd, _nextOrdre: next });
+        })
+        .catch(() => showFlash('danger', translateUiText("Erreur lors du chargement")))
+        .finally(() => setLoading(false));
+    }, []);
+
+    // ---------- Drag handlers ----------
+
+    const handleDragStart = useCallback((e, index) => {
+        dragIndexRef.current = index;
+        e.dataTransfer.effectAllowed = 'move';
+        // ghost image transparent (Firefox needs this)
+        const ghost = document.createElement('span');
+        ghost.style.cssText = 'position:fixed;top:-999px';
+        document.body.appendChild(ghost);
+        e.dataTransfer.setDragImage(ghost, 0, 0);
+        setTimeout(() => document.body.removeChild(ghost), 0);
+    }, []);
+
+    const handleDragEnter = useCallback((e, index) => {
+        e.preventDefault();
+        setDragOver(index);
+    }, []);
+
+    const handleDragEnd = useCallback(async () => {
+        const fromIndex = dragIndexRef.current;
+        const toIndex   = dragOver;
+        dragIndexRef.current = null;
+        setDragOver(null);
+
+        if (fromIndex === null || toIndex === null || fromIndex === toIndex) return;
+        // Le glisser-déposer est coupé pendant une recherche : une liste filtrée
+        // renvoyait les lignes masquées en fin de devis, hors de leur section.
+        if (search) return;
+
+        // Une section emporte ses lignes ; ordre renuméroté de 1 à N.
+        const sorted    = [...lines].sort((a, b) => a.ordre - b.ordre);
+        const reordered = moveLine(lines, sorted[fromIndex]?.id, sorted[toIndex]?.id);
+
+        setLines(reordered);
+        refreshNextOrdre(reordered);
+
+        // Persist
+        try {
+            await apiFetch(endpoints.reorder, {
+                method: 'POST',
+                body: JSON.stringify({ order: reordered.map((l) => ({ id: l.id, ordre: l.ordre })) }),
+            });
+        } catch {
+            showFlash('danger', translateUiText("Erreur lors de la sauvegarde de l'ordre"));
+        }
+    }, [lines, dragOver, search, endpoints]);
+
+    // ---------- CRUD ----------
+
+    const handleOpenCreate = () => { setEditingLine(null); setDrawerOpen(true); };
+    const handleEdit        = (line) => { setEditingLine(line); setDrawerOpen(true); };
+
+    const handleSaved = (savedLine, isEdit) => {
+        setLines((prev) => {
+            const updated = isEdit
+                ? prev.map((l) => (l.id === savedLine.id ? savedLine : l))
+                : [...prev, savedLine];
+            refreshNextOrdre(updated);
+            return updated;
+        });
+        showFlash('success', isEdit ? translateUiText("Ligne mise à jour") : translateUiText("Ligne ajoutée"));
+    };
+
+    const handleDelete = async (id) => {
+        if (!confirm(translateUiText("Supprimer cette ligne ?"))) return;
+        const res = await apiFetch(endpoints.destroy.replace('__ID__', id), { method: 'DELETE' });
+        if (res.ok) {
+            setLines((prev) => { const u = prev.filter((l) => l.id !== id); refreshNextOrdre(u); return u; });
+            setSelected((s) => { s.delete(id); return new Set(s); });
+            showFlash('success', translateUiText("Ligne supprimée"));
+        } else {
+            showFlash('danger', translateUiText("Erreur lors de la suppression"));
+        }
+    };
+
+    const handleDuplicate = async (id) => {
+        const res  = await apiFetch(endpoints.duplicate.replace('__ID__', id), { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+            // Le serveur insère la copie sous l'original et décale la suite.
+            setLines((prev) => {
+                const shifted = prev.map((l) => (l.ordre >= data.line.ordre ? { ...l, ordre: l.ordre + 1 } : l));
+                const at      = shifted.findIndex((l) => l.id === id);
+                const u       = at === -1 ? [...shifted, data.line] : [...shifted.slice(0, at + 1), data.line, ...shifted.slice(at + 1)];
+                refreshNextOrdre(u);
+                return u;
+            });
+            showFlash('success', translateUiText("Ligne dupliquée"));
+        } else {
+            showFlash('danger', translateUiText("Erreur lors de la duplication"));
+        }
+    };
+
+    const handleBreakDown = async (id) => {
+        if (!confirm(translateUiText("Appliquer le découpage technique du produit sur cette ligne ?"))) return;
+        const res  = await apiFetch(endpoints.breakdown.replace('__ID__', id), { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+            setLines((prev) => prev.map((l) => l.id === id ? data.line : l));
+            showFlash('success', translateUiText("Découpage technique appliqué"));
+        } else {
+            showFlash('danger', translateUiText("Erreur lors du découpage technique"));
+        }
+    };
+
+    // ---------- Lignes de présentation ----------
+
+    const replaceLine = (updated) => setLines((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
+
+    const handleInsert = async (lineType, ordre) => {
+        setAddMenuOpen(false);
+        const at = ordre ?? (lines.reduce((m, l) => Math.max(m, l.ordre), 0) + 1);
+        const defaults = { [LINE_TYPES.SECTION]: translateUiText("Nouvelle section"), [LINE_TYPES.TEXT]: translateUiText("Texte"), [LINE_TYPES.SUBTOTAL]: '' };
+        const res  = await apiFetch(endpoints.store, {
+            method: 'POST',
+            body: JSON.stringify({ line_type: lineType, ordre: at, label: defaults[lineType] }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            showFlash('danger', data.message ?? data.error ?? translateUiText("Erreur lors de l'ajout"));
+            return;
+        }
+        // Le serveur insère à la position demandée et décale la suite.
+        setLines((prev) => {
+            const u = [...prev.map((l) => (l.ordre >= data.line.ordre ? { ...l, ordre: l.ordre + 1 } : l)), data.line];
+            refreshNextOrdre(u);
+            return u;
+        });
+        if (lineType !== LINE_TYPES.SUBTOTAL) setAutoEditId(data.line.id);
+    };
+
+    const handleSaveLabel = async (line, label) => {
+        const res  = await apiFetch(endpoints.update.replace('__ID__', line.id), {
+            method: 'PUT',
+            body: JSON.stringify({ ordre: line.ordre, label }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            showFlash('danger', data.message ?? translateUiText("Libellé invalide"));
+            return false;
+        }
+        replaceLine(data.line);
+        setAutoEditId(null);
+        return true;
+    };
+
+    const handlePresentation = async (line, patch) => {
+        if (!endpoints.presentation) return;
+        const res  = await apiFetch(endpoints.presentation.replace('__ID__', line.id), {
+            method: 'PATCH',
+            body: JSON.stringify(patch),
+        });
+        const data = await res.json();
+        if (res.ok) {
+            replaceLine(data.line);
+        } else {
+            showFlash('danger', data.message ?? translateUiText("Erreur lors de la mise à jour"));
+        }
+    };
+
+    const handleToggleHidden = (line) => handlePresentation(line, { hide_on_pdf: !line.hide_on_pdf });
+
+    // ---------- Conversion en commande ----------
+
+    const hasPresentation = lines.some((l) => !isArticle(l));
+
+    const handleStoreOrder = async (presentation = 'keep') => {
+        const ids = [...selected];
+        if (ids.length === 0) return;
+        if (!hasPresentation && !confirm(translateUiText("Créer une commande à partir des :v0 ligne(s) sélectionnée(s) ?", { v0: (ids.length) }))) return;
+        setConvertOpen(false);
+        try {
+            const res  = await apiFetch(endpoints.storeOrder, { method: 'POST', body: JSON.stringify({ line_ids: ids, presentation }) });
+            const data = await res.json();
+            if (res.ok && data.redirect) {
+                window.location.href = data.redirect;
+            } else {
+                showFlash('danger', data.error ?? translateUiText("Erreur lors de la création de la commande"));
+            }
+        } catch {
+            showFlash('danger', translateUiText("Erreur lors de la création de la commande"));
+        }
+    };
+
+    const handleCreateProducts = async () => {
+        const ids = [...selected];
+        if (ids.length === 0) return;
+        if (!confirm(translateUiText("Créer des produits à partir des :v0 ligne(s) sélectionnée(s) ?", { v0: (ids.length) }))) return;
+        try {
+            const res  = await apiFetch(endpoints.createProducts, {
+                method: 'POST',
+                body: JSON.stringify({ line_ids: ids }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                const created = data.created ?? [];
+                const skipped = data.skipped ?? [];
+                setLines((prev) => prev.map((l) => {
+                    const match = created.find((c) => c.line_id === l.id);
+                    return match ? { ...l, product_id: match.product_id, product_url: match.product_url } : l;
+                }));
+                let msg = translateUiText(":v0 produit(s) créé(s)", { v0: (created.length) });
+                if (skipped.length > 0) {
+                    msg += translateUiText(" — :v0 ignorée(s) (code déjà existant) : :v1", { v0: (skipped.length), v1: (skipped.map((s) => s.code).join(', ')) });
+                }
+                showFlash(created.length > 0 ? 'success' : 'warning', msg);
+            } else {
+                showFlash('danger', data.error ?? translateUiText("Erreur lors de la création des produits"));
+            }
+        } catch {
+            showFlash('danger', translateUiText("Erreur réseau"));
+        }
+    };
+
+    const handleCreateProduct = async (id) => {
+        if (!endpoints.createProduct) {
+            showFlash('danger', translateUiText("Endpoint manquant — rechargez la page."));
+            return;
+        }
+        const res  = await apiFetch(endpoints.createProduct.replace('__ID__', id), { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+            setLines((prev) => prev.map((l) => l.id === id
+                ? { ...l, product_id: data.product_id, product_code: data.product_code, product_url: data.product_url }
+                : l
+            ));
+            showFlash('success', translateUiText("Produit créé et lié à la ligne"));
+        } else {
+            showFlash('danger', data.error ?? translateUiText("Erreur lors de la création du produit"));
+        }
+    };
+
+    const handleLinesImported = (newLines) => {
+        setImportOpen(false);
+        setLines((prev) => {
+            const updated = [...prev, ...newLines];
+            refreshNextOrdre(updated);
+            return updated;
+        });
+        showFlash('success', translateUiText(":v0 ligne:v1 importée:v2", { v0: (newLines.length), v1: (newLines.length > 1 ? 's' : ''), v2: (newLines.length > 1 ? 's' : '') }));
+    };
+
+    const handleCadImported = (newLines) => {
+        setLines((prev) => {
+            const updated = [...prev, ...newLines];
+            refreshNextOrdre(updated);
+            return updated;
+        });
+        showFlash('success', translateUiText(":v0 ligne:v1 importée:v2 depuis un fichier CAO", { v0: (newLines.length), v1: (newLines.length > 1 ? 's' : ''), v2: (newLines.length > 1 ? 's' : '') }));
+    };
+
+    const handlePriceIncrease = async () => {
+        const amt = parseFloat(priceIncAmt);
+        if (!amt || amt <= 0) return;
+        const res  = await apiFetch(endpoints.priceIncrease, { method: 'POST', body: JSON.stringify({ amount: amt }) });
+        if (res.ok) {
+            const linesRes  = await fetch(endpoints.lines, { headers: { Accept: 'application/json' } });
+            const linesData = await linesRes.json();
+            setLines(linesData.lines ?? []);
+            setPriceIncAmt('');
+            showFlash('success', translateUiText("Prix augmenté"));
+        } else {
+            showFlash('danger', translateUiText("Erreur lors de la mise à jour des prix"));
+        }
+    };
+
+    const handleToggleSelect = (id) => {
+        setSelected((s) => { const ns = new Set(s); ns.has(id) ? ns.delete(id) : ns.add(id); return ns; });
+    };
+
+    const filteredLines = lines
+        .filter((l) => {
+            const q = search.toLowerCase();
+            return !q || (l.label ?? '').toLowerCase().includes(q)
+                       || (l.code  ?? '').toLowerCase().includes(q)
+                       || (l.product_code ?? '').toLowerCase().includes(q);
+        })
+        .sort((a, b) => a.ordre - b.ordre);
+
+    // Seuls les articles se sélectionnent (commande, création de produits).
+    const selectableLines = filteredLines.filter(isArticle);
+    const articleCount    = filteredLines.length - filteredLines.filter((l) => !isArticle(l)).length;
+    const sectionLabelOf  = (line) => lines.find((l) => l.id === layout.byId[line.id]?.sectionId)?.label;
+    const canDrag         = quoteStatu === 1 && !search;
+
+    const allSelected = selectableLines.length > 0 && selectableLines.every((l) => selected.has(l.id));
+    const handleToggleAll = () => {
+        const ids = selectableLines.map((l) => l.id);
+        if (allSelected) {
+            setSelected((s) => { const ns = new Set(s); ids.forEach((id) => ns.delete(id)); return ns; });
+        } else {
+            setSelected((s) => { const ns = new Set(s); ids.forEach((id) => ns.add(id)); return ns; });
+        }
+    };
+
+    return (
+        <div>
+            {/* Flash */}
+            {flash && (
+                <div className={`alert alert-${flash.type} alert-dismissible py-2 mb-2`}>
+                    {flash.msg}
+                    <button type="button" className="close" onClick={() => setFlash(null)}><span>&times;</span></button>
+                </div>
+            )}
+
+            {/* Toolbar */}
+            <div className="d-flex flex-wrap align-items-center mb-3" style={{ gap: '0.5rem' }}>
+                {quoteStatu === 1 && selected.size > 0 && (
+                    <button className="btn btn-success btn-sm" onClick={handleCreateProducts}>
+                        <i className="fas fa-barcode mr-1" />
+                        {translateUiText("Créer produits (")}{selected.size})
+                    </button>
+                )}
+                {endpoints.storeOrder && (quoteStatu === 1 || quoteStatu === 2) && selected.size > 0 && (
+                    <button className="btn btn-primary btn-sm"
+                        onClick={() => (hasPresentation ? setConvertOpen(true) : handleStoreOrder())}>
+                        <i className="fas fa-folder mr-1" />
+                        {translateUiText("Créer une commande (")}{selected.size})
+                    </button>
+                )}
+                <div className="input-group input-group-sm" style={{ maxWidth: 260 }}>
+                    <div className="input-group-prepend"><span className="input-group-text"><i className="fas fa-search" /></span></div>
+                    <input type="text" className="form-control" placeholder={translateUiText("Rechercher…")}
+                        value={search} onChange={(e) => setSearch(e.target.value)} />
+                    {search && (
+                        <div className="input-group-append">
+                            <button className="btn btn-outline-secondary" onClick={() => setSearch('')}><i className="fas fa-times" /></button>
+                        </div>
+                    )}
+                </div>
+                {quoteStatu === 1 && (
+                    <div className="input-group input-group-sm" style={{ maxWidth: 280 }}>
+                        <input type="number" className="form-control" placeholder={translateUiText("Augmentation de prix…")}
+                            min="0" step="0.01" value={priceIncAmt}
+                            onChange={(e) => setPriceIncAmt(e.target.value)} />
+                        <div className="input-group-append">
+                            <button className="btn btn-primary"
+                                onClick={handlePriceIncrease}
+                                disabled={!priceIncAmt || parseFloat(priceIncAmt) <= 0}>
+                                <i className="fas fa-plus-circle mr-1" />{translateUiText("Appliquer")}
+                            </button>
+                        </div>
+                    </div>
+                )}
+                {quoteStatu === 1 && endpoints.importFrom && (
+                    <button className="btn btn-outline-secondary btn-sm" onClick={() => setImportOpen(true)}>
+                        <i className="fas fa-file-import mr-1" />{translateUiText("Importer d'un autre devis")}
+                    </button>
+                )}
+                {quoteStatu === 1 && (
+                    <div className="btn-group btn-group-sm position-relative">
+                        <button type="button" className="btn btn-outline-secondary dropdown-toggle"
+                            onClick={() => setAddMenuOpen((v) => !v)}>
+                            <i className="fas fa-heading mr-1" />{translateUiText("Mise en page")}
+                        </button>
+                        {addMenuOpen && (
+                            <div className="dropdown-menu show" style={{ zIndex: 1060 }}>
+                                <button className="dropdown-item" onClick={() => handleInsert(LINE_TYPES.SECTION)}>
+                                    <i className="fas fa-heading fa-fw mr-2 text-secondary" />{translateUiText("Ajouter une section")}
+                                </button>
+                                <button className="dropdown-item" onClick={() => handleInsert(LINE_TYPES.SUBTOTAL)}>
+                                    <i className="fas fa-equals fa-fw mr-2 text-secondary" />{translateUiText("Ajouter un sous-total")}
+                                </button>
+                                <button className="dropdown-item" onClick={() => handleInsert(LINE_TYPES.TEXT)}>
+                                    <i className="fas fa-paragraph fa-fw mr-2 text-secondary" />{translateUiText("Ajouter un texte")}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                )}
+                <span className="badge badge-secondary ml-auto">
+                    {articleCount} {translateUiText("ligne")}{articleCount > 1 ? translateUiText("s") : ''}
+                </span>
+            </div>
+
+            {/* Hint drag */}
+            {quoteStatu === 1 && filteredLines.length > 1 && !search && (
+                <p className="text-muted small mb-2">
+                    <i className="fas fa-grip-vertical mr-1" />
+                    {translateUiText("Glissez les lignes pour modifier l'ordre. Une section emporte ses lignes.")}
+                </p>
+            )}
+            {quoteStatu === 1 && filteredLines.length > 1 && search && (
+                <p className="text-muted small mb-2">
+                    <i className="fas fa-info-circle mr-1" />
+                    {translateUiText("Videz la recherche pour réordonner les lignes.")}
+                </p>
+            )}
+
+            {/* Table */}
+            <div className="table-responsive p-0">
+                <table className="table table-hover table-sm mb-0">
+                    <thead className="thead-light">
+                        <tr>
+                            <th style={{ width: 48 }} title={translateUiText("Glisser pour réordonner")}>
+                                <i className="fas fa-grip-vertical text-muted" />
+                            </th>
+                            <th style={{ width: 32 }}>
+                                <input type="checkbox" checked={allSelected} onChange={handleToggleAll}
+                                    disabled={(quoteStatu !== 1 && quoteStatu !== 2) || filteredLines.length === 0} />
+                            </th>
+                            <th>{translateUiText("Réf. ext.")}</th>
+                            <th style={{ width: 36 }} />
+                            <th>{translateUiText("Description")}</th>
+                            <th className="text-right">{translateUiText("Qté")}</th>
+                            <th>{translateUiText("Unité")}</th>
+                            <th className="text-right">{translateUiText("Prix")}</th>
+                            <th className="text-right">{translateUiText("Remise")}</th>
+                            <th>{translateUiText("TVA")}</th>
+                            <th>{translateUiText("Livraison")}</th>
+                            <th>{translateUiText("Statut")}</th>
+                            <th style={{ width: 120 }}>{translateUiText("Actions")}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {loading ? (
+                            <tr>
+                                <td colSpan={13} className="text-center py-4">
+                                    <i className="fas fa-spinner fa-spin mr-2" />{translateUiText("Chargement…")}
+                                </td>
+                            </tr>
+                        ) : filteredLines.length === 0 ? (
+                            <tr>
+                                <td colSpan={13} className="text-center py-4 text-muted">
+                                    {search ? translateUiText("Aucune ligne ne correspond.") : translateUiText("Aucune ligne dans ce devis.")}
+                                    {!search && quoteStatu === 1 && (
+                                        <button className="btn btn-link p-0 ml-2" onClick={handleOpenCreate}>
+                                            {translateUiText("Ajouter la première ligne")}
+                                        </button>
+                                    )}
+                                </td>
+                            </tr>
+                        ) : filteredLines.map((line, index) => (isArticle(line) ? (
+                            <LineRow
+                                key={line.id}
+                                line={line}
+                                info={layout.byId[line.id]}
+                                onToggleHidden={handleToggleHidden}
+                                onInsert={handleInsert}
+                                canDrag={canDrag}
+                                quoteStatu={quoteStatu}
+                                onEdit={handleEdit}
+                                onDelete={handleDelete}
+                                onDuplicate={handleDuplicate}
+                                onBreakDown={handleBreakDown}
+                                onCreateProduct={handleCreateProduct}
+                                onOpenTaskModal={setTaskModalLine}
+                                onToggleSelect={handleToggleSelect}
+                                selected={selected.has(line.id)}
+                                onDragStart={(e) => handleDragStart(e, index)}
+                                onDragEnter={(e) => handleDragEnter(e, index)}
+                                onDragEnd={handleDragEnd}
+                                isDragOver={dragOver === index}
+                                isDragging={dragIndexRef.current === index}
+                            />
+                        ) : (
+                            <PresentationRow
+                                key={line.id}
+                                line={line}
+                                info={layout.byId[line.id]}
+                                sectionLabel={sectionLabelOf(line)}
+                                quoteStatu={quoteStatu}
+                                units={selectData.units}
+                                currency={selectData.currency}
+                                autoEdit={autoEditId === line.id}
+                                onSaveLabel={handleSaveLabel}
+                                onDelete={handleDelete}
+                                onPresentation={handlePresentation}
+                                canDrag={canDrag}
+                                onDragStart={(e) => handleDragStart(e, index)}
+                                onDragEnter={(e) => handleDragEnter(e, index)}
+                                onDragEnd={handleDragEnd}
+                                isDragOver={dragOver === index}
+                                isDragging={dragIndexRef.current === index}
+                            />
+                        )))}
+                    </tbody>
+                </table>
+            </div>
+
+            {/* Lignes masquées hors forfait : la somme imprimée ne fera pas le total */}
+            {layout.hiddenOutsidePackage.count > 0 && (
+                <div className="alert alert-warning py-2 mt-2 mb-0 small">
+                    <i className="fas fa-eye-slash mr-1" />
+                    {layout.hiddenOutsidePackage.count} {translateUiText("ligne")}{layout.hiddenOutsidePackage.count > 1 ? translateUiText("s") : ''} {translateUiText("masquée")}{layout.hiddenOutsidePackage.count > 1 ? translateUiText("s") : ''} {translateUiText("hors forfait :")}{' '}
+                    <strong>{layout.hiddenOutsidePackage.amount.toLocaleString(uiLocale(), { style: 'currency', currency: selectData.currency || uiCurrency() })} {translateUiText("HT")}</strong>{' '}
+                    {translateUiText("compté")}{layout.hiddenOutsidePackage.count > 1 ? translateUiText("s") : ''} {translateUiText("dans le total mais absent")}{layout.hiddenOutsidePackage.count > 1 ? translateUiText("s") : ''} {translateUiText("du PDF.\n                    La somme des lignes imprimées sera inférieure au total.")}
+                </div>
+            )}
+
+            {convertOpen && (
+                <ConvertOrderModal
+                    count={selected.size}
+                    onConfirm={handleStoreOrder}
+                    onClose={() => setConvertOpen(false)}
+                />
+            )}
+
+            {/* CAD import dropzone */}
+            <CadDropzone
+                endpoint={endpoints.importCad}
+                disabled={quoteStatu !== 1}
+                onImported={handleCadImported}
+            />
+
+            {/* Drawer */}
+            <LineDrawer
+                open={drawerOpen}
+                onClose={() => setDrawerOpen(false)}
+                onOpenCreate={handleOpenCreate}
+                editingLine={editingLine}
+                selectData={selectData}
+                endpoints={endpoints}
+                onSaved={handleSaved}
+                quoteStatu={quoteStatu}
+            />
+
+            {importOpen && (
+                <ImportLinesModal
+                    endpoints={endpoints}
+                    onImported={handleLinesImported}
+                    onClose={() => setImportOpen(false)}
+                />
+            )}
+
+            {/* Task modal */}
+            {taskModalLine && (
+                <TaskModal
+                    lineId={taskModalLine.id}
+                    lineLabel={taskModalLine.label}
+                    endpoints={endpoints}
+                    quoteStatu={quoteStatu}
+                    useCalculatedPrice={taskModalLine.use_calculated_price}
+                    onLineUpdated={(updatedLine) => {
+                        setLines((prev) => prev.map((l) => l.id === updatedLine.id ? updatedLine : l));
+                        setTaskModalLine((prev) => prev ? { ...prev, use_calculated_price: updatedLine.use_calculated_price } : null);
+                    }}
+                    onClose={() => setTaskModalLine(null)}
+                />
+            )}
+        </div>
+    );
+}
