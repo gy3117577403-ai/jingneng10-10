@@ -196,4 +196,73 @@ class JingnengCompanyDataTest extends TestCase
         $this->actingAs($this->reviewer); $this->action($id, 'approve', ['note' => '不能忽略结构变化'])->assertConflict();
         $this->assertNull($this->record($id)->published_version_id);
     }
+
+    private function readingFile(int $id, string $text = '阀门校准每三十天一次，演示数据。', string $name = '阅读.txt'): int
+    {
+        $fid = $this->send("records/$id/files", ['revision' => $this->record($id)->revision, 'file' => UploadedFile::fake()->createWithContent($name, $text)])->assertOk()->json('file_id');
+        app(\App\Services\CompanyData\DataDocuments::class)->process($fid);
+        return $fid;
+    }
+    public function test_body_search_defaults_to_current_published_version_and_rechecks_permissions(): void
+    {
+        $id = $this->fixture(); $fid = $this->readingFile($id); $this->getJson('/company-data/api/search?q=阀门')->assertJsonCount(0, 'items'); $old = $this->publish($id);
+        $this->actingAs($this->reader); $this->getJson('/company-data/api/search?q=阀门')->assertOk()->assertJsonPath('items.0.file_id', $fid)->assertJsonPath('items.0.version_id', $old)->assertJsonMissingPath('items.0.body');
+        $this->actingAs($this->owner); $this->revise($id)->assertOk(); $this->publish($id);
+        $this->getJson('/company-data/api/search?q=阀门')->assertJsonCount(0, 'items');
+        $this->getJson('/company-data/api/search?q=阀门&history=1')->assertJsonPath('items.0.historical', true);
+        $this->rules(['discover']); $this->actingAs($this->reader);
+        $this->getJson('/company-data/api/search?q=阀门&history=1')->assertJsonCount(0, 'items')->assertJsonPath('incomplete_files', 0);
+        $this->getJson("/company-data/api/records/$id/versions/$old/files/$fid")->assertForbidden();
+        $this->actingAs($this->owner); app(DataCatalog::class)->rules('category', $this->cat, []);
+        $this->getJson('/company-data/api/search?q=阀门&history=1')->assertJsonCount(0, 'items');
+    }
+    public function test_reading_recovery_is_idempotent_and_failure_retry_does_not_change_original(): void
+    {
+        $id = $this->fixture(); $fid = $this->readingFile($id); $d = app(\App\Services\CompanyData\DataDocuments::class);
+        $before = DB::table('jn_data_chunks')->count(); $d->enqueue($fid); $d->process($fid); $this->assertSame($before, DB::table('jn_data_chunks')->count());
+        $hash = DB::table('jn_data_files')->where('id', $fid)->value('sha256');
+        DB::table('jn_data_documents')->where('file_id', $fid)->update(['state' => 'processing', 'lease' => 'old', 'attempts' => 3, 'updated_at' => now()->subMinutes(5)]);
+        $d->recover(); $this->assertDatabaseHas('jn_data_documents', ['file_id' => $fid, 'state' => 'failed']);
+        $v = $this->record($id)->draft_version_id; $path = "records/$id/versions/$v/files/$fid/retry"; $key = $this->key();
+        $this->send($path, [], $key)->assertOk(); $this->send($path, [], $key)->assertOk(); $d->process($fid);
+        $this->assertDatabaseHas('jn_data_documents', ['file_id' => $fid, 'state' => 'ready']); $this->assertSame($before, DB::table('jn_data_chunks')->count());
+        $this->assertSame($hash, DB::table('jn_data_files')->where('id', $fid)->value('sha256'));
+        $this->actingAs($this->reader); $this->send($path)->assertForbidden();
+    }
+    public function test_spreadsheet_preview_preserves_positions_zero_values_and_formula_cache_without_calculation(): void
+    {
+        $id = $this->fixture(); $book = new \PhpOffice\PhpSpreadsheet\Spreadsheet(); $sheet = $book->getActiveSheet(); $sheet->setTitle('设备档案');
+        $sheet->setCellValueExplicit('A1', '00007', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING); $sheet->setCellValue('B1', 0);
+        $sheet->setCellValue('C1', '=WEBSERVICE("https://invalid.example/private")'); $sheet->getCell('C1')->setCalculatedValue('保存的结果');
+        $sheet->setCellValue('A51', '定位第51行'); $book->createSheet()->setTitle('检查记录')->setCellValue('A1', '每三十天检查');
+        $path = tempnam(sys_get_temp_dir(), 'reading-');
+        try {
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($book); $writer->setPreCalculateFormulas(false); $writer->save($path);
+            $fid = $this->readingFile($id, file_get_contents($path), '档案.xlsx');
+        } finally { unlink($path); $book->disconnectWorksheets(); }
+        $this->assertDatabaseHas('jn_data_documents', ['file_id' => $fid, 'state' => 'ready']); $v = $this->publish($id); $this->actingAs($this->reader);
+        $url = "/company-data/api/records/$id/versions/$v/files/$fid";
+        $this->getJson($url)->assertJsonPath('type', 'sheet')->assertJsonPath('rows.0.0', '00007')->assertJsonPath('rows.0.1', '0');
+        $this->getJson($url . '?row=51')->assertJsonPath('start', 51)->assertJsonPath('rows.0.0', '定位第51行');
+        $this->getJson($url . '?page=2')->assertJsonPath('name', '检查记录'); $this->getJson($url . '?page=3')->assertUnprocessable();
+        $this->getJson('/company-data/api/search?q=定位')->assertJsonPath('items.0.row', 51)->assertJsonPath('items.0.page', 1);
+        $this->get($url . '?download=1')->assertForbidden();
+    }
+    public function test_images_and_unsupported_files_are_not_reported_as_searchable_text_and_corrupt_office_is_retryable(): void
+    {
+        $id = $this->fixture(); $png = UploadedFile::fake()->image('scan.png', 10, 10);
+        $fid = $this->send("records/$id/files", ['revision' => $this->record($id)->revision, 'file' => $png])->assertOk()->json('file_id');
+        app(\App\Services\CompanyData\DataDocuments::class)->process($fid); $this->assertDatabaseHas('jn_data_documents', ['file_id' => $fid, 'state' => 'no_text', 'chunks' => 0]);
+        $bad = $this->readingFile($id, 'not a zip file', '损坏.docx'); $this->assertDatabaseHas('jn_data_documents', ['file_id' => $bad, 'state' => 'failed']);
+        $v = $this->publish($id); $this->getJson("/company-data/api/records/$id/versions/$v/files/$bad")->assertJsonPath('type', 'processing')->assertJsonPath('state', 'failed');
+        $this->getJson('/company-data/api/search?q=anything')->assertJsonPath('incomplete_files', 2);
+    }
+    public function test_search_treats_wildcards_as_literal_and_paginates_utf8_lines(): void
+    {
+        $id = $this->fixture(); $this->readingFile($id, "字面%_!内容\n" . str_repeat("普通行\n", 220) . '结尾标记'); $v = $this->publish($id);
+        $this->getJson('/company-data/api/search?q=' . urlencode('%_!'))->assertJsonCount(1, 'items');
+        $result = $this->getJson('/company-data/api/search?q=结尾标记')->assertJsonCount(1, 'items')->json('items.0');
+        $this->assertGreaterThan(200, $result['row']);
+        $this->getJson("/company-data/api/records/$id/versions/$v/files/{$result['file_id']}?row={$result['row']}")->assertJsonPath('start', 201);
+    }
 }

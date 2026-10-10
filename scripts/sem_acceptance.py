@@ -17,7 +17,7 @@ import urllib.request
 
 from sem import LOCAL, ROOT, compose
 
-OUT = ROOT / '.local' / 'acceptance' / 'jn-0013'
+OUT = ROOT / '.local' / 'acceptance' / 'jn-0014'
 
 
 def snapshot(project=None):

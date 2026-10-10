@@ -1,4 +1,4 @@
-"""Manage the isolated JN-0013 SEM demo. Secrets and backups stay in .local/."""
+"""Manage the isolated JN-0014 SEM demo. Secrets and backups stay in .local/."""
 import argparse
 import base64
 from datetime import datetime
@@ -94,7 +94,7 @@ def backup():
         metadata = {
             'created_at': datetime.now().astimezone().isoformat(),
             'git_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
-            'image': json.loads(subprocess.check_output(['docker', 'image', 'inspect', 'jingneng/sem:jn-0013'], text=True))[0]['Id'],
+            'image': json.loads(subprocess.check_output(['docker', 'image', 'inspect', 'jingneng/sem:jn-0014'], text=True))[0]['Id'],
             'baseline': {'counts': baseline['counts'], 'files': baseline['files'], 'locale': baseline['locale']},
             'files': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in destination.iterdir() if p.is_file()},
         }
@@ -164,7 +164,7 @@ def restore_check(source):
         if prior.strip():
             raise RuntimeError('Restore project already exists; nothing overwritten.')
     before = manifest['baseline']
-    overrides = {'SEM_HTTP_PORT': '8091', 'SEM_APP_URL': 'http://127.0.0.1:8091', 'SEM_SUBNET': '10.250.21.0/24'}
+    overrides = {'SEM_HTTP_PORT': '8091', 'SEM_APP_URL': 'http://127.0.0.1:8091', 'SEM_SUBNET': '10.250.21.0/24', 'SEM_DOCUMENT_SUBNET': '10.250.23.0/24'}
     saved = {key: os.environ.get(key) for key in overrides}
     os.environ.update(overrides)
     success = False
@@ -180,7 +180,7 @@ def restore_check(source):
         result = {'passed': True, 'project': project, 'backup': str(source), 'counts': after['counts'],
                   'file_count': len(after['files']), 'file_hashes': after['files'], 'login': True,
                   'completed_at': datetime.now().astimezone().isoformat()}
-        destination = ROOT / '.local' / 'acceptance' / 'jn-0013' / 'restore.json'
+        destination = ROOT / '.local' / 'acceptance' / 'jn-0014' / 'restore.json'
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
         success = True
@@ -203,30 +203,31 @@ def package():
     if dirty.strip():
         raise RuntimeError('Commit reviewed source changes before packaging so the archive has an exact revision.')
     commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
-    destination = LOCAL / 'releases' / ('JN-0013-' + commit[:12] + '-' + datetime.now().strftime('%Y%m%d-%H%M%S'))
+    destination = LOCAL / 'releases' / ('JN-0014-' + commit[:12] + '-' + datetime.now().strftime('%Y%m%d-%H%M%S'))
     destination.mkdir(parents=True)
     saved = backup()
     shutil.copytree(saved, destination / 'backup')
     run(['git', 'archive', '--format=zip', '-o', str(destination / 'source.zip'), 'HEAD'])
     run(['git', 'bundle', 'create', str(destination / 'history.bundle'), '--all'])
-    images = ['jingneng/sem:jn-0013']
-    for service in ['db', 'redis']:
+    images = ['jingneng/sem:jn-0014']
+    for service in ['db', 'redis', 'converter']:
         container = compose('ps', '-q', service, stdout=subprocess.PIPE).stdout.decode().strip()
         image = subprocess.check_output(['docker', 'inspect', '--format', '{{.Image}}', container], text=True).strip()
-        tag = f'jingneng/sem-{service}:jn-0013'
+        tag = f'jingneng/sem-{service}:jn-0014'
         run(['docker', 'tag', image, tag])
         images.append(tag)
     run(['docker', 'save', '-o', str(destination / 'images.tar'), *images])
-    readme = '''# JN-0013 本机迁移包（含私密配置，请勿公开上传）
+    readme = '''# JN-0014 本机迁移包（含私密配置，请勿公开上传）
 
 1. 新电脑准备 Docker Desktop 的 Linux 容器环境、Git、Python 3.10+。
 2. 运行 git clone <本包路径>/history.bundle <新目录>，进入新目录后执行 git checkout <本包提交号>。
    提交号见本文件末尾和 SHA256SUMS.json。使用历史仓库可继续开发并生成后续备份。
 3. 把 backup 目录复制到新目录的 .local/sem/transfer；再把 backup 内的 compose.env、runtime.env、credentials.txt 复制到 .local/sem/。
 4. 在新目录打开终端，运行 docker load -i <本包路径>/images.tar（路径含空格时加双引号）。
-5. 在 .local/sem/compose.env 末尾加入以下两行，使用包内已校验镜像：
-   SEM_DB_IMAGE=jingneng/sem-db:jn-0013
-   SEM_REDIS_IMAGE=jingneng/sem-redis:jn-0013
+5. 在 .local/sem/compose.env 末尾加入以下三行，使用包内已校验镜像：
+   SEM_DB_IMAGE=jingneng/sem-db:jn-0014
+   SEM_REDIS_IMAGE=jingneng/sem-redis:jn-0014
+   SEM_CONVERTER_IMAGE=jingneng/sem-converter:jn-0014
 6. 运行 python scripts/sem.py restore-new --backup .local/sem/transfer。
    已有同名容器或数据卷会被拒绝，不覆盖旧环境。首次恢复不要运行 start。
 7. 打开 http://127.0.0.1:8090，用 credentials.txt 登录。
@@ -293,7 +294,7 @@ def main():
             'BROADCAST_DRIVER=log', 'MAIL_MAILER=array', 'PULSE_ENABLED=false',
         ]) + '\n', encoding='utf-8')
         run(['docker', 'run', '--rm', '--network', 'none', '--env-file', str(test_env),
-             '--tmpfs', '/app/storage', '--tmpfs', '/app/tests_tmp:uid=33,gid=33,mode=0770', 'jingneng/sem:jn-0013', 'php',
+             '--tmpfs', '/app/storage', '--tmpfs', '/app/tests_tmp:uid=33,gid=33,mode=0770', 'jingneng/sem:jn-0014', 'php',
              'vendor/bin/phpunit', '--colors=never'])
 
 
