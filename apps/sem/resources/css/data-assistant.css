@@ -87,3 +87,7 @@
 @media(max-width:760px){.da-heading{padding:12px;align-items:flex-start}.da-heading-title{gap:4px}.da-heading-title span{display:none}.da-heading h3{font-size:16px;margin:7px 0}.da-heading .dc-inline{gap:3px}.da-model-state{font-size:12px;padding:4px 6px}.da-conversation{max-height:52dvh;min-height:220px}.da-welcome{padding:24px 20px}.da-welcome h3{font-size:20px}.da-turn{padding:18px}.da-question{display:block}.da-question small{display:block;margin-top:6px}.da-composer{padding:14px}.da-composer textarea{font-size:16px}.da-composer-bottom>span{display:none}.da-send{margin-left:auto;width:40px;height:40px}.da-settings{grid-template-columns:1fr}.da-citations{margin-left:0}.da-history{top:62px}.da-feedback button{min-width:40px;min-height:40px}}
 @media(prefers-reduced-motion:reduce){.da-pulse{animation:none}}
 @media(max-width:760px){.da-main{max-height:none}}
+.da-connection{border:1px solid var(--jn-border);border-radius:12px;background:var(--jn-soft);padding:12px 14px;margin:0 0 12px;font-size:13px;line-height:1.6}
+.da-connection>div:first-child{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.da-connection span{color:var(--jn-muted)}
+.da-connection p{margin:5px 0 8px}.da-connection-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.da-connection-actions a{color:var(--jn-blue)}
+.da-model-note{font-size:13px;line-height:1.6;color:var(--jn-muted);margin:0 0 10px}.da-model-state{cursor:pointer}

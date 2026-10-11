@@ -1,4 +1,4 @@
-"""Manage the isolated JN-0016 SEM demo. Secrets and backups stay in .local/."""
+"""Manage the isolated JN-0017 SEM demo. Secrets and backups stay in .local/."""
 import argparse
 import base64
 from datetime import datetime
@@ -31,6 +31,7 @@ def compose(*args, project=None, **kwargs):
 
 def init_env():
     LOCAL.mkdir(parents=True, exist_ok=True)
+    (LOCAL / 'assistant-bridge').mkdir(exist_ok=True)
     expected = [ENV, LOCAL / 'runtime.env', LOCAL / 'credentials.txt']
     if all(p.exists() for p in expected):
         print('Existing SEM configuration preserved.')
@@ -94,7 +95,7 @@ def backup():
         metadata = {
             'created_at': datetime.now().astimezone().isoformat(),
             'git_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
-            'image': json.loads(subprocess.check_output(['docker', 'image', 'inspect', 'jingneng/sem:jn-0016'], text=True))[0]['Id'],
+            'image': json.loads(subprocess.check_output(['docker', 'image', 'inspect', 'jingneng/sem:jn-0017'], text=True))[0]['Id'],
             'baseline': {'counts': baseline['counts'], 'files': baseline['files'], 'locale': baseline['locale']},
             'files': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in destination.iterdir() if p.is_file()},
         }
@@ -180,7 +181,7 @@ def restore_check(source):
         result = {'passed': True, 'project': project, 'backup': str(source), 'counts': after['counts'],
                   'file_count': len(after['files']), 'file_hashes': after['files'], 'login': True,
                   'completed_at': datetime.now().astimezone().isoformat()}
-        destination = ROOT / '.local' / 'acceptance' / 'jn-0016' / 'restore.json'
+        destination = ROOT / '.local' / 'acceptance' / 'jn-0017' / 'restore.json'
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
         success = True
@@ -209,11 +210,11 @@ def package():
     shutil.copytree(saved, destination / 'backup')
     run(['git', 'archive', '--format=zip', '-o', str(destination / 'source.zip'), 'HEAD'])
     run(['git', 'bundle', 'create', str(destination / 'history.bundle'), '--all'])
-    images = ['jingneng/sem:jn-0016']
+    images = ['jingneng/sem:jn-0017']
     for service in ['db', 'redis', 'converter']:
         container = compose('ps', '-q', service, stdout=subprocess.PIPE).stdout.decode().strip()
         image = subprocess.check_output(['docker', 'inspect', '--format', '{{.Image}}', container], text=True).strip()
-        tag = f'jingneng/sem-{service}:jn-0016'
+        tag = f'jingneng/sem-{service}:jn-0017'
         run(['docker', 'tag', image, tag])
         images.append(tag)
     run(['docker', 'save', '-o', str(destination / 'images.tar'), *images])
@@ -225,9 +226,9 @@ def package():
 3. 把 backup 目录复制到新目录的 .local/sem/transfer；再把 backup 内的 compose.env、runtime.env、credentials.txt 复制到 .local/sem/。
 4. 在新目录打开终端，运行 docker load -i <本包路径>/images.tar（路径含空格时加双引号）。
 5. 在 .local/sem/compose.env 末尾加入以下三行，使用包内已校验镜像：
-   SEM_DB_IMAGE=jingneng/sem-db:jn-0016
-   SEM_REDIS_IMAGE=jingneng/sem-redis:jn-0016
-   SEM_CONVERTER_IMAGE=jingneng/sem-converter:jn-0016
+   SEM_DB_IMAGE=jingneng/sem-db:jn-0017
+   SEM_REDIS_IMAGE=jingneng/sem-redis:jn-0017
+   SEM_CONVERTER_IMAGE=jingneng/sem-converter:jn-0017
 6. 运行 python scripts/sem.py restore-new --backup .local/sem/transfer。
    已有同名容器或数据卷会被拒绝，不覆盖旧环境。首次恢复不要运行 start。
 7. 打开 http://127.0.0.1:8090，用 credentials.txt 登录。
@@ -294,7 +295,7 @@ def main():
             'BROADCAST_DRIVER=log', 'MAIL_MAILER=array', 'PULSE_ENABLED=false',
         ]) + '\n', encoding='utf-8')
         run(['docker', 'run', '--rm', '--network', 'none', '--env-file', str(test_env),
-             '--tmpfs', '/app/storage', '--tmpfs', '/app/tests_tmp:uid=33,gid=33,mode=0770', 'jingneng/sem:jn-0016', 'php',
+             '--tmpfs', '/app/storage', '--tmpfs', '/app/tests_tmp:uid=33,gid=33,mode=0770', 'jingneng/sem:jn-0017', 'php',
              'vendor/bin/phpunit', '--colors=never'])
 
 

@@ -2,6 +2,10 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+
+// HMAC-authenticated outbound local bridge. No browser session or OAuth token enters this route.
+Route::post('/jn-assistant-bridge/{action}', [\App\Http\Controllers\DataAssistantBridgeController::class, 'handle'])
+    ->whereIn('action', ['heartbeat', 'claim', 'progress', 'complete'])->withoutMiddleware('throttle:api')->middleware('throttle:120,1,jn-bridge');
 use App\Http\Controllers\Api\TaskController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\QuoteController;

@@ -157,4 +157,88 @@ class JingnengDataAssistantTest extends TestCase
         $this->travel(2)->minutes();
         $this->detail($ids['id'])->assertJsonPath('runs.0.state', 'restricted')->assertJsonPath('runs.0.answer', null)->assertJsonCount(0, 'runs.0.sources');
     }
+    private function plan(): \App\Services\CompanyData\Assistant\PlanConnection
+    {
+        Storage::disk('local')->put('bridge/binding.json', json_encode(['owner_id' => $this->reader->id]));
+        Storage::disk('local')->put('bridge/bridge.key', str_repeat('a', 64));
+        config(['company_data.plan_bridge_directory' => Storage::disk('local')->path('bridge')]);
+        $service = app(\App\Services\CompanyData\Assistant\PlanConnection::class);
+        $service->heartbeat($this->reader->id, ['status' => 'ready', 'model' => 'fixture-model', 'account' => '虚构账号', 'connection_url' => 'http://127.0.0.1:12345/']);
+        return $service;
+    }
+    private function planResult(array $job): array
+    {
+        return ['id' => $job['id'], 'lease' => $job['lease'], 'model' => 'fixture-model', 'answer' => (new ExcerptProvider())->answer($job['request']), 'usage' => ['input_tokens' => 10, 'output_tokens' => 5, 'total_tokens' => 15]];
+    }
+    public function test_plan_connection_is_bound_to_one_user_and_accepts_only_grounded_completed_results(): void
+    {
+        $this->plan(); $s = app(DataAssistant::class);
+        $this->getJson('/company-data/api/assistant')->assertJsonPath('capabilities.openai', true);
+        $ids = $this->ask(['mode' => 'openai'])->assertOk()->json(); $s->process($ids['run_id']);
+        $this->assertSame('queued', DB::table('jn_data_answers')->find($ids['run_id'])->state);
+        $job = $s->claimPlan($this->reader->id); $this->assertNotNull($job); $this->assertNull($s->claimPlan($this->reader->id));
+        $this->assertArrayNotHasKey('record_id', $job['request']['sources'][0]);
+        $this->assertSame(['active' => true], $s->progressPlan($this->reader->id, $job));
+        $s->completePlan($this->reader->id, $this->planResult($job));
+        $s->completePlan($this->reader->id, $this->planResult($job));
+        $this->detail($ids['id'])->assertJsonPath('runs.0.state', 'ready')->assertJsonPath('runs.0.sources.0.version_id', $this->version)
+            ->assertJsonCount(1, 'runs.0.provider.attempts')->assertJsonPath('runs.0.provider.attempts.0.usage.total_tokens', 15)->assertJsonMissingPath('runs.0.provider.attempts.0.lease');
+        $this->actingAs($this->owner); $this->getJson('/company-data/api/assistant')->assertJsonPath('capabilities.openai', false)->assertJsonPath('capabilities.connection', null);
+        $this->ask(['mode' => 'openai'])->assertStatus(409); $this->send('assistant/connection', ['action' => 'pause'])->assertForbidden();
+    }
+    public function test_cancelled_model_result_stays_hidden_but_usage_is_retained(): void
+    {
+        $this->plan(); $s = app(DataAssistant::class); $ids = $this->ask(['mode' => 'openai'])->assertOk()->json(); $job = $s->claimPlan($this->reader->id);
+        $this->send("assistant/items/{$ids['run_id']}/cancel")->assertOk();
+        $this->assertFalse($s->progressPlan($this->reader->id, $job)['active']);
+        $this->assertFalse($s->completePlan($this->reader->id, $this->planResult($job))['accepted']);
+        $this->detail($ids['id'])->assertJsonPath('runs.0.state', 'cancelled')->assertJsonPath('runs.0.answer', null)->assertJsonPath('runs.0.provider.attempts.0.usage.total_tokens', 15);
+    }
+    public function test_model_permission_is_checked_during_request_and_on_history_reads(): void
+    {
+        $this->plan(); $s = app(DataAssistant::class); $ids = $this->ask(['mode' => 'openai'])->assertOk()->json(); $job = $s->claimPlan($this->reader->id);
+        $this->rules(false); $this->assertFalse($s->progressPlan($this->reader->id, $job)['active']);
+        $this->assertFalse($s->completePlan($this->reader->id, $this->planResult($job))['accepted']);
+        $this->detail($ids['id'])->assertJsonPath('runs.0.state', 'restricted')->assertJsonPath('runs.0.answer', null);
+    }
+    public function test_pausing_aborts_pending_work_and_is_durable_across_heartbeats(): void
+    {
+        $plan = $this->plan(); $s = app(DataAssistant::class); $ids = $this->ask(['mode' => 'openai'])->assertOk()->json(); $job = $s->claimPlan($this->reader->id);
+        $this->send('assistant/connection', ['action' => 'pause'])->assertOk(); $this->plan();
+        $this->getJson('/company-data/api/assistant')->assertJsonPath('capabilities.openai', false)->assertJsonPath('capabilities.connection.status', 'paused');
+        $this->assertFalse($s->progressPlan($this->reader->id, $job)['active']);
+        $this->send('assistant/connection', ['action' => 'enable'])->assertOk();
+        $this->getJson('/company-data/api/assistant')->assertJsonPath('capabilities.openai', true);
+        $this->travel(40)->seconds();$this->getJson('/company-data/api/assistant')->assertJsonPath('capabilities.openai', false)->assertJsonPath('capabilities.connection.status', 'offline');
+    }
+    public function test_model_recovery_never_replays_an_uncertain_billable_request(): void
+    {
+        $this->plan(); $s = app(DataAssistant::class); $ids = $this->ask(['mode' => 'openai'])->assertOk()->json(); $s->claimPlan($this->reader->id);
+        DB::table('jn_data_answers')->where('id', $ids['run_id'])->update(['updated_at' => now()->subMinutes(4)]);
+        $s->recover(); $this->detail($ids['id'])->assertJsonPath('runs.0.state', 'failed'); $this->assertNull($s->claimPlan($this->reader->id));
+    }
+    public function test_no_sources_skip_model_and_unsupported_citations_are_rejected_with_abstention_available(): void
+    {
+        $this->plan(); $s = app(DataAssistant::class);
+        $empty = $this->ask(['mode' => 'openai', 'question' => '不存在的虚构编号'])->assertOk()->json();
+        $this->assertNull($s->claimPlan($this->reader->id));$this->detail($empty['id'])->assertJsonPath('runs.0.state', 'no_sources');
+        $ids = $this->ask(['mode' => 'openai'])->assertOk()->json(); $job = $s->claimPlan($this->reader->id); $bad = $this->planResult($job);
+        $bad['answer']['paragraphs'][0]['citations'][0]['source_id'] = 'S999';$s->completePlan($this->reader->id, $bad);
+        $this->detail($ids['id'])->assertJsonPath('runs.0.state', 'failed')->assertJsonPath('runs.0.answer', null);
+        $this->send("assistant/items/{$ids['run_id']}/retry")->assertOk();$job = $s->claimPlan($this->reader->id);
+        $s->completePlan($this->reader->id, [...$this->planResult($job), 'answer' => ['abstained' => true, 'paragraphs' => []]]);
+        $this->detail($ids['id'])->assertJsonPath('runs.0.state', 'insufficient_evidence')->assertJsonCount(2, 'runs.0.provider.attempts');
+    }
+    public function test_bridge_requires_signed_exact_body_fresh_timestamp_and_single_use_nonce(): void
+    {
+        $this->plan(); $url = '/api/jn-assistant-bridge/heartbeat'; $body = json_encode(['status' => 'ready', 'model' => 'fixture-model']);
+        $time = (string) time(); $nonce = bin2hex(random_bytes(16));
+        $signature = hash_hmac('sha256', "$time\n$nonce\nPOST\n$url\n" . hash('sha256', $body), str_repeat('a', 64));
+        $headers = ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json', 'HTTP_X_JN_TIME' => $time, 'HTTP_X_JN_NONCE' => $nonce, 'HTTP_X_JN_SIGNATURE' => $signature];
+        $this->postJson($url, ['status' => 'ready'])->assertForbidden();
+        $this->call('POST', $url, [], [], [], $headers, $body)->assertOk();
+        $this->call('POST', $url, [], [], [], $headers, $body)->assertStatus(409);
+        $headers['HTTP_X_JN_NONCE'] = bin2hex(random_bytes(16));$this->call('POST', $url, [], [], [], $headers, $body)->assertForbidden();
+        $headers['HTTP_X_JN_TIME'] = (string) (time() - 60);$this->call('POST', $url, [], [], [], $headers, $body)->assertForbidden();
+    }
 }

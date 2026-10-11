@@ -3,15 +3,16 @@ namespace App\Services\CompanyData;
 
 use App\Jobs\ProcessDataAnswer;
 use App\Models\User;
-use App\Services\CompanyData\Assistant\{AnswerContract, DemoProvider, ExcerptProvider, OpenAiReservedProvider};
+use App\Services\CompanyData\Assistant\{AnswerContract, DemoProvider, ExcerptProvider, OpenAiReservedProvider, PlanConnection};
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class DataAssistant
 {
-    public function capabilities(): array
+    public function capabilities(?User $user = null): array
     {
-        return ['contract' => 'company-data-answer/v1', 'external_requests' => false, 'openai' => false,
+        $connection = $user ? app(PlanConnection::class)->status($user) : null;
+        return ['contract' => 'company-data-answer/v1', 'external_requests' => (bool) ($connection['available'] ?? false), 'openai' => (bool) ($connection['available'] ?? false), 'connection' => $connection,
             'demo' => (bool) config('company_data.assistant_demo', true), 'default_mode' => 'excerpt'];
     }
 
@@ -36,14 +37,14 @@ class DataAssistant
         $query = DB::table('jn_data_conversations')->where('owner_id', $user->id)->where('archived', (bool) ($params['archived'] ?? false));
         $total = $query->count(); $pages = max(1, (int) ceil($total / 20)); $page = min(max(1, (int) ($params['page'] ?? 1)), $pages);
         return ['items' => $query->orderByDesc('updated_at')->orderByDesc('id')->offset(($page - 1) * 20)->limit(20)->get(['id', 'title', 'archived', 'updated_at'])->all(),
-            'page' => $page, 'pages' => $pages, 'total' => $total, 'capabilities' => $this->capabilities()];
+            'page' => $page, 'pages' => $pages, 'total' => $total, 'capabilities' => $this->capabilities($user)];
     }
     public function detail(User $user, int $id): array
     {
         return $this->locked(function () use ($user, $id) {
             $conversation = $this->owner($user, $id); $access = new DataAccess();
             $runs = DB::table('jn_data_answers')->where('conversation_id', $id)->orderBy('id')->get();
-            return ['conversation' => $conversation, 'runs' => $runs->map(fn ($r) => $this->present($user, $r, $access))->all(), 'capabilities' => $this->capabilities()];
+            return ['conversation' => $conversation, 'runs' => $runs->map(fn ($r) => $this->present($user, $r, $access))->all(), 'capabilities' => $this->capabilities($user)];
         });
     }
     public function ask(User $user, string $key, array $input): array
@@ -51,7 +52,7 @@ class DataAssistant
         $input = validator($input, ['conversation_id' => 'nullable|integer|min:1', 'question' => 'required|string|max:1000', 'keywords' => 'nullable|string|max:200',
             'category_id' => 'nullable|integer|min:1', 'include_history' => 'required|boolean', 'mode' => 'required|in:excerpt,demo,openai', 'demo_ack' => 'nullable|boolean'])->validate();
         $input['question'] = trim($input['question']); abort_if($input['question'] === '', 422, '请输入问题或要查找的内容。');
-        abort_if($input['mode'] === 'openai', 409, 'OpenAI 接口已预留，当前未接入模型。请选择原文摘录。');
+        abort_if($input['mode'] === 'openai' && !$this->capabilities($user)['openai'], 409, '个人套餐连接尚未就绪，请检查连接状态或选择原文摘录。');
         abort_if($input['mode'] === 'demo' && (!config('company_data.assistant_demo', true) || empty($input['demo_ack'])), 422, '模拟测试需要明确选择，当前不会调用模型。');
         return (new DataSupport())->mutate($user, $key, 'assistant.ask', $input,
             function () use ($user, $input) { if (!empty($input['conversation_id'])) $this->owner($user, $input['conversation_id'], true); },
@@ -91,6 +92,7 @@ class DataAssistant
                     abort_unless(in_array($run->state, ['queued', 'processing', 'cancelled']), 409, '该问题已经处理结束。');
                     DB::table('jn_data_answers')->where('id', $id)->update(['state' => 'cancelled', 'lease' => null, 'finished_at' => now(), 'updated_at' => now()]);
                 } elseif ($action === 'retry') {
+                    abort_if($run->mode === 'openai' && !$this->capabilities($user)['openai'], 409, '个人套餐连接尚未就绪，请先检查连接状态。');
                     abort_unless(in_array($run->state, ['failed', 'cancelled', 'restricted']), 409, '仅失败、取消或来源失效的问题可以重试。');
                     $own = DB::table('jn_data_conversations')->where('owner_id', $user->id)->pluck('id');
                     abort_if(DB::table('jn_data_answers')->whereIn('conversation_id', $own)->whereIn('state', ['queued', 'processing'])->count() >= 3
@@ -150,24 +152,27 @@ class DataAssistant
     {
         $sources = DataSupport::decode($run->sources); $state = $run->state;
         if ($sources && !$this->readable($user, $sources, $access)) $state = 'restricted';
-        $visible = in_array($state, ['ready', 'no_sources']); $outSources = [];
+        $visible = in_array($state, ['ready', 'no_sources', 'insufficient_evidence']); $outSources = [];
         if ($visible) foreach ($sources as $s) {
             $current = DB::table('jn_data_records')->where('id', $s['record_id'])->value('published_version_id');
             $s['historical'] = (int) $current !== (int) $s['version_id'];
             unset($s['body'], $s['body_hash'], $s['file_hash'], $s['snippet']); $outSources[] = $s;
         }
+        $provider = DataSupport::decode($run->provider_meta);
+        if (isset($provider['attempts'])) $provider['attempts'] = array_map(function ($attempt) { unset($attempt['lease']); return $attempt; }, $provider['attempts']);
         return ['id' => (int) $run->id, 'question' => $run->question, 'keywords' => $run->keywords, 'mode' => $run->mode, 'state' => $state,
             'include_history' => (bool) $run->include_history, 'category_id' => $run->category_id, 'created_at' => $run->created_at,
             'answer' => $visible ? DataSupport::decode($run->answer) : null, 'sources' => $outSources, 'retrieval' => $visible ? DataSupport::decode($run->retrieval) : null,
             'feedback' => $visible ? $run->feedback : null, 'feedback_note' => $visible ? $run->feedback_note : null,
-            'error' => $state === 'failed' ? '处理未完成，可以重试。原始资料未被修改。' : null];
+            'provider' => $provider,
+            'error' => $state === 'failed' ? PlanConnection::message($run->error_code ?? '') : null];
     }
     private function dispatch(int $id): void { try { ProcessDataAnswer::dispatch($id); } catch (\Throwable) { /* Durable queued row is recovered by the scheduler. */ } }
 
     public function process(int $id): void
     {
         $claimed = $this->locked(function () use ($id) {
-            $run = DB::table('jn_data_answers')->find($id); if (!$run || $run->state !== 'queued') return null;
+            $run = DB::table('jn_data_answers')->find($id); if (!$run || $run->state !== 'queued' || $run->mode === 'openai') return null;
             $c = DB::table('jn_data_conversations')->find($run->conversation_id); $user = $c ? User::find($c->owner_id) : null;
             if (!$user || !DataSupport::active($user) || $c->archived) { DB::table('jn_data_answers')->where('id', $id)->update(['state' => 'cancelled', 'finished_at' => now(), 'updated_at' => now()]); return null; }
             $lease = (string) Str::uuid();
@@ -213,11 +218,84 @@ class DataAssistant
         return $this->locked(function () {
             $rows = DB::table('jn_data_answers')->whereIn('state', ['queued', 'processing'])->where('updated_at', '<', now()->subMinutes(3))->limit(100)->get();
             foreach ($rows as $row) {
-                $failed = $row->attempts >= 3;
+                // A model call may already have consumed usage; never replay it automatically.
+                $failed = $row->mode === 'openai' || $row->attempts >= 3;
                 DB::table('jn_data_answers')->where('id', $row->id)->update(['state' => $failed ? 'failed' : 'queued', 'lease' => null, 'updated_at' => now(), 'error_code' => $failed ? 'INTERRUPTED' : null]);
                 if (!$failed) DB::afterCommit(fn () => $this->dispatch($row->id));
             }
             return $rows->count();
+        });
+    }
+
+    public function claimPlan(int $owner): ?array
+    {
+        return $this->locked(function () use ($owner) {
+            $user = User::find($owner);
+            if (!$user || !DataSupport::active($user) || !$this->capabilities($user)['openai']) return null;
+            $ids = DB::table('jn_data_conversations')->where('owner_id', $owner)->where('archived', false)->pluck('id');
+            if (DB::table('jn_data_answers')->whereIn('conversation_id', $ids)->where('mode', 'openai')->where('state', 'processing')->exists()) return null;
+            $run = DB::table('jn_data_answers')->whereIn('conversation_id', $ids)->where('mode', 'openai')->where('state', 'queued')->orderBy('id')->first();
+            if (!$run) return null;
+            [$sources, $retrieval] = $this->snapshot($user, $run);
+            $lease = (string) Str::uuid();
+            $meta = DataSupport::decode($run->provider_meta); $attempts = $meta['attempts'] ?? [];
+            if ($sources) $attempts[] = ['lease' => $lease, 'model' => $this->capabilities($user)['connection']['model'], 'usage' => [], 'at' => now()->toIso8601String(), 'reported' => false];
+            $meta = ['route' => 'chatgpt-plan', 'model' => $this->capabilities($user)['connection']['model'], 'attempts' => $attempts];
+            DB::table('jn_data_answers')->where('id', $run->id)->update(['sources' => DataSupport::json($sources), 'retrieval' => DataSupport::json($retrieval),
+                'provider_meta' => DataSupport::json($meta), 'state' => 'processing', 'lease' => $lease, 'attempts' => $run->attempts + 1, 'started_at' => now(), 'updated_at' => now()]);
+            if (!$sources) { $this->finish($run->id, $lease, 'no_sources'); return null; }
+            return ['id' => $run->id, 'lease' => $lease, 'request' => ['contract' => 'company-data-answer/v1', 'question' => $run->question,
+                'sources' => array_map(fn ($s) => array_intersect_key($s, array_flip(['id', 'title', 'version', 'location', 'body', 'excerpt'])), $sources)]];
+        });
+    }
+    private function planRun(int $owner, array $input): ?object
+    {
+        $run = DB::table('jn_data_answers')->where('id', $input['id'])->where('mode', 'openai')->where('state', 'processing')->where('lease', $input['lease'])
+            ->whereIn('conversation_id', DB::table('jn_data_conversations')->where('owner_id', $owner)->where('archived', false)->select('id'))->first();
+        if (!$run) return null;
+        $user = User::find($owner);
+        if (!$user || !DataSupport::active($user) || !$this->readable($user, DataSupport::decode($run->sources), new DataAccess())) {
+            $this->finish($run->id, $run->lease, 'restricted'); return null;
+        }
+        if (!$this->capabilities($user)['openai']) { $this->finish($run->id, $run->lease, 'cancelled'); return null; }
+        if (now()->diffInSeconds($run->started_at, true) > 150) { $this->finish($run->id, $run->lease, 'failed', [], 'request_timeout'); return null; }
+        return $run;
+    }
+    public function progressPlan(int $owner, array $input): array
+    {
+        validator($input, ['id' => 'required|integer', 'lease' => 'required|uuid'])->validate();
+        return $this->locked(function () use ($owner, $input) {
+            $run = $this->planRun($owner, $input);
+            if ($run) DB::table('jn_data_answers')->where('id', $run->id)->update(['updated_at' => now()]);
+            return ['active' => (bool) $run];
+        });
+    }
+    public function completePlan(int $owner, array $input): array
+    {
+        $input = validator($input, ['id' => 'required|integer', 'lease' => 'required|uuid', 'answer' => 'nullable|array',
+            'error' => ['nullable', 'regex:/^[a-z0-9_]{1,80}$/D'], 'model' => ['required', 'regex:/^[a-zA-Z0-9._-]{1,100}$/D'],
+            'usage' => 'nullable|array:input_tokens,output_tokens,total_tokens', 'usage.*' => 'integer|min:0|max:10000000'])->validate();
+        return $this->locked(function () use ($owner, $input) {
+            // Store usage even for a cancelled/late result, but never restore its text.
+            $row = DB::table('jn_data_answers')->where('id', $input['id'])->where('mode', 'openai')
+                ->whereIn('conversation_id', DB::table('jn_data_conversations')->where('owner_id', $owner)->select('id'))->first();
+            abort_unless($row, 404);
+            $meta = DataSupport::decode($row->provider_meta); $attempts = $meta['attempts'] ?? [];
+            $index = array_search($input['lease'], array_column($attempts, 'lease'), true);
+            abort_if($index === false, 409);
+            if (empty($attempts[$index]['reported'])) {
+                $attempts[$index] = [...$attempts[$index], 'model' => $input['model'], 'usage' => $input['usage'] ?? [], 'reported' => true];
+                $meta['attempts'] = $attempts;
+                DB::table('jn_data_answers')->where('id', $row->id)->update(['provider_meta' => DataSupport::json($meta)]);
+            }
+            $run = $this->planRun($owner, $input);
+            if (!$run) return ['accepted' => false];
+            $error = $input['error'] ?? null; $answer = [];
+            if (!$error) try { $answer = AnswerContract::validate($input['answer'] ?? [], DataSupport::decode($run->sources)); }
+                catch (\UnexpectedValueException) { $error = 'INVALID_RESPONSE'; }
+            $state = $error ? 'failed' : (!empty($answer['abstained']) ? 'insufficient_evidence' : 'ready');
+            $this->finish($run->id, $run->lease, $state, $answer, $error);
+            return ['accepted' => true];
         });
     }
 }

@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { createRemoteJWKSet } from 'jose';
 import { ProtectedStore } from './storage.mjs';
+import { PlanSession } from './plan-session.mjs';
+import { configureBridge, bridgeConfiguration, startErpBridge } from './erp-bridge.mjs';
 import { ISSUER, RESOURCE, ProbeError, safeCode, randomSecret, equalSecret, newAttempt,
   validateCallback, validateIdentity, inferencePayload, validateAnswer, apiErrorCode, readInferenceResponse } from './core.mjs';
 
@@ -12,6 +14,8 @@ const here=path.dirname(fileURLToPath(import.meta.url)), root=path.resolve(here,
 const directory=path.join(root,'.local/sem/chatgpt-plan-check');
 const reports=path.join(root,'.local/acceptance/chatgpt-plan-check');
 const store=new ProtectedStore(directory);
+const erpMode=process.argv.includes('--erp');
+let erpBridge;
 const lockPath=path.join(directory,'process.lock');
 let lock, server, connection, hostId, pending, pendingUrl, busy=false, runningRequest, origin, signingExpiry, idleExpiry;
 let status={phase:'ready',connected:false,sharing:false,verified:false};
@@ -98,7 +102,8 @@ async function finishAuthorization(attempt, values) {
     connection={clientId:values.clientId,identity,tokens:tokenResponse,expiresAt:Date.now()+tokenResponse.expires_in*1000,savedAt:new Date().toISOString()};
     await store.save(connection);
     if(!identity.sharing)throw new ProbeError('sharing_not_enabled');
-    await verifyPlan();
+    if(erpMode) { erpBridge?.reset();await publish('ready',{connected:true,sharing:true,error:null}); }
+    else await verifyPlan();
   } catch(error) { await publish('failed',{error:safeCode(error),verified:false}); }
   finally { busy=false; runningRequest=null; }
 }
@@ -128,10 +133,10 @@ async function route(request,response) {
   if(['/client.js','/style.css'].includes(url.pathname)&&request.method==='GET')return send(response,200,await readFile(path.join(here,url.pathname.slice(1)),'utf8'),url.pathname.endsWith('.js')?'text/javascript; charset=utf-8':'text/css; charset=utf-8');
   const cookies=Object.fromEntries((request.headers.cookie||'').split(';').filter(v=>v.includes('=')).map(v=>v.trim().split('=')));
   if(!equalSecret(cookies.jn_plan_session,browserSession))return send(response,403,{error:'local_session_required'});
-  if(url.pathname==='/status'&&request.method==='GET')return send(response,200,{...status,can_verify:canVerify(),csrf});
+  if(url.pathname==='/status'&&request.method==='GET')return send(response,200,{...status,can_verify:canVerify(),erp_mode:erpMode,authorized:Boolean(connection?.tokens?.access_token&&connection?.identity?.sharing),csrf});
   if(request.method!=='POST'||request.headers.origin!==origin||!equalSecret(request.headers['x-jn-csrf'],csrf))return send(response,403,{error:'request_rejected'});
   if(url.pathname==='/connect') {
-    if(busy)return send(response,409,{error:'verification_busy'});
+    if(busy||erpBridge?.busy)return send(response,409,{error:'verification_busy'});
     // Resume the same request after ordinary login, without rotating PKCE or state.
     if(pending && Date.now()<pending.expiresAt)return send(response,200,{url:pendingUrl});
     clearTimeout(signingExpiry);
@@ -144,6 +149,7 @@ async function route(request,response) {
     return send(response,200,{url:prepared.url});
   }
   if(url.pathname==='/verify') {
+    if(erpMode)return send(response,409,{error:'use_erp_assistant'});
     if(busy||pending)return send(response,409,{error:'verification_busy'});
     if(!canVerify())return send(response,409,{error:'authorization_expired'});
     busy=true;
@@ -156,12 +162,16 @@ async function route(request,response) {
   return send(response,404,{error:'not_found'});
 }
 async function cleanup() {
+  erpBridge?.stop();
   pending=null;pendingUrl=null;runningRequest?.abort();clearTimeout(signingExpiry);clearTimeout(idleExpiry);
   if(server)server.closeAllConnections();
   if(lock){await lock.close();await unlink(lockPath).catch(()=>{});lock=null;}
   process.exit(0);
 }
 async function main() {
+  const setup=process.argv.indexOf('--setup-owner');
+  if(setup!==-1) {await configureBridge(root,Number(process.argv[setup+1]));console.log(JSON.stringify({configured:true}));return;}
+  const configuration=erpMode?await bridgeConfiguration(root):null;
   await mkdir(reports,{recursive:true});
   await store.init();
   try { lock=await open(lockPath,'wx'); }
@@ -185,8 +195,13 @@ async function main() {
   origin=`http://127.0.0.1:${server.address().port}`;
   await publish('ready',{connected:Boolean(connection?.identity),sharing:Boolean(connection?.identity?.sharing)});
   await writeFile(path.join(reports,'runtime.json'),JSON.stringify({pid:process.pid,url:origin,started_at:new Date().toISOString()},null,2));
+  if(erpMode) {
+    const session=new PlanSession({getConnection:()=>connection,saveConnection:async value=>{await store.save(value);connection=value;},jwks});
+    erpBridge=startErpBridge({configuration,session,getConnection:()=>connection,origin,canRun:()=>!pending&&!busy,
+      onStatus:(_state,error)=>{void publish('ready',{connected:false,sharing:false,error});}});
+  }
   process.on('SIGINT',cleanup);process.on('SIGTERM',cleanup);
-  idleExpiry=setTimeout(cleanup,30*60_000);
-  console.log(JSON.stringify({status:'ready',url:origin,credential_storage:'Windows DPAPI CurrentUser',expires_after_minutes:30}));
+  if(!erpMode)idleExpiry=setTimeout(cleanup,30*60_000);
+  console.log(JSON.stringify({status:'ready',mode:erpMode?'erp':'verification',url:origin,credential_storage:'Windows DPAPI CurrentUser',expires_after_minutes:erpMode?null:30}));
 }
 main().catch(async error=>{console.error(JSON.stringify({error:safeCode(error)}));if(lock){await lock.close();await unlink(lockPath).catch(()=>{});}process.exitCode=1;});

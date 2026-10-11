@@ -6,7 +6,7 @@
   "description": "Local OAuth and fictional-source verification for ChatGPT plan usage",
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test core.test.mjs"
+    "test": "node --test core.test.mjs plan-session.test.mjs"
   },
   "engines": { "node": ">=22.12.0" },
   "dependencies": { "jose": "6.2.12" }

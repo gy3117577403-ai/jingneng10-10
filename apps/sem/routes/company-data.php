@@ -5,6 +5,7 @@ Route::middleware(['auth', 'verified', 'has.role', 'check.factory'])->prefix('co
     Route::get('/', [C::class, 'page'])->name('page');
     Route::prefix('api')->group(function () {
         Route::prefix('assistant')->middleware('throttle:90,1')->group(function () {
+            Route::post('/connection', [\App\Http\Controllers\DataAssistantController::class, 'connection']);
             Route::get('/', [\App\Http\Controllers\DataAssistantController::class, 'index']);
             Route::get('/conversations/{id}', [\App\Http\Controllers\DataAssistantController::class, 'show'])->whereNumber('id');
             Route::post('/ask', [\App\Http\Controllers\DataAssistantController::class, 'ask'])->middleware('throttle:20,1,assistant-ask');

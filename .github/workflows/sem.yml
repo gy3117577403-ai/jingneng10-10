@@ -44,6 +44,8 @@ jobs:
         run: python3 scripts/sem_assistant_acceptance.py
       - name: Run upstream backend suite without network or live database access
         run: python3 scripts/sem.py test
+      - name: Verify signed personal-plan bridge without external model calls
+        run: python3 scripts/sem_plan_acceptance.py
       - name: Verify restart persistence
         run: |
           python3 scripts/sem.py stop

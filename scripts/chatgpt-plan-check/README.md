@@ -1,5 +1,7 @@
 # ChatGPT 套餐最小验证
 
+JN-0017 已增加 ERP 连接模式（`node server.mjs --erp`）：复用同一授权与进程锁，执行令牌刷新、签名任务领取、取消和用量回传。设置与运行见 [本机套餐连接](../../docs/sem-chatgpt-plan.md)。下文描述默认的独立验证模式，不能据此判断 ERP 运行验收已完成。
+
 独立的 Windows 本机验证程序，属于 JN-0017。按 OpenAI 公布的 OAuth / OIDC 与套餐调用接口自行实现，未引入 Sign in with ChatGPT DevKit 的非商业许可代码、字体或品牌资产。唯一 npm 运行依赖是 MIT 许可的 `jose`，用于标准 JWT 签名验证。
 
 这不是已接入 ERP 的正式 Provider。它只验证当前授权账号能否通过 ChatGPT 套餐完成一次虚构资料问答。是否可用由官方授权与实际响应决定，不把普通 API Key 的余额状态当作套餐状态，也不以登录成功替代推理完成。

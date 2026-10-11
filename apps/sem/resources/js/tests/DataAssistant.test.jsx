@@ -41,8 +41,25 @@ describe('source assistant boundaries',()=>{
         expect(screen.getByRole('button',{name:'发送问题'}).disabled).toBe(true);
         fireEvent.click(screen.getByRole('button',{name:'查询设置'}));
         await waitFor(()=>expect(screen.getByRole('option',{name:'模拟测试（未调用模型）'})).toBeTruthy());
-        expect(screen.getByLabelText('查询方式').value).toBe('excerpt');expect(screen.getByRole('option',{name:'AI 解读（接口预留）'}).disabled).toBe(true);
+        expect(screen.getByLabelText('查询方式').value).toBe('excerpt');expect(screen.getByRole('option',{name:'AI 解读（ChatGPT 套餐）'}).disabled).toBe(true);
         fireEvent.change(screen.getByLabelText('查询方式'),{target:{value:'demo'}});
         expect(screen.getByText(/模拟测试：使用固定规则/)).toBeTruthy();expect(api.post).not.toHaveBeenCalled();
+    });
+    it('labels actual AI responses and reports tokens without inventing a credit conversion',()=>{
+        render(<SourceAnswer run={{...run,mode:'openai',provider:{model:'fixture-model',attempts:[{usage:{input_tokens:10,output_tokens:5,total_tokens:15}}]}}} onOpen={()=>{}} onAction={()=>{}}/>);
+        expect(screen.getByText('AI 解读 · ChatGPT 套餐')).toBeTruthy();expect(screen.queryByText('原文摘录 · 未使用 AI')).toBeNull();
+        expect(screen.getByText(/共 15 个词元/)).toBeTruthy();expect(screen.getByText(/词元数量不等于积分扣除数/)).toBeTruthy();
+    });
+    it('enables only an available connection and explains the external request before sending',async()=>{
+        const api={get:vi.fn().mockResolvedValue({items:[],page:1,pages:1,capabilities:{openai:true,connection:{available:true,status:'ready',message:'连接已就绪',model:'fixture-model',account:'虚构账号',connection_url:'http://127.0.0.1:1234/'}}}),post:vi.fn()};
+        render(<DataAssistant api={api} categories={[]} onOpen={()=>{}}/>);fireEvent.click(screen.getByRole('button',{name:'查询设置'}));
+        await waitFor(()=>expect(screen.getByRole('option',{name:'AI 解读（ChatGPT 套餐）'}).disabled).toBe(false));
+        fireEvent.change(screen.getByLabelText('查询方式'),{target:{value:'openai'}});
+        expect(screen.getByText(/将问题与有权查看的来源片段发送给 OpenAI/)).toBeTruthy();expect(api.post).not.toHaveBeenCalled();
+        expect(screen.getByRole('button',{name:'暂停 AI 解读'})).toBeTruthy();
+    });
+    it('shows insufficient evidence as abstention without fabricated paragraphs',()=>{
+        render(<SourceAnswer run={{...run,state:'insufficient_evidence',mode:'openai',answer:{paragraphs:[],abstained:true}}} onOpen={()=>{}} onAction={()=>{}}/>);
+        expect(screen.getByText('现有资料不足以回答这个问题')).toBeTruthy();expect(document.querySelector('blockquote')).toBeNull();
     });
 });

@@ -29,6 +29,8 @@ jobs:
         run: |
           node --check server.mjs
           node --check client.js
+          node --check plan-session.mjs
+          node --check erp-bridge.mjs
       - name: Verify protocol, complete responses and actual Windows encryption
         # Synthetic fixtures only. CI never signs in or makes a model request.
         run: npm test
