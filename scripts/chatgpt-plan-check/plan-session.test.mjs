@@ -93,3 +93,21 @@ test('a timed-out response stream reports timeout once without replaying inferen
     t.mock.timers.tick(5_000);await flush();assert.equal(inferences,1);
   }finally{bridge.stop();}
 });
+
+for(const desired of ['checking','disconnect'])test(`pending OAuth defers ${desired} and ongoing bridge work blocks a new login`,async t=>{
+  t.mock.timers.enable({apis:['setInterval']});
+  let available=false,models=0,revokes=0,release;
+  t.mock.method(globalThis,'fetch',async()=>Response.json({desired}));
+  const bridge=startErpBridge({configuration:{url:'http://127.0.0.1:8090',key:'f'.repeat(64),model:'fixture-model'},
+    getConnection:credential,origin:'http://127.0.0.1:12345',onStatus:()=>{},canRun:()=>available,
+    session:{models:async()=>{models++;await new Promise(resolve=>{release=resolve;});return[{slug:'fixture-model'}];},revoke:async()=>{revokes++;return true;}}});
+  const flush=async()=>{for(let i=0;i<30;i++)await Promise.resolve();};
+  try {
+    await flush();assert.equal(models,0);assert.equal(revokes,0);
+    available=true;t.mock.timers.tick(2500);await flush();assert.equal(bridge.busy,true);
+    release();await flush();
+    if(desired==='checking'){assert.equal(models,2);release();await flush();assert.equal(revokes,0);}
+    else assert.equal(revokes,1);
+    assert.equal(bridge.busy,false);
+  }finally{bridge.stop();}
+});

@@ -74,7 +74,9 @@ export function startErpBridge({configuration,session,getConnection,origin,onSta
         const models=await session.models();if(!models.some(m=>m.slug===model))throw new ProbeError('model_not_found');catalogAt=Date.now();
       }
       await heartbeat();
-      if(desired==='checking'&&!task) {
+      // An OAuth callback and refresh/revocation must not replace the same
+      // persisted credentials concurrently. Recheck after awaited heartbeat.
+      if(canRun()&&desired==='checking'&&!task) {
         lastError=null;catalogAt=0;
         try {const models=await session.models();if(!models.some(m=>m.slug===model))throw new ProbeError('model_not_found');catalogAt=Date.now();}
         catch(e){lastError=safeCode(e);}
@@ -82,7 +84,7 @@ export function startErpBridge({configuration,session,getConnection,origin,onSta
         return;
       }
       if(desired!=='enabled')running?.abort(new ProbeError('request_cancelled'));
-      if(desired==='disconnect'&&!task) {
+      if(canRun()&&desired==='disconnect'&&!task) {
         const confirmed=await session.revoke();catalogAt=0;lastError=confirmed?null:'revocation_unconfirmed';
         // Always acknowledge cleared credentials, even when remote revocation was uncertain.
         await call('heartbeat',{status:'disconnected',model,connection_url:origin+'/',error:lastError});
@@ -99,5 +101,5 @@ export function startErpBridge({configuration,session,getConnection,origin,onSta
   }
   void tick();timer=setInterval(()=>void tick(),2500);
   return {stop(){stopped=true;clearInterval(timer);running?.abort(new ProbeError('request_cancelled'));},
-    reset(){lastError=null;catalogAt=0;void tick();},get busy(){return !!task;}};
+    reset(){lastError=null;catalogAt=0;void tick();},get busy(){return !!task||ticking;}};
 }
