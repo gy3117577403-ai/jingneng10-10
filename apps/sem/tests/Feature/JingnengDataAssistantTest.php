@@ -179,8 +179,10 @@ class JingnengDataAssistantTest extends TestCase
         $job = $s->claimPlan($this->reader->id); $this->assertNotNull($job); $this->assertNull($s->claimPlan($this->reader->id));
         $this->assertArrayNotHasKey('record_id', $job['request']['sources'][0]);
         $this->assertSame(['active' => true], $s->progressPlan($this->reader->id, $job));
+        $diagnostic = ['http_status' => 200, 'request_id' => 'req_fixture', 'body_shape' => 'response_stream'];
+        $s->completePlan($this->reader->id, [...$this->planResult($job), 'diagnostic' => $diagnostic]);
         $s->completePlan($this->reader->id, $this->planResult($job));
-        $s->completePlan($this->reader->id, $this->planResult($job));
+        $this->assertSame($diagnostic, DataSupport::decode(DB::table('jn_data_answers')->find($job['id'])->provider_meta)['attempts'][0]['diagnostic']);
         $this->detail($ids['id'])->assertJsonPath('runs.0.state', 'ready')->assertJsonPath('runs.0.sources.0.version_id', $this->version)
             ->assertJsonCount(1, 'runs.0.provider.attempts')->assertJsonPath('runs.0.provider.attempts.0.usage.total_tokens', 15)->assertJsonMissingPath('runs.0.provider.attempts.0.lease');
         $this->actingAs($this->owner); $this->getJson('/company-data/api/assistant')->assertJsonPath('capabilities.openai', false)->assertJsonPath('capabilities.connection', null);

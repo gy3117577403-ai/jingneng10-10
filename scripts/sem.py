@@ -218,7 +218,7 @@ def package():
         run(['docker', 'tag', image, tag])
         images.append(tag)
     run(['docker', 'save', '-o', str(destination / 'images.tar'), *images])
-    readme = '''# JN-0016 本机迁移包（含私密配置，请勿公开上传）
+    readme = '''# JN-0017 本机迁移包（含私密配置，请勿公开上传）
 
 1. 新电脑准备 Docker Desktop 的 Linux 容器环境、Git、Python 3.10+。
 2. 运行 git clone <本包路径>/history.bundle <新目录>，进入新目录后执行 git checkout <本包提交号>。
@@ -296,6 +296,9 @@ def main():
         ]) + '\n', encoding='utf-8')
         run(['docker', 'run', '--rm', '--network', 'none', '--env-file', str(test_env),
              '--tmpfs', '/app/storage', '--tmpfs', '/app/tests_tmp:uid=33,gid=33,mode=0770', 'jingneng/sem:jn-0017', 'php',
+             # The full suite bootstraps hundreds of app instances in one process.
+             # This limit applies only to this disposable, network-isolated test run.
+             '-d', 'memory_limit=1G',
              'vendor/bin/phpunit', '--colors=never'])
 
 

@@ -274,7 +274,9 @@ class DataAssistant
     {
         $input = validator($input, ['id' => 'required|integer', 'lease' => 'required|uuid', 'answer' => 'nullable|array',
             'error' => ['nullable', 'regex:/^[a-z0-9_]{1,80}$/D'], 'model' => ['required', 'regex:/^[a-zA-Z0-9._-]{1,100}$/D'],
-            'usage' => 'nullable|array:input_tokens,output_tokens,total_tokens', 'usage.*' => 'integer|min:0|max:10000000'])->validate();
+            'usage' => 'nullable|array:input_tokens,output_tokens,total_tokens', 'usage.*' => 'integer|min:0|max:10000000',
+            'diagnostic' => 'nullable|array:http_status,request_id,body_shape', 'diagnostic.http_status' => 'integer|between:100,599',
+            'diagnostic.request_id' => ['nullable', 'regex:/^[a-zA-Z0-9_-]{1,160}$/D'], 'diagnostic.body_shape' => 'in:error,detail,other,response_stream'])->validate();
         return $this->locked(function () use ($owner, $input) {
             // Store usage even for a cancelled/late result, but never restore its text.
             $row = DB::table('jn_data_answers')->where('id', $input['id'])->where('mode', 'openai')
@@ -284,7 +286,7 @@ class DataAssistant
             $index = array_search($input['lease'], array_column($attempts, 'lease'), true);
             abort_if($index === false, 409);
             if (empty($attempts[$index]['reported'])) {
-                $attempts[$index] = [...$attempts[$index], 'model' => $input['model'], 'usage' => $input['usage'] ?? [], 'reported' => true];
+                $attempts[$index] = [...$attempts[$index], 'model' => $input['model'], 'usage' => $input['usage'] ?? [], 'diagnostic' => $input['diagnostic'] ?? null, 'reported' => true];
                 $meta['attempts'] = $attempts;
                 DB::table('jn_data_answers')->where('id', $row->id)->update(['provider_meta' => DataSupport::json($meta)]);
             }

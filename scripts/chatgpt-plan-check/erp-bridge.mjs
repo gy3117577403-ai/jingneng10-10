@@ -60,10 +60,10 @@ export function startErpBridge({configuration,session,getConnection,origin,onSta
       await check();controller.signal.throwIfAborted();
       monitor=setInterval(()=>void check(),1500);
       result=await session.answer(job.request,model,controller.signal);
-    }catch(e){error=safeCode(e);result.usage=e.usage||{};}
+    }catch(e){error=safeCode(controller.signal.aborted?controller.signal.reason:e);result.usage=e.usage||{};result.diagnostic=e.diagnostic||null;}
     finally {clearInterval(monitor);clearTimeout(timeout);running=null;}
     // Retrying result delivery is safe (lease/idempotent usage); inference itself is never retried.
-    const receipt={id:job.id,lease:job.lease,model,answer:result.answer||null,usage:result.usage||{},error};
+    const receipt={id:job.id,lease:job.lease,model,answer:result.answer||null,usage:result.usage||{},diagnostic:result.diagnostic||null,error};
     for(let i=0;i<3&&!stopped;i++)try{await call('complete',receipt);break;}catch{await new Promise(r=>setTimeout(r,1000*(i+1)));}
     if(['authorization_expired','invalid_grant','sharing_not_enabled','subscription_sharing_usage_limit_exceeded','subscription_sharing_user_not_eligible'].includes(error))lastError=error;
   }

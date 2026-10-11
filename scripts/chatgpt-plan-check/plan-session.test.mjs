@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHmac,createHash } from 'node:crypto';
 import { generateKeyPair,SignJWT } from 'jose';
 import { PlanSession,answerPayload,providerError } from './plan-session.mjs';
-import { signedRequest } from './erp-bridge.mjs';
+import { signedRequest,startErpBridge } from './erp-bridge.mjs';
 import { ISSUER,SCOPES } from './core.mjs';
 
 const credential=()=>({clientId:'oaiapp_fixture',expiresAt:0,identity:{subject:'fixture-user',scopes:SCOPES.split(' '),sharing:true},tokens:{access_token:'fictional-access',refresh_token:'fictional-refresh',id_token:'old-id'}});
@@ -58,4 +58,38 @@ test('an already aborted job performs no inference call',async()=>{
   const c=new AbortController();c.abort(new Error('cancelled'));
   await f.session.access();const before=calls;
   await assert.rejects(()=>f.session.answer({},'fixture-model',c.signal),/cancelled/);assert.equal(calls,before);
+});
+
+test('completed but malformed answers retain usage and only safe response diagnostics',async()=>{
+  const request={contract:'company-data-answer/v1',question:'虚构核对',sources:[{id:'S1',body:'虚构规程'}]};
+  const event={type:'response.completed',response:{status:'completed',output:[{type:'message',content:[{type:'output_text',text:'not-json'}]}],usage:{input_tokens:10,output_tokens:5,total_tokens:15}}};
+  const f=fixture(async url=>url.endsWith('/token')?Response.json(renewal):new Response(`data: ${JSON.stringify(event)}\n\n`,{headers:{'Content-Type':'text/event-stream','x-request-id':'req_fixture.123'}}));
+  await assert.rejects(()=>f.session.answer(request,'fixture-model',new AbortController().signal),error=>{
+    assert.equal(error.code,'invalid_answer');assert.equal(error.usage.total_tokens,15);
+    assert.deepEqual(error.diagnostic,{http_status:200,body_shape:'response_stream',request_id:'req_fixture123'});
+    assert.equal(JSON.stringify(error).includes('not-json'),false);return true;
+  });
+});
+
+test('a timed-out response stream reports timeout once without replaying inference',async t=>{
+  t.mock.timers.enable({apis:['setTimeout','setInterval']});
+  const receipts=[];let claims=0,inferences=0;
+  t.mock.method(globalThis,'fetch',async(url,options)=>{
+    const action=new URL(url).pathname.split('/').at(-1);
+    if(action==='heartbeat')return Response.json({desired:'enabled'});
+    if(action==='claim')return Response.json({job:claims++===0?{id:1,lease:'fixture-lease',request:{}}:null});
+    if(action==='progress')return Response.json({active:true});
+    if(action==='complete'){receipts.push(JSON.parse(options.body));return Response.json({accepted:true});}
+    throw Error('Unexpected test URL');
+  });
+  const bridge=startErpBridge({configuration:{url:'http://127.0.0.1:8090',key:'f'.repeat(64),model:'fixture-model'},
+    getConnection:credential,origin:'http://127.0.0.1:12345',onStatus:()=>{},session:{models:async()=>[{slug:'fixture-model'}],
+      answer:async(request,model,signal)=>{inferences++;return new Promise((resolve,reject)=>signal.addEventListener('abort',()=>reject(new DOMException('Aborted stream','AbortError')),{once:true}));}}});
+  const flush=async()=>{for(let i=0;i<30;i++)await Promise.resolve();};
+  try {
+    await flush();assert.equal(inferences,1);
+    t.mock.timers.tick(90_000);await flush();
+    assert.equal(receipts.length,1);assert.equal(receipts[0].error,'request_timeout');assert.equal(receipts[0].answer,null);
+    t.mock.timers.tick(5_000);await flush();assert.equal(inferences,1);
+  }finally{bridge.stop();}
 });

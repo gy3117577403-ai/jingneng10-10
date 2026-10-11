@@ -22,7 +22,7 @@ abstract class TestCase extends BaseTestCase
     {
         parent::tearDown();
         // Each test rebuilds the localized route graph. Collect closed application cycles
-        // promptly so the complete suite stays within the same 512 MB runtime limit.
+        // promptly to avoid retaining unused route graphs across the full suite.
         gc_collect_cycles();
     }
 

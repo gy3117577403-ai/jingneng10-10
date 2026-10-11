@@ -81,9 +81,10 @@ export class PlanSession {
     try { response=await this.fetch(`${RESOURCE}/responses`,{method:'POST',redirect:'error',signal,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json',Accept:'text/event-stream'},body:JSON.stringify(answerPayload(request,model))}); }
     catch(error) { if(signal.aborted)throw signal.reason;throw new ProbeError('transport_failed'); }
     if(!response.ok) { let body;try{body=await response.json();}catch{}throw providerError(response,body); }
-    const result=await readInferenceResponse(response);
-    let answer;try{answer=JSON.parse(result.text);}catch{const e=new ProbeError('invalid_answer');e.usage=result.usage;throw e;}
-    return {answer,usage:result.usage}; // Authoritative citation validation remains in Laravel.
+    const diagnostic={http_status:response.status,body_shape:'response_stream',request_id:response.headers.get('x-request-id')?.replace(/[^a-zA-Z0-9_-]/g,'').slice(0,160)||null};
+    let result;try{result=await readInferenceResponse(response);}catch(e){e.diagnostic=diagnostic;throw e;}
+    let answer;try{answer=JSON.parse(result.text);}catch{const e=new ProbeError('invalid_answer');e.usage=result.usage;e.diagnostic=diagnostic;throw e;}
+    return {answer,usage:result.usage,diagnostic}; // Authoritative citation validation remains in Laravel.
   }
 }
 export function answerPayload(request,model) {
