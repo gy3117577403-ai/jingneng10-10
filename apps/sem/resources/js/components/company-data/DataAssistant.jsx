@@ -25,18 +25,19 @@ export function SourceAnswer({run,onOpen,onAction,busy}){
     </article>;
 }
 
-export default function DataAssistant({api,categories,onOpen}){
+export default function DataAssistant({api,categories,onOpen,active=true,sourceOpen=false}){
     const [id,setId]=useState(()=>Number(new URLSearchParams(location.search).get('conversation'))||null);
     const [list,setList]=useState(null),[detail,setDetail]=useState(null),[page,setPage]=useState(1),[archived,setArchived]=useState(false),[refresh,setRefresh]=useState(0),[error,setError]=useState(''),[loading,setLoading]=useState(false);
     const [question,setQuestion]=useState(''),[keywords,setKeywords]=useState(''),[category,setCategory]=useState(''),[includeHistory,setIncludeHistory]=useState(false),[mode,setMode]=useState('excerpt'),[settings,setSettings]=useState(false),[busy,setBusy]=useState(false),[feedback,setFeedback]=useState(null);
+    const [historyOpen,setHistoryOpen]=useState(false);
     const scroll=useRef(null),lastShown=useRef(null);
     const requestLock=useRef(false),receipt=useRef(null),input=useRef(null),generation=useRef(0),selection=useRef(id);selection.current=id;
     const pending=detail?.runs.some(r=>['queued','processing'].includes(r.state));
     const canSend=question.trim()&&!busy&&!pending&&!detail?.conversation.archived&&(!id||detail)&&(!detail||detail.runs.length<50);
     const caps=detail?.capabilities||list?.capabilities;
-    useEffect(()=>{const abort=new AbortController();api.get(`/assistant?${new URLSearchParams({page,archived:archived?'1':'0'})}`,abort.signal).then(d=>{setList(d);if(d.page!==page)setPage(d.page);}).catch(e=>{if(!abort.signal.aborted){setError(e.message);setList(null);}});return()=>abort.abort();},[api,page,archived,refresh]);
+    useEffect(()=>{if(!active)return;const abort=new AbortController();api.get(`/assistant?${new URLSearchParams({page,archived:archived?'1':'0'})}`,abort.signal).then(d=>{setList(d);if(d.page!==page)setPage(d.page);}).catch(e=>{if(!abort.signal.aborted){setError(e.message);setList(null);}});return()=>abort.abort();},[api,page,archived,refresh,active]);
     useEffect(()=>{
-        if(!id){setDetail(null);setLoading(false);return;}
+        if(!id){setDetail(null);setLoading(false);return;}if(!active)return;
         let stopped=false,controller=null,timer=null;
         async function load(clear=false){
             if(stopped)return;controller?.abort();controller=new AbortController();const current=++generation.current;
@@ -48,7 +49,7 @@ export default function DataAssistant({api,categories,onOpen}){
         const focus=()=>load(true);const visibility=()=>{if(document.hidden){controller?.abort();clearTimeout(timer);generation.current++;setDetail(null);}else load(true);};
         load(true);window.addEventListener('focus',focus);document.addEventListener('visibilitychange',visibility);
         return()=>{stopped=true;controller?.abort();clearTimeout(timer);generation.current++;window.removeEventListener('focus',focus);document.removeEventListener('visibilitychange',visibility);};
-    },[api,id,refresh]);
+    },[api,id,refresh,active]);
     useEffect(()=>{const last=detail?.runs.at(-1);if(!last)return;const key=`${id}:${last.id}:${last.state}`;if(lastShown.current!==key){scroll.current?.scrollTo?.({top:scroll.current.lastElementChild?.offsetTop||0});lastShown.current=key;}},[id,detail]);
     async function post(path,data){
         if(requestLock.current)return null;requestLock.current=true;setBusy(true);setError('');
@@ -56,7 +57,7 @@ export default function DataAssistant({api,categories,onOpen}){
         try{const result=await api.post(path,data,receipt.current.key);receipt.current=null;return result;}
         catch(e){setError(e.message);return null;}finally{requestLock.current=false;setBusy(false);}
     }
-    function select(value){setId(value);setDetail(null);const url=new URL(location.href);if(value)url.searchParams.set('conversation',String(value));else url.searchParams.delete('conversation');history.replaceState(null,'',url);}
+    function select(value){setId(value);setHistoryOpen(false);setDetail(null);const url=new URL(location.href);if(value)url.searchParams.set('conversation',String(value));else url.searchParams.delete('conversation');history.replaceState(null,'',url);}
     async function navigate(value){if(busy)return;if(question.trim()&&!await confirmAction('切换会话将清除尚未提交的问题。',{title:'切换会话',confirmLabel:'切换'}))return;setQuestion('');setError('');select(value);input.current?.focus();}
     async function submit(e){e.preventDefault();if(!canSend)return;const result=await post('/assistant/ask',{conversation_id:id,question:question.trim(),keywords:keywords.trim(),category_id:category?Number(category):null,include_history:includeHistory,mode,demo_ack:mode==='demo'});if(result){setQuestion('');select(result.id);setRefresh(n=>n+1);}}
     async function action(run,kind){
@@ -71,19 +72,19 @@ export default function DataAssistant({api,categories,onOpen}){
         catch(e){setDetail(null);setError(e.message);}
     }
     const examples=useMemo(()=>['现场核对有哪些要求？','设备点检需要记录什么？'],[]);
-    return <section className="da-workspace">
-        <aside className="da-history"><div className="da-history-top"><strong><History size={16}/>我的会话</strong><button className="dc-icon" aria-label="新建会话" onClick={()=>navigate(null)} disabled={busy}><Plus size={18}/></button></div><label className="dc-check"><input type="checkbox" checked={archived} onChange={e=>{setArchived(e.target.checked);setPage(1);}}/>已归档</label>
+    return <section className={`da-workspace ${historyOpen?'history-open':''} ${sourceOpen?'with-source':''}`}>
+        {historyOpen&&<aside className="da-history"><div className="da-history-top"><strong><History size={16}/>我的会话</strong><button className="dc-icon" aria-label="新建会话" onClick={()=>navigate(null)} disabled={busy}><Plus size={18}/></button></div><label className="dc-check"><input type="checkbox" checked={archived} onChange={e=>{setArchived(e.target.checked);setPage(1);}}/>已归档</label>
             <nav aria-label="资料助手会话">{list?.items.map(c=><button key={c.id} className={id===c.id?'is-selected':''} onClick={()=>navigate(c.id)} aria-current={id===c.id?'page':undefined}><strong>{c.title}</strong><small>{when(c.updated_at)}</small></button>)}</nav>
             {list&&!list.items.length&&<p className="da-history-empty">{archived?'暂无归档会话':'查询会保存在这里，仅你本人可见。'}</p>}
             {list?.pages>1&&<div className="dc-pagination"><button className="dc-icon" aria-label="上一页会话" disabled={page<=1} onClick={()=>setPage(p=>p-1)}><ChevronLeft size={16}/></button><span>{page} / {list.pages}</span><button className="dc-icon" aria-label="下一页会话" disabled={page>=list.pages} onClick={()=>setPage(p=>p+1)}><ChevronRight size={16}/></button></div>}
-        </aside>
-        <div className="da-main"><header className="da-heading"><div><h3>{detail?.conversation.title||'资料助手'}</h3><span>只查找有权查看的已发布资料</span></div><div className="dc-inline"><span className="da-model-state">模型未接入</span>{id&&<><button className="dc-icon" aria-label="刷新会话" onClick={()=>setRefresh(n=>n+1)}><RefreshCw size={16}/></button>{detail&&<button className="dc-icon" aria-label={detail.conversation.archived?'恢复会话':'归档会话'} onClick={archive} disabled={busy}>{detail.conversation.archived?<RotateCcw size={17}/>:<Archive size={17}/>}</button>}</>}</div></header>
+        </aside>}
+        <div className="da-main"><header className="da-heading"><div className="da-heading-title"><button className="dc-icon" aria-label={historyOpen?'收起会话记录':'查看会话记录'} aria-expanded={historyOpen} title="我的会话" onClick={()=>setHistoryOpen(v=>!v)}><History size={19}/></button><div><h3>{detail?.conversation.title||'资料助手'}</h3><span>从授权资料中查找依据</span></div></div><div className="dc-inline"><span className="da-model-state" title="按关键词查找原文，每次独立检索。AI 模型尚未接入。">原文检索</span><button className="dc-icon" aria-label="新建查询" title="新建查询" onClick={()=>navigate(null)} disabled={busy}><Plus size={18}/></button>{id&&<><button className="dc-icon" aria-label="刷新会话" onClick={()=>setRefresh(n=>n+1)}><RefreshCw size={16}/></button>{detail&&<button className="dc-icon" aria-label={detail.conversation.archived?'恢复会话':'归档会话'} onClick={archive} disabled={busy}>{detail.conversation.archived?<RotateCcw size={17}/>:<Archive size={17}/>}</button>}</>}</div></header>
             <ErrorBox error={error}/>
-            <div className="da-conversation" ref={scroll} aria-busy={loading}>{loading?<p className="da-state" role="status">正在读取会话并核对权限…</p>:detail?detail.runs.map(r=><SourceAnswer key={r.id} run={r} onOpen={source} onAction={action} busy={busy||Boolean(detail.conversation.archived)}/>):!id?<div className="da-welcome"><BookOpen size={26}/><h3>从公司资料里，找到可核对的依据</h3><p>输入问题或关键词，查看原文摘录并打开对应版本。当前不会调用外部模型。</p><div>{examples.map(text=><button key={text} onClick={()=>{setQuestion(text);input.current?.focus();}}>{text}<ArrowUpRight size={14}/></button>)}</div></div>:null}</div>
+            <div className="da-conversation" ref={scroll} aria-busy={loading}>{loading?<p className="da-state" role="status">正在读取会话并核对权限…</p>:detail?detail.runs.map(r=><SourceAnswer key={r.id} run={r} onOpen={source} onAction={action} busy={busy||Boolean(detail.conversation.archived)}/>):!id?<div className="da-welcome"><BookOpen size={26}/><h3>从公司资料里，找到可核对的依据</h3><p>输入问题或关键词，查看原文与对应版本。AI 尚未接入，当前按关键词独立检索。</p><div>{examples.map(text=><button key={text} onClick={()=>{setQuestion(text);input.current?.focus();}}>{text}<ArrowUpRight size={14}/></button>)}</div></div>:null}</div>
             {detail?.conversation.archived?<p className="da-archived">会话已归档，恢复后可以继续查询。</p>:<form className="da-composer" onSubmit={submit}>
                 {settings&&<div className="da-settings"><Field label="检索关键词" hint="可选，多项用空格分隔；未填写时从本次问题提取。"><input maxLength={200} value={keywords} onChange={e=>setKeywords(e.target.value)} placeholder="例如：现场核对 密封情况"/></Field><Field label="资料分类"><select value={category} onChange={e=>setCategory(e.target.value)}><option value="">全部授权分类</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></Field><Field label="查询方式"><select value={mode} onChange={e=>setMode(e.target.value)}><option value="excerpt">原文摘录（不使用 AI）</option>{caps?.demo&&<option value="demo">模拟测试（未调用模型）</option>}<option value="openai" disabled>AI 解读（接口预留）</option></select></Field><label className="dc-check"><input type="checkbox" checked={includeHistory} onChange={e=>setIncludeHistory(e.target.checked)}/>包含历史发布版本</label></div>}
                 {mode==='demo'&&<p className="da-demo-banner">模拟测试：使用固定规则验证回答和引用流程，不代表真实 AI 推理。</p>}
-                <label className="da-input-label" htmlFor="da-question">问题或关键词</label><textarea id="da-question" ref={input} disabled={busy} value={question} onChange={e=>setQuestion(e.target.value)} maxLength={1000} rows={2} placeholder="输入问题或要查找的条款、设备编号…" onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();e.currentTarget.form.requestSubmit();}}}/>
+                <label className="da-input-label" htmlFor="da-question">问题或关键词</label><textarea id="da-question" ref={input} disabled={busy} value={question} onChange={e=>setQuestion(e.target.value)} maxLength={1000} rows={2} placeholder="查找条款、设备编号或需要核对的内容…" onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();e.currentTarget.form.requestSubmit();}}}/>
                 <div className="da-composer-bottom"><button type="button" className="dc-text-button" aria-expanded={settings} onClick={()=>setSettings(v=>!v)}><SlidersHorizontal size={15}/>查询设置{includeHistory?' · 含历史版本':''}</button><span>{pending?'正在处理上一个问题':detail?.runs.length>=50?'本会话已满，请新建会话':'每次独立检索 · Ctrl / ⌘ + Enter 发送'}</span><button type="submit" className="da-send" disabled={!canSend} aria-label="发送问题"><ArrowUp size={19}/></button></div>
             </form>}
         </div>
