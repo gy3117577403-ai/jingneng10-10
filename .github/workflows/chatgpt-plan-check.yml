@@ -1,0 +1,34 @@
+name: ChatGPT plan connection checks
+
+on:
+  push:
+    paths: ['scripts/chatgpt-plan-check/**', '.github/workflows/chatgpt-plan-check.yml']
+  pull_request:
+    paths: ['scripts/chatgpt-plan-check/**', '.github/workflows/chatgpt-plan-check.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  offline-protocol-and-storage:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: scripts/chatgpt-plan-check
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - name: Install locked dependency without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Check server and browser syntax
+        run: |
+          node --check server.mjs
+          node --check client.js
+      - name: Verify protocol, complete responses and actual Windows encryption
+        # Synthetic fixtures only. CI never signs in or makes a model request.
+        run: npm test

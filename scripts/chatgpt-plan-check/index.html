@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>京能 · ChatGPT 套餐验证</title><link rel="stylesheet" href="/style.css"><script src="/client.js" defer></script></head>
+<body><main><header><span class="mark">京能</span><span class="tag">本机验证</span></header>
+<h1>连接你的 ChatGPT 套餐</h1><p class="intro">验证现有套餐能否为资料助手提供 AI 回答。</p>
+<section class="panel"><h2>这次会做什么</h2><ol><li>在 OpenAI 官方页面登录，选择账号并授权使用套餐额度。</li><li>查询这份授权实际允许使用的模型。</li><li>发送一条虚构资料，核对模型回答和原文引用。</li></ol><p class="note">登录凭据使用 Windows 本机加密保存。此次不读取公司资料，不使用普通 API 密钥。是否允许使用额外额度，由你在官方授权与用量设置中决定。</p>
+<button id="connect" type="button">通过 ChatGPT 继续</button><a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer">管理 ChatGPT 用量 ↗</a></section>
+<section class="result" aria-live="polite"><div class="line"><span id="dot" class="dot"></span><strong id="phase">正在连接本机验证程序…</strong></div><p id="detail"></p><p id="model" class="muted"></p><div id="answer"></div></section>
+<footer>仅用于当前账户的本机验证。通过验证后，仍需将授权连接接入软件并完成业务权限验收。</footer></main></body></html>
