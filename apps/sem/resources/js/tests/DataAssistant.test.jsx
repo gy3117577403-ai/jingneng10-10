@@ -25,6 +25,16 @@ describe('source assistant boundaries',()=>{
         const action=vi.fn();render(<SourceAnswer run={{...run,mode:'demo',state:'processing'}} onOpen={()=>{}} onAction={action}/>);
         expect(screen.getByText('模拟测试 · 未调用模型')).toBeTruthy();fireEvent.click(screen.getByRole('button',{name:'取消'}));expect(action).toHaveBeenCalledWith(expect.anything(),'cancel');
     });
+    it('keeps archived conversations readable while disabling feedback actions',async()=>{
+        history.replaceState(null,'','/?conversation=1');
+        const api={get:vi.fn(path=>Promise.resolve(path.includes('/conversations/')?{conversation:{id:1,title:'归档会话',archived:true},runs:[run],capabilities:{demo:true}}:{items:[],page:1,pages:1,capabilities:{demo:true}})),post:vi.fn()};
+        render(<DataAssistant api={api} categories={[]} onOpen={()=>{}}/>);
+        await waitFor(()=>expect(screen.getByRole('button',{name:'反馈问题'}).disabled).toBe(true));
+        expect(screen.getByRole('button',{name:'有帮助'}).disabled).toBe(true);
+        expect(screen.getByRole('button',{name:/虚构制度/}).disabled).toBe(false);
+        expect(screen.getByRole('button',{name:'恢复会话'}).disabled).toBe(false);
+        expect(screen.queryByRole('button',{name:'发送问题'})).toBeNull();
+    });
     it('defaults to extracts, does not submit blank questions and requires explicit demo selection',async()=>{
         const api={get:vi.fn().mockResolvedValue({items:[],page:1,pages:1,capabilities:{demo:true}}),post:vi.fn().mockResolvedValue({id:1,run_id:1})};
         render(<DataAssistant api={api} categories={[]} onOpen={()=>{}}/>);
