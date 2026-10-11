@@ -14,6 +14,9 @@ class CheckBanned
         if (auth()->check() && auth()->user()->banned_until && now()->lessThan(auth()->user()->banned_until)) {
             $banned_days = now()->diffInDays(auth()->user()->banned_until);
             auth()->logout();
+            if ($request->expectsJson()) {
+                return response()->json(['message' => '当前账号已停用，请联系管理员。'], 403)->header('Cache-Control', 'private, no-store');
+            }
 
             if ($banned_days > 14) {
                 $message = 'Your account has been suspended. Please contact administrator.';

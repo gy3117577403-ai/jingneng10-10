@@ -95,8 +95,9 @@ class QuoteReview
         $data = validator($input, ['fingerprint' => 'required|string|size:64', 'reviewer_id' => 'required|integer', 'note' => 'required|string|max:2000',
             'confirmed' => 'accepted', 'version_ids' => 'present|array|max:50', 'version_ids.*' => 'integer|distinct'], [],
             ['note' => '提交说明', 'reviewer_id' => '核对人', 'confirmed' => '资料共享与核对确认'])->validate();
+        return $this->retrySubmission(function (callable $track) use ($id, $user, $key, $data) {
         return $this->flow->mutate('quote', $id, $user, $key, ['action' => 'submit', ...$data],
-            fn ($q) => abort_unless($this->manages($q, $user), 404), function ($quote) use ($user, $data) {
+            fn ($q) => abort_unless($this->manages($q, $user), 404), function ($quote) use ($user, $data, $track) {
                 abort_unless(in_array((int) $quote->statu, [1, 2]) && !$quote->is_template, 409, '当前报价状态不能提交核对。');
                 $reviewer = User::find($data['reviewer_id']);
                 abort_unless($reviewer && FlowSupport::can($reviewer, '核对报价版本'), 422, '请选择有核对权限的有效人员。');
@@ -117,12 +118,31 @@ class QuoteReview
                 $version = ($latest->version ?? 0) + 1;
                 $html = app(PrintController::class)->quoteVersionHtml($quote->fresh(), $version, $snapshot['materials']);
                 $file = $this->savePdf($html, '待核对草稿', $quote->id, $version);
+                $track($file['path']);
                 $review = DB::table('jn_quote_reviews')->insertGetId(['quote_id' => $quote->id, 'version' => $version, 'state' => 'pending',
                     'submitted_by' => $user->id, 'reviewer_id' => $reviewer->id, 'snapshot' => FlowSupport::json($snapshot), 'fingerprint' => $hash,
                     'note' => $data['note'], 'print_html' => $html, 'draft_path' => $file['path'], 'draft_sha256' => $file['sha256'], 'created_at' => now(), 'updated_at' => now()]);
                 $this->flow->event('quote', $quote->id, $user, '提交报价核对', ['review_id' => $review, 'version' => $version, 'note' => $data['note'], 'reviewer_id' => $reviewer->id]);
                 return ['review_id' => $review, 'reused' => false];
             });
+        });
+    }
+    private function retrySubmission(callable $work): array
+    {
+        // MariaDB can reject an insert with error 1020 after a concurrent commit.
+        // Retry the entire rolled-back mutation so permissions and receipts are read again.
+        $level = DB::transactionLevel();
+        for ($attempt = 1; ; $attempt++) {
+            $paths = [];
+            try {
+                return $work(function (string $path) use (&$paths) { $paths[] = $path; });
+            } catch (\Throwable $error) {
+                foreach ($paths as $path) Storage::disk('local')->delete($path);
+                if ($attempt >= 3 || DB::transactionLevel() !== $level
+                    || !$error instanceof \Illuminate\Database\QueryException
+                    || (int) ($error->errorInfo[1] ?? 0) !== 1020) throw $error;
+            }
+        }
     }
     public function decide(int $id, int $rid, User $user, string $key, array $input): array
     {

@@ -115,6 +115,42 @@ class JingnengSalesControlTest extends TestCase
         $this->get("/sales-control/api/quotes/$q->id/reviews/$rid/pdf")->assertNotFound();
         $this->get("/sales-control/api/quotes/$q->id/reviews/$rid/files/{$file['version_id']}")->assertNotFound();
     }
+    public function test_mariadb_concurrency_retry_keeps_one_review_receipt_and_pdf(): void
+    {
+        [$quote] = $this->fixture();
+        // Exercise an outermost transaction, as in HTTP. Laravel deliberately does not
+        // retry a deadlock inside RefreshDatabase's enclosing transaction. This is the
+        // isolated in-memory SQLite connection; its teardown marks migrations dirty.
+        $this->assertSame(1, DB::transactionLevel()); DB::commit();
+        $remaining = 1; $this->failReviewInsert($remaining);
+        $result = $this->submit($quote);
+        $this->assertDatabaseHas('jn_quote_reviews', ['id' => $result, 'quote_id' => $quote->id, 'version' => 1]);
+        $this->assertDatabaseCount('jn_quote_reviews', 1);
+        $this->assertSame(1, DB::table('jn_sales_receipts')->where('entity_id', $quote->id)->where('scope', 'quote')->count());
+        $this->assertCount(1, Storage::disk('local')->allFiles('sales-control/quotes/' . $quote->id));
+    }
+    public function test_mariadb_concurrency_retry_is_bounded_and_cleans_failed_pdfs(): void
+    {
+        [$quote] = $this->fixture(); $this->assertSame(1, DB::transactionLevel()); DB::commit();
+        $remaining = 10; $this->failReviewInsert($remaining);
+        try { $this->submit($quote); $this->fail('The persistent database conflict must be reported.'); }
+        catch (\Illuminate\Database\QueryException $error) { $this->assertSame(1020, $error->errorInfo[1]); }
+        $this->assertSame(7, $remaining);
+        $this->assertDatabaseCount('jn_quote_reviews', 0);
+        $this->assertSame(0, DB::table('jn_sales_receipts')->where('entity_id', $quote->id)->where('scope', 'quote')->count());
+        $this->assertCount(0, Storage::disk('local')->allFiles('sales-control/quotes/' . $quote->id));
+    }
+    private function failReviewInsert(int &$remaining): void
+    {
+        DB::listen(function ($query) use (&$remaining) {
+            if (str_starts_with($query->sql, 'insert into "jn_quote_reviews"') && $remaining > 0) {
+                $remaining--;
+                $cause = new \PDOException('Record has changed since last read in table');
+                $cause->errorInfo = ['HY000', 1020, 'Record has changed since last read in table'];
+                throw new \Illuminate\Database\QueryException($query->connectionName, $query->sql, [], $cause);
+            }
+        });
+    }
     public function test_handoff_receive_request_supplement_reassign_complete_preserves_history(): void
     {
         [$o, $q, $iid, $file] = $this->approvedOrder(); $service = app(TechnicalHandoff::class);

@@ -27,6 +27,7 @@ async function request(url,options={}){
     if(!response.ok){const messages={401:'登录已过期，请重新登录。',419:'登录已过期，请重新登录后继续。',403:'权限已变化，当前不能执行此操作。',404:'内容不存在或已经不可用，请刷新后重试。',422:'填写内容不符合要求，请检查后重试。',429:'操作较频繁，请稍后重试，输入内容已保留。'};
         const message=json?.errors?Object.values(json.errors).flat().join('；'):json?.message||'';
         throw new Error(response.status>=500?'服务暂时不可用，请稍后重试。':/[\u3400-\u9fff]/.test(message)?message:messages[response.status]||'请求未完成，请刷新后重试。');}
+    if(json===null)throw new Error(response.redirected?'登录已过期，请重新登录后继续。':'服务返回内容不完整，请刷新后重试。');
     return json;
 }
 

@@ -24,6 +24,7 @@ $tables = ['users', 'companies', 'quotes', 'quote_lines', 'orders', 'order_lines
            'jn_quote_reviews', 'jn_order_quote_reviews', 'jn_technical_handoffs', 'jn_handoff_versions', 'jn_sales_events', 'jn_sales_receipts',
            'jn_data_state', 'jn_data_groups', 'jn_data_members', 'jn_data_categories', 'jn_data_records', 'jn_data_versions',
            'jn_data_files', 'jn_data_rules', 'jn_data_access_requests', 'jn_data_tasks', 'jn_data_comments', 'jn_data_imports', 'jn_data_events', 'jn_data_receipts', 'jn_data_documents', 'jn_data_chunks'];
+$tables = [...$tables, 'jn_data_conversations', 'jn_data_answers'];
 $counts = [];
 foreach ($tables as $table) {
     if (Illuminate\Support\Facades\Schema::hasTable($table)) { $counts[$table] = DB::table($table)->count(); }
