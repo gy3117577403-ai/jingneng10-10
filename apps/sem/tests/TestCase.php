@@ -18,6 +18,14 @@ abstract class TestCase extends BaseTestCase
     use CreatesApplication;
     use RefreshDatabase;
 
+    protected function tearDown(): void
+    {
+        parent::tearDown();
+        // Each test rebuilds the localized route graph. Collect closed application cycles
+        // promptly so the complete suite stays within the same 512 MB runtime limit.
+        gc_collect_cycles();
+    }
+
     protected function setUp(): void
     {
         parent::setUp();

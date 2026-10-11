@@ -39,6 +39,9 @@ jobs:
         run: python3 scripts/sem_data_acceptance.py
       - name: Verify private Office reading, exact source locations and permission-aware text search
         run: python3 scripts/sem_reading_acceptance.py
+      - name: Verify private assistant history, grounded sources and offline provider contract
+        # Assistant fixtures never need or invoke a model API.
+        run: python3 scripts/sem_assistant_acceptance.py
       - name: Run upstream backend suite without network or live database access
         run: python3 scripts/sem.py test
       - name: Verify restart persistence

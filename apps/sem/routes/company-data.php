@@ -4,6 +4,12 @@ use Illuminate\Support\Facades\Route;
 Route::middleware(['auth', 'verified', 'has.role', 'check.factory'])->prefix('company-data')->name('company-data.')->group(function () {
     Route::get('/', [C::class, 'page'])->name('page');
     Route::prefix('api')->group(function () {
+        Route::prefix('assistant')->middleware('throttle:90,1')->group(function () {
+            Route::get('/', [\App\Http\Controllers\DataAssistantController::class, 'index']);
+            Route::get('/conversations/{id}', [\App\Http\Controllers\DataAssistantController::class, 'show'])->whereNumber('id');
+            Route::post('/ask', [\App\Http\Controllers\DataAssistantController::class, 'ask'])->middleware('throttle:20,1,assistant-ask');
+            Route::post('/items/{id}/{action}', [\App\Http\Controllers\DataAssistantController::class, 'action'])->whereNumber('id')->whereIn('action', ['archive', 'restore', 'cancel', 'retry', 'feedback']);
+        });
         Route::get('/', [C::class, 'index'])->name('index');
         Route::get('/records/{id}', [C::class, 'detail'])->whereNumber('id');
         Route::get('/configuration', [C::class, 'configuration']);
