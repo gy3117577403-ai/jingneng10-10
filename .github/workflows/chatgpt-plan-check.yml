@@ -2,9 +2,9 @@ name: ChatGPT plan connection checks
 
 on:
   push:
-    paths: ['scripts/chatgpt-plan-check/**', '.github/workflows/chatgpt-plan-check.yml']
+    paths: ['scripts/chatgpt-plan-check/**', 'scripts/sem_assistant_bridge.ps1', '.github/workflows/chatgpt-plan-check.yml']
   pull_request:
-    paths: ['scripts/chatgpt-plan-check/**', '.github/workflows/chatgpt-plan-check.yml']
+    paths: ['scripts/chatgpt-plan-check/**', 'scripts/sem_assistant_bridge.ps1', '.github/workflows/chatgpt-plan-check.yml']
 
 permissions:
   contents: read

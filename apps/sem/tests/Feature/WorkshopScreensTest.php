@@ -134,6 +134,9 @@ class WorkshopScreensTest extends TestCase
      */
     public function test_report_pairs_declarations_within_the_period(): void
     {
+        // Keep all paired events inside "today", including when CI runs before 03:00.
+        $this->travelTo(now()->startOfDay()->addHours(12));
+
         $closed = Task::factory()->create();
         $open   = Task::factory()->create();
 

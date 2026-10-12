@@ -37,6 +37,8 @@ powershell -NoProfile -File scripts/sem_assistant_bridge.ps1 -Action Status
 
 停止进程：`powershell -NoProfile -File scripts/sem_assistant_bridge.ps1 -Action Stop`。它保留套餐授权；软件中断开连接或 ChatGPT 设置中的撤销才会结束可续期会话。若连接离线，不能声称点击断开就已在 OpenAI 撤销。
 
+启动脚本以UTF-8 BOM保存，兼容Windows自带PowerShell 5.1；编辑时保留此编码，避免中文被误读后脚本无法解析。`Start`只说明进程已发起，须在软件查询设置看到“套餐已连接”才表示当前检查通过。当前电脑已有绑定时直接执行`Start`，不要重复首次配置步骤。
+
 ## 刷新、错误与用量
 
 接近到期时用原注册的 refresh token 串行刷新，验证返回的身份与 scope 后原子保存最新轮换令牌。暂时网络错误不清除原授权；明确无效的刷新令牌清除后要求重新授权。使用官方文档的协议实现，不依赖非商业 DevKit。
@@ -50,5 +52,7 @@ powershell -NoProfile -File scripts/sem_assistant_bridge.ps1 -Action Status
 数据库新增连接状态表及回答元数据；数据库和附件仍须配套备份。授权文件受 Windows 用户保护，不能把加密文件直接复制到另一台电脑当作可用登录。恢复演练不应启动真实连接或调用模型。CI 只使用虚构来源、签名和令牌夹具。
 
 需要分别通过：离线协议/刷新/存储测试；账号隔离、签名与防重放；权限撤销、取消和迟到结果；真实应用请求与原文定位；没有依据的拒答和提示注入干扰。最终运行验收按更新记录如实登记。企业长期服务、多用户各自授权与正式部署资格仍需后续确定。
+
+2026-10-12已完成本机应用验收：真实虚构规程问答、逐字来源和固定版本打开、用量、个人连接与会话隔离、撤权隐藏、暂停/恢复、离线禁发和归档恢复。真实页面取消样例在模型领取前完成；流中取消和迟到用量保留仍以签名HTTP及离线夹具为证据。通用403不等于授权丢失或余额不足；保留授权并人工重新检查，不自动更换账号或计费路线。详细结果见JN-0017。
 
 官方依据：[账号与会话](https://developers.openai.com/siwc/token-sharing-open-source/profiles-and-sessions)、[模型与推理](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference)、[错误恢复](https://developers.openai.com/siwc/token-sharing-open-source/errors-and-recovery)。

@@ -1,12 +1,13 @@
-param([ValidateSet('Start','Status','Stop')][string]$Action='Start')
+﻿param([ValidateSet('Start','Status','Stop')][string]$Action='Start')
 $ErrorActionPreference='Stop'
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 $projectRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $serverPath=Join-Path $projectRoot 'scripts/chatgpt-plan-check/server.mjs'
 $reportPath=Join-Path $projectRoot '.local/acceptance/chatgpt-plan-check'
 $runtimePath=Join-Path $reportPath 'runtime.json'
 $running=$null
 if(Test-Path -LiteralPath $runtimePath){
-    $runtime=Get-Content -Raw -LiteralPath $runtimePath | ConvertFrom-Json
+    $runtime=Get-Content -Raw -Encoding UTF8 -LiteralPath $runtimePath | ConvertFrom-Json
     $candidate=Get-CimInstance Win32_Process -Filter "ProcessId=$([int]$runtime.pid)" -ErrorAction SilentlyContinue
     if($candidate -and $candidate.Name -eq 'node.exe' -and $candidate.CommandLine.Contains($serverPath) -and $candidate.CommandLine.Contains('--erp')){$running=$candidate}
 }
