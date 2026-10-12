@@ -28,6 +28,7 @@ import {
 import { Pick, PersonAvatar, ReviewStatus, UnitIcon } from "./shared"
 import { kindNames, type Member, type Unit } from "@/data/demo"
 import { membersIn, unitPath, validateMember } from "@/lib/organization"
+import { MotionPanel } from "./MotionPanel"
 
 type SaveMember = (member: Member) => string | null
 function MemberFields({
@@ -187,7 +188,7 @@ export function MemberDetails({
     onDirty(false)
   }
   return (
-    <aside className="detail-panel" aria-label={`成员详情 ${member.name}`}>
+    <MotionPanel label={`成员详情 ${member.name}`}>
       <div className="detail-top">
         {onBack ? (
           <Button variant="ghost" size="sm" onClick={onBack}>
@@ -431,7 +432,7 @@ export function MemberDetails({
           </TabsContent>
         </Tabs>
       )}
-    </aside>
+    </MotionPanel>
   )
 }
 export function UnitDetails({
@@ -458,7 +459,7 @@ export function UnitDetails({
   const direct = membersIn(units, members, unit.id, false),
     children = units.filter((u) => u.parentId === unit.id)
   return (
-    <aside className="detail-panel" aria-label={`组织详情 ${unit.name}`}>
+    <MotionPanel label={`组织详情 ${unit.name}`}>
       <div className="detail-top">
         <span>组织详情</span>
         <Button
@@ -552,7 +553,7 @@ export function UnitDetails({
           <ChevronRight size={14} />
         </Button>
       </div>
-    </aside>
+    </MotionPanel>
   )
 }
 export function NewMemberDialog({

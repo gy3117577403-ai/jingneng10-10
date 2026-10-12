@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react"
+import { motion } from "motion/react"
 import {
   flexRender,
   getCoreRowModel,
@@ -56,6 +57,7 @@ const columnLabels: Record<string, string> = {
   review: "资料核对",
   account: "账号状态",
 }
+const MotionTableRow = motion.create(TableRow)
 export const defaultFilters: Filters = {
   query: "",
   review: "all",
@@ -423,8 +425,16 @@ export function MembersTable({
           </TableHeader>
           <TableBody>
             {table.getRowModel().rows.map((row) => (
-              <TableRow
+              <MotionTableRow
                 key={row.id}
+                layout="position"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{
+                  opacity: { duration: 0.14 },
+                  y: { duration: 0.18 },
+                  layout: { type: "spring", stiffness: 520, damping: 40 },
+                }}
                 className={
                   selectedPerson === row.original.id ? "inspected" : ""
                 }
@@ -451,7 +461,7 @@ export function MembersTable({
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </TableCell>
                 ))}
-              </TableRow>
+              </MotionTableRow>
             ))}
           </TableBody>
         </Table>

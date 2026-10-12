@@ -10,7 +10,6 @@ import ReactFlow, {
   type Viewport,
 } from "reactflow"
 import {
-  ChevronDown,
   ChevronRight,
   LocateFixed,
   Maximize,
@@ -26,11 +25,13 @@ import {
   layoutOrganization,
   membersIn,
   NODE_WIDTH,
-  type Branch,
   type LayoutNode,
 } from "@/lib/organization"
 import { kindNames, type Member, type Unit } from "@/data/demo"
 import "reactflow/dist/style.css"
+import { useReducedMotion } from "motion/react"
+import { useLayoutMotion } from "@/hooks/use-layout-motion"
+import type { MotionBranch } from "@/lib/layout-motion"
 
 type NodeData = {
   item: LayoutNode
@@ -81,7 +82,7 @@ const OrganizationNode = memo(function OrganizationNode({
               aria-expanded={open}
               onClick={() => data.onToggle(unit.id)}
             >
-              {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+              <ChevronRight size={13} />
             </button>
           )}
         </div>
@@ -109,13 +110,27 @@ const OrganizationNode = memo(function OrganizationNode({
     </>
   )
 })
-const SharedBranch = memo(function SharedBranch({ data }: EdgeProps<Branch>) {
+const SharedBranch = memo(function SharedBranch({
+  data,
+}: EdgeProps<MotionBranch>) {
   if (!data) return null
   return (
-    <g data-testid={data.id} className="shared-branch">
+    <g
+      data-testid={data.id}
+      className="shared-branch"
+      opacity={data.opacity ?? 1}
+    >
       <path d={branchPath(data)} className="branch-line" />
       {activeBranchPath(data) && (
-        <path d={activeBranchPath(data)} className="branch-line active" />
+        <path
+          key={data.targets
+            .filter((point) => point.active)
+            .map((point) => point.id)
+            .join(":")}
+          d={activeBranchPath(data)}
+          pathLength={1}
+          className="branch-line active"
+        />
       )}
     </g>
   )
@@ -140,6 +155,7 @@ export type ChartProps = {
   fitSignal: number
 }
 export function OrganizationChart(props: ChartProps) {
+  const reduced = useReducedMotion()
   const {
     units,
     members,
@@ -180,18 +196,25 @@ export function OrganizationChart(props: ChartProps) {
       ),
     [units, members, rootId, expanded, showPeople, selectedId]
   )
+  const animatedLayout = useLayoutMotion(layout, rootId)
   const nodes = useMemo(
     () =>
-      layout.nodes.map((item) => {
+      animatedLayout.nodes.map((item) => {
         const unit = units.find((u) => u.id === item.unitId)!
         return {
           id: item.id,
           type: "organization",
           position: { x: item.x, y: item.y },
+          // Controlled animation replaces node objects every frame. React Flow
+          // 11 otherwise drops measured dimensions and hides nodes until its
+          // ResizeObserver runs again. These cards have fixed known dimensions.
+          width: NODE_WIDTH,
+          height: item.height,
           style: {
             width: NODE_WIDTH,
             height: item.height,
-            pointerEvents: "all" as const,
+            opacity: item.opacity ?? 1,
+            pointerEvents: item.leaving ? ("none" as const) : ("all" as const),
           },
           draggable: false,
           data: {
@@ -215,7 +238,7 @@ export function OrganizationChart(props: ChartProps) {
         }
       }),
     [
-      layout,
+      animatedLayout,
       units,
       members,
       selectedId,
@@ -229,14 +252,14 @@ export function OrganizationChart(props: ChartProps) {
   )
   const edges = useMemo(
     () =>
-      layout.branches.map((branch) => ({
+      animatedLayout.branches.map((branch) => ({
         id: branch.id,
         source: branch.source,
         target: branch.target,
         type: "branch",
         data: branch,
       })),
-    [layout]
+    [animatedLayout]
   )
   const latestLayout = useRef(layout)
   useEffect(() => {
@@ -271,14 +294,42 @@ export function OrganizationChart(props: ChartProps) {
           108 + (wrapper.clientHeight - 164 - height * scale) / 2 - top * scale,
         zoom: scale,
       },
-      { duration: 0 }
+      { duration: reduced ? 0 : 340 }
     )
-  }, [])
+  }, [reduced])
   useEffect(() => {
     if (!fitSignal) return
     const timer = requestAnimationFrame(fitLayout)
     return () => cancelAnimationFrame(timer)
   }, [fitSignal, fitLayout])
+  const previousScope = useRef({ rootId, layout, fitSignal })
+  useEffect(() => {
+    const previous = previousScope.current
+    previousScope.current = { rootId, layout, fitSignal }
+    if (previous.rootId !== rootId || previous.fitSignal !== fitSignal) return
+    const oldIds = new Set(previous.layout.nodes.map((node) => node.id))
+    const added = layout.nodes.filter((node) => !oldIds.has(node.id))
+    if (!added.length) return
+    const frame = requestAnimationFrame(() => {
+      const wrapper = container.current,
+        instance = flow.current
+      if (!wrapper || !instance) return
+      const v = instance.getViewport()
+      // Preserve the current view when the new branch fits. Reveal the full
+      // layout only when expanding would leave its result outside the canvas.
+      if (
+        added.some(
+          (node) =>
+            node.x * v.zoom + v.x < 24 ||
+            (node.x + NODE_WIDTH) * v.zoom + v.x > wrapper.clientWidth - 24 ||
+            node.y * v.zoom + v.y < 96 ||
+            (node.y + node.height) * v.zoom + v.y > wrapper.clientHeight - 56
+        )
+      )
+        fitLayout()
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [layout, rootId, fitSignal, fitLayout])
   useEffect(() => {
     // Keep scale and pan stable. Only nudge the selected card if a panel hides it.
     const frame = requestAnimationFrame(() => {
@@ -295,10 +346,14 @@ export function OrganizationChart(props: ChartProps) {
           : left < 24
             ? 24 - left
             : 0
-      if (delta) instance.setViewport({ ...v, x: v.x + delta }, { duration: 0 })
+      if (delta)
+        instance.setViewport(
+          { ...v, x: v.x + delta },
+          { duration: reduced ? 0 : 260 }
+        )
     })
     return () => cancelAnimationFrame(frame)
-  }, [selectedId, inspectorOpen])
+  }, [selectedId, inspectorOpen, reduced])
   const root = units.find((u) => u.id === rootId)!
   return (
     <div className="chart-canvas" ref={container} aria-label="组织架构画布">
@@ -358,7 +413,7 @@ export function OrganizationChart(props: ChartProps) {
                 flow.current?.setCenter(
                   node.x + NODE_WIDTH / 2,
                   node.y + node.height / 2,
-                  { zoom, duration: 0 }
+                  { zoom, duration: reduced ? 0 : 340 }
                 )
             }}
           >
@@ -369,7 +424,9 @@ export function OrganizationChart(props: ChartProps) {
             variant="ghost"
             size="icon"
             aria-label="缩小架构图"
-            onClick={() => flow.current?.zoomOut()}
+            onClick={() =>
+              flow.current?.zoomOut({ duration: reduced ? 0 : 220 })
+            }
           >
             <Minus />
           </Button>
@@ -378,7 +435,9 @@ export function OrganizationChart(props: ChartProps) {
             variant="ghost"
             size="icon"
             aria-label="放大架构图"
-            onClick={() => flow.current?.zoomIn()}
+            onClick={() =>
+              flow.current?.zoomIn({ duration: reduced ? 0 : 220 })
+            }
           >
             <Plus />
           </Button>

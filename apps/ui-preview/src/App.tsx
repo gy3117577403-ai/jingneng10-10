@@ -71,6 +71,8 @@ import {
 } from "@/data/demo"
 import { membersIn, unitPath, type Filters } from "@/lib/organization"
 import "./workspace.css"
+import "./motion.css"
+import { AnimatePresence, motion } from "motion/react"
 
 type Inspector =
   | { type: "unit"; id: string }
@@ -501,39 +503,50 @@ export default function App() {
           </div>
           <div className={`work-area ${inspector ? "has-inspector" : ""}`}>
             <div className="work-content">
-              {view === "organization" ? (
-                <OrganizationChart
-                  units={units}
-                  members={members}
-                  rootId={rootId}
-                  selectedId={scope}
-                  expanded={expanded}
-                  showPeople={showPeople}
-                  inspectorOpen={!!inspector}
-                  viewport={viewport}
-                  onViewport={setViewport}
-                  onSelect={selectNode}
-                  onToggle={toggleBranch}
-                  onPerson={openPerson}
-                  onMembers={openMembers}
-                  fitSignal={fitSignal}
-                />
-              ) : (
-                <MembersTable
-                  key={scope}
-                  units={units}
-                  members={members}
-                  scope={scope}
-                  filters={filters}
-                  onFilters={setFilters}
-                  selectedPerson={
-                    inspector?.type === "member" ? inspector.id : undefined
-                  }
-                  onOpen={openPerson}
-                  onEdit={editPerson}
-                  onNotify={notify}
-                />
-              )}
+              <AnimatePresence initial={false} mode="wait">
+                <motion.div
+                  key={view}
+                  className="view-stage"
+                  initial={{ opacity: 0, y: 7 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  {view === "organization" ? (
+                    <OrganizationChart
+                      units={units}
+                      members={members}
+                      rootId={rootId}
+                      selectedId={scope}
+                      expanded={expanded}
+                      showPeople={showPeople}
+                      inspectorOpen={!!inspector}
+                      viewport={viewport}
+                      onViewport={setViewport}
+                      onSelect={selectNode}
+                      onToggle={toggleBranch}
+                      onPerson={openPerson}
+                      onMembers={openMembers}
+                      fitSignal={fitSignal}
+                    />
+                  ) : (
+                    <MembersTable
+                      key={scope}
+                      units={units}
+                      members={members}
+                      scope={scope}
+                      filters={filters}
+                      onFilters={setFilters}
+                      selectedPerson={
+                        inspector?.type === "member" ? inspector.id : undefined
+                      }
+                      onOpen={openPerson}
+                      onEdit={editPerson}
+                      onNotify={notify}
+                    />
+                  )}
+                </motion.div>
+              </AnimatePresence>
             </div>
             {inspector && (
               <button
@@ -542,58 +555,72 @@ export default function App() {
                 onClick={closeDetails}
               />
             )}
-            {inspectorUnit && (
-              <UnitDetails
-                unit={inspectorUnit}
-                units={units}
-                members={members}
-                onClose={closeDetails}
-                onPerson={openPerson}
-                onSelect={selectNode}
-                onMembers={() => openMembers(inspectorUnit.id)}
-                onAdd={() => setModal("member")}
-                onEdit={() => {
-                  setEditingUnit(inspectorUnit)
-                  setModal("unit")
-                }}
-              />
-            )}
-            {person && inspector?.type === "member" && (
-              <MemberDetails
-                key={`${person.id}:${inspector.key}`}
-                member={person}
-                units={units}
-                editInitially={inspector.edit}
-                onClose={closeDetails}
-                onBack={
-                  inspector.from
-                    ? () =>
-                        attempt(() =>
-                          setInspector({ type: "unit", id: inspector.from! })
-                        )
-                    : undefined
-                }
-                onLocate={locate}
-                onSave={saveMember}
-                onDirty={setDirty}
-              />
-            )}
+            <AnimatePresence initial={false} mode="wait">
+              {inspectorUnit && (
+                <UnitDetails
+                  key={`unit:${inspectorUnit.id}`}
+                  unit={inspectorUnit}
+                  units={units}
+                  members={members}
+                  onClose={closeDetails}
+                  onPerson={openPerson}
+                  onSelect={selectNode}
+                  onMembers={() => openMembers(inspectorUnit.id)}
+                  onAdd={() => setModal("member")}
+                  onEdit={() => {
+                    setEditingUnit(inspectorUnit)
+                    setModal("unit")
+                  }}
+                />
+              )}
+              {person && inspector?.type === "member" && (
+                <MemberDetails
+                  key={`${person.id}:${inspector.key}`}
+                  member={person}
+                  units={units}
+                  editInitially={inspector.edit}
+                  onClose={closeDetails}
+                  onBack={
+                    inspector.from
+                      ? () =>
+                          attempt(() =>
+                            setInspector({ type: "unit", id: inspector.from! })
+                          )
+                      : undefined
+                  }
+                  onLocate={locate}
+                  onSave={saveMember}
+                  onDirty={setDirty}
+                />
+              )}
+            </AnimatePresence>
           </div>
         </SidebarInset>
-        {toast && (
-          <div className="preview-toast" role="status">
-            <Check size={15} />
-            {toast}
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              aria-label="关闭保存提示"
-              onClick={() => setToast("")}
+        <AnimatePresence>
+          {toast && (
+            <motion.div
+              className="preview-toast"
+              role="status"
+              key={toast}
+              style={{ x: "-50%" }}
+              initial={{ opacity: 0, y: 14, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8 }}
+              transition={{ type: "spring", stiffness: 480, damping: 30 }}
             >
-              <X size={13} />
-            </Button>
-          </div>
-        )}
+              <Check size={15} />
+              {toast}
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label="关闭保存提示"
+                onClick={() => setToast("")}
+              >
+                <X size={13} />
+              </Button>
+            </motion.div>
+          )}
+        </AnimatePresence>
         <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
           <DialogContent className="search-dialog" showCloseButton={false}>
             <DialogHeader>

@@ -1,7 +1,7 @@
-import { useState, type CSSProperties } from "react"
+import { useId, useState, type CSSProperties } from "react"
+import { AnimatePresence, LayoutGroup, motion } from "motion/react"
 import {
   Building2,
-  ChevronDown,
   ChevronRight,
   ChevronsUpDown,
   ListTree,
@@ -35,6 +35,7 @@ export function Directory({
   onSelect: (id: string) => void
   onSearch: () => void
 }) {
+  const motionId = useId()
   const [query, setQuery] = useState(""),
     [expanded, setExpanded] = useState(
       new Set(["company", "sales", "production", "workshop"])
@@ -56,11 +57,24 @@ export function Directory({
     const children = units.filter((u) => u.parentId === unit.id),
       open = !!query || expanded.has(unit.id)
     return (
-      <div className="directory-branch" key={unit.id}>
+      <motion.div
+        layout="position"
+        className="directory-branch"
+        key={unit.id}
+        transition={{ type: "spring", stiffness: 480, damping: 38 }}
+      >
         <div
           className={`directory-row ${selected === unit.id ? "active" : ""}`}
           style={{ "--depth": depth } as CSSProperties}
         >
+          {selected === unit.id && (
+            <motion.span
+              aria-hidden
+              className="directory-active-pill"
+              layoutId="selected-directory"
+              transition={{ type: "spring", stiffness: 520, damping: 36 }}
+            />
+          )}
           {children.length ? (
             <button
               className="directory-toggle"
@@ -75,7 +89,7 @@ export function Directory({
                 })
               }
             >
-              {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+              <ChevronRight size={12} />
             </button>
           ) : (
             <span className="directory-toggle" />
@@ -91,8 +105,20 @@ export function Directory({
             <small>{membersIn(units, members, unit.id).length}</small>
           </button>
         </div>
-        {open && children.map((child) => renderUnit(child, depth + 1))}
-      </div>
+        <AnimatePresence initial={false}>
+          {open && children.length > 0 && (
+            <motion.div
+              key="children"
+              initial={{ opacity: 0, x: -7 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -7 }}
+              transition={{ duration: 0.16 }}
+            >
+              {children.map((child) => renderUnit(child, depth + 1))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
     )
   }
   return (
@@ -150,10 +176,14 @@ export function Directory({
           )}
         </div>
         <nav className="directory-tree" aria-label="组织目录">
-          {units.filter((u) => !u.parentId).map((unit) => renderUnit(unit, 0))}
-          {query && !units.some((u) => u.name.includes(query)) && (
-            <p className="directory-empty">没有匹配的组织</p>
-          )}
+          <LayoutGroup id={motionId}>
+            {units
+              .filter((u) => !u.parentId)
+              .map((unit) => renderUnit(unit, 0))}
+            {query && !units.some((u) => u.name.includes(query)) && (
+              <p className="directory-empty">没有匹配的组织</p>
+            )}
+          </LayoutGroup>
         </nav>
       </SidebarContent>
       <SidebarFooter>
