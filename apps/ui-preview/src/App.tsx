@@ -334,7 +334,7 @@ export default function App() {
     <TooltipProvider delay={300}>
       <SidebarProvider
         className="workspace-root"
-        style={{ "--sidebar-width": "224px" } as CSSProperties}
+        style={{ "--sidebar-width": "232px" } as CSSProperties}
       >
         <Directory
           units={units}

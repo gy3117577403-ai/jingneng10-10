@@ -62,11 +62,11 @@ export function filterMembers(
   )
 }
 
-export const NODE_WIDTH = 196,
-  NODE_HEIGHT = 72,
-  PERSON_HEIGHT = 56,
-  COLUMN_GAP = 72,
-  ROW_GAP = 24
+export const NODE_WIDTH = 212,
+  NODE_HEIGHT = 80,
+  PERSON_HEIGHT = 60,
+  COLUMN_GAP = 64,
+  ROW_GAP = 28
 export type Point = { x: number; y: number }
 export type LayoutNode = {
   id: string
@@ -93,7 +93,6 @@ type Tree = {
   personId?: string
   count?: number
   children: Tree[]
-  height: number
   ownHeight: number
 }
 
@@ -126,7 +125,6 @@ export function layoutOrganization(
           kind: "person",
           children: [],
           ownHeight: PERSON_HEIGHT,
-          height: PERSON_HEIGHT,
         })
       if (direct.length > 4)
         children.push({
@@ -136,7 +134,6 @@ export function layoutOrganization(
           count: direct.length,
           children: [],
           ownHeight: PERSON_HEIGHT,
-          height: PERSON_HEIGHT,
         })
     }
     return {
@@ -145,16 +142,61 @@ export function layoutOrganization(
       kind: "unit",
       children,
       ownHeight: NODE_HEIGHT,
-      height: Math.max(
-        NODE_HEIGHT,
-        children.reduce((sum, c) => sum + c.height, 0) +
-          Math.max(0, children.length - 1) * ROW_GAP
-      ),
     }
   }
   const nodes: LayoutNode[] = [],
     branches: Branch[] = []
-  function place(item: Tree, depth: number, top: number): LayoutNode {
+  type Arrangement = {
+    item: Tree
+    children: Arrangement[]
+    offsets: number[]
+    contour: { top: number; bottom: number }[]
+  }
+  // Pack only columns that actually share space. A deep member branch must
+  // not push a childless sibling below the whole descendant bounding box.
+  function arrange(item: Tree): Arrangement {
+    const children = item.children.map(arrange)
+    const contour: Arrangement["contour"] = []
+    const offsets = children.map((child) => {
+      let offset = 0
+      child.contour.forEach((range, depth) => {
+        if (contour[depth])
+          offset = Math.max(offset, contour[depth].bottom + ROW_GAP - range.top)
+      })
+      child.contour.forEach((range, depth) => {
+        const top = range.top + offset,
+          bottom = range.bottom + offset
+        contour[depth] = contour[depth]
+          ? {
+              top: Math.min(contour[depth].top, top),
+              bottom: Math.max(contour[depth].bottom, bottom),
+            }
+          : { top, bottom }
+      })
+      return offset
+    })
+    const center = offsets.length
+      ? (offsets[0] + offsets[offsets.length - 1]) / 2
+      : 0
+    return {
+      item,
+      children,
+      offsets: offsets.map((offset) => offset - center),
+      contour: [
+        { top: -item.ownHeight / 2, bottom: item.ownHeight / 2 },
+        ...contour.map((range) => ({
+          top: range.top - center,
+          bottom: range.bottom - center,
+        })),
+      ],
+    }
+  }
+  function place(
+    arrangement: Arrangement,
+    depth: number,
+    center: number
+  ): LayoutNode {
+    const { item } = arrangement
     const node: LayoutNode = {
       id: item.id,
       unitId: item.unitId,
@@ -162,16 +204,13 @@ export function layoutOrganization(
       kind: item.kind,
       count: item.count,
       x: depth * (NODE_WIDTH + COLUMN_GAP),
-      y: top + (item.height - item.ownHeight) / 2,
+      y: center - item.ownHeight / 2,
       height: item.ownHeight,
     }
     nodes.push(node)
-    let childTop = top
-    const childNodes = item.children.map((child) => {
-      const result = place(child, depth + 1, childTop)
-      childTop += child.height + ROW_GAP
-      return result
-    })
+    const childNodes = arrangement.children.map((child, index) =>
+      place(child, depth + 1, center + arrangement.offsets[index])
+    )
     if (childNodes.length)
       branches.push({
         id: `branch:${item.id}`,
@@ -188,7 +227,17 @@ export function layoutOrganization(
       })
     return node
   }
-  place(tree(root), 0, 0)
+  place(arrange(tree(root)), 0, 0)
+  const top = Math.min(...nodes.map((node) => node.y))
+  nodes.forEach((node) => {
+    node.y -= top
+  })
+  branches.forEach((branch) => {
+    branch.start.y -= top
+    branch.targets.forEach((target) => {
+      target.y -= top
+    })
+  })
   return { nodes, branches }
 }
 export function branchPath(branch: Branch) {

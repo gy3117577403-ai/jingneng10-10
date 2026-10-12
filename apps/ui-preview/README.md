@@ -31,9 +31,9 @@ npm run dev
 
 ## 动态交互
 
-按钮有悬停抬升、按压缩小和弹簧回弹；Base UI 标签页共用一个滑动指示块。目录选中背景跟随选择移动，箭头旋转，详情面板和页面切换具有进入、退出过渡。表格筛选与排序保留紧凑行高，行位置平滑调整。
+按钮有悬停抬升、轻按缩至98%和无夸张回弹的复位；Base UI 标签页共用一个滑动指示块。目录选中背景跟随选择移动，箭头旋转，详情面板和页面切换具有进入、退出过渡。表格筛选与排序保留紧凑行高，行位置平滑调整。
 
-组织卡片和共享连线使用同一份逐帧布局，360ms 内完成展开或收起；中途反向操作从当前帧继续。新增节点超出可见画布时平滑取景，结果已经可见时保留视口。缩放、定位和适应视图均有短过渡。系统开启 `prefers-reduced-motion` 时关闭位移类动效，CSS 动画与过渡也相应简化。
+组织卡片和共享连线使用同一份逐帧布局，360ms 内完成展开或收起；中途反向操作从当前帧继续。布局按各列轮廓压缩多余空白。新增节点超出可见画布时平滑取景，自动取景优先保持文字可读，手动适应视图用于完整大图；覆盖式详情与窗口变化都按实际宽度避让。缩放、定位和适应视图均有短过渡。系统开启 `prefers-reduced-motion` 时关闭位移类动效，CSS 动画与过渡也相应简化。
 
 ## 组件与来源
 
@@ -47,7 +47,7 @@ npm run dev
 | 画布、缩放和平移 | [React Flow](https://reactflow.dev/) 的 `reactflow` 11.11.4；节点与共享主干连线由本预览实现 |
 | 按压、布局和面板动效 | [Motion for React](https://motion.dev/docs/react) 14.1.0；保留 Base UI 原控件语义和事件 |
 | 图标 | [Lucide](https://lucide.dev/)；全页统一图标来源 |
-| 字体 | Geist（西文）及系统中文字体；标题 18px，正文和主要控件 13px |
+| 字体 | 平台系统无衬线字体（含中文回退）；标题18px、节点名称14px、正文和主要控件13px |
 
 HeroUI、Ant Design、Aceternity、Magic UI 在本轮仅作为设计参考，没有安装，也不将相似外观标注成使用了其组件。shadcn 生成组件的许可见 [LICENSE.shadcn-ui.txt](LICENSE.shadcn-ui.txt)，其他依赖许可随 npm 包提供。
 
@@ -57,6 +57,7 @@ HeroUI、Ant Design、Aceternity、Magic UI 在本轮仅作为设计参考，没
 - `src/components/workspace/`：目录、架构图、成员表格和详情组合。
 - `src/lib/organization.ts`：组织范围、任职去重、布局、单一主干路径与表单校验。
 - `src/lib/layout-motion.ts` 与 `src/hooks/use-layout-motion.ts`：可中断的节点、连线同步布局动画。
+- `src/lib/chart-viewport.ts`：可读字号取景、选中组织与人物分支的面板避让。
 - `src/data/demo.ts`：显式虚构演示资料和本地存储。
 - `src/workspace.css`：统一密度、字体、颜色与响应式规则。
 - `src/motion.css`：控件反馈、选中路径、过渡节奏和减少动态效果适配。

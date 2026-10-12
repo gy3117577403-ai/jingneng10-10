@@ -7,6 +7,8 @@ import {
   layoutOrganization,
   membersIn,
   NODE_WIDTH,
+  NODE_HEIGHT,
+  ROW_GAP,
   unitPath,
   validateMember,
 } from "./organization"
@@ -152,6 +154,43 @@ describe("shared-trunk organization geometry", () => {
     )
     expect(graph.nodes).toHaveLength(1)
     expect(graph.branches).toHaveLength(0)
+  })
+  it("keeps a leaf sibling close to its peer when that peer has a deep member branch", () => {
+    const graph = layoutOrganization(
+      demoUnits,
+      demoMembers,
+      "production",
+      new Set(["production", "workshop", "project"]),
+      true,
+      "project"
+    )
+    const workshop = graph.nodes.find((node) => node.id === "workshop")!
+    const warehouse = graph.nodes.find((node) => node.id === "warehouse")!
+    expect(warehouse.y - workshop.y).toBe(NODE_HEIGHT + ROW_GAP)
+    for (const node of graph.nodes) {
+      for (const other of graph.nodes.filter(
+        (candidate) => candidate.x === node.x && candidate.y > node.y
+      ))
+        expect(other.y - node.y - node.height).toBeGreaterThanOrEqual(ROW_GAP)
+    }
+  })
+  it("packs mixed fully expanded branches without overlapping nodes in any column", () => {
+    for (const selected of demoUnits) {
+      const graph = layoutOrganization(
+        demoUnits,
+        demoMembers,
+        "company",
+        new Set(demoUnits.map((unit) => unit.id)),
+        true,
+        selected.id
+      )
+      for (const node of graph.nodes) {
+        for (const other of graph.nodes.filter(
+          (candidate) => candidate.x === node.x && candidate.y > node.y
+        ))
+          expect(other.y - node.y - node.height).toBeGreaterThanOrEqual(ROW_GAP)
+      }
+    }
   })
   it("cannot loop forever when malformed organizational input contains a cycle", () => {
     const units: Unit[] = [

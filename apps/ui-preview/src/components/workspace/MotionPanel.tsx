@@ -15,17 +15,17 @@ export function MotionPanel({
       className="detail-panel"
       aria-label={label}
       inert={!present}
-      initial={{ opacity: 0, x: reduced ? 0 : 32 }}
+      initial={{ opacity: 0, x: reduced ? 0 : 18 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{
         opacity: 0,
-        x: reduced ? 0 : 24,
+        x: reduced ? 0 : 14,
         transition: { duration: reduced ? 0.05 : 0.12 },
       }}
       transition={
         reduced
           ? { duration: 0.08 }
-          : { type: "spring", stiffness: 420, damping: 36, mass: 0.9 }
+          : { duration: 0.22, ease: [0.22, 1, 0.36, 1] }
       }
     >
       {children}

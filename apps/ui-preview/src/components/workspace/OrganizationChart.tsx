@@ -32,6 +32,7 @@ import "reactflow/dist/style.css"
 import { useReducedMotion } from "motion/react"
 import { useLayoutMotion } from "@/hooks/use-layout-motion"
 import type { MotionBranch } from "@/lib/layout-motion"
+import { frameOrganization, revealOrganization } from "@/lib/chart-viewport"
 
 type NodeData = {
   item: LayoutNode
@@ -40,6 +41,7 @@ type NodeData = {
   count: number
   directCount: number
   selected: boolean
+  root: boolean
   open: boolean
   expandable: boolean
   onSelect: (id: string) => void
@@ -58,6 +60,7 @@ const OrganizationNode = memo(function OrganizationNode({
         <div
           className={`organization-node ${selected ? "selected" : ""}`}
           data-testid={`org-node-${unit.id}`}
+          data-root={data.root}
         >
           <button
             className="node-body nodrag nopan"
@@ -224,6 +227,7 @@ export function OrganizationChart(props: ChartProps) {
             count: membersIn(units, members, unit.id).length,
             directCount: membersIn(units, members, unit.id, false).length,
             selected: selectedId === unit.id,
+            root: rootId === unit.id,
             open: expanded.has(unit.id),
             expandable:
               units.some((u) => u.parentId === unit.id) ||
@@ -242,6 +246,7 @@ export function OrganizationChart(props: ChartProps) {
       units,
       members,
       selectedId,
+      rootId,
       expanded,
       showPeople,
       onSelect,
@@ -262,44 +267,48 @@ export function OrganizationChart(props: ChartProps) {
     [animatedLayout]
   )
   const latestLayout = useRef(layout)
+  const selectedRef = useRef(selectedId)
   useEffect(() => {
     latestLayout.current = layout
-  }, [layout])
-  const fitLayout = useCallback(() => {
-    const wrapper = container.current,
-      instance = flow.current
-    const visible = latestLayout.current.nodes
-    if (!wrapper || !instance || !visible.length) return
-    const left = Math.min(...visible.map((node) => node.x))
-    const top = Math.min(...visible.map((node) => node.y))
-    const width = Math.max(...visible.map((node) => node.x + NODE_WIDTH)) - left
-    const height =
-      Math.max(...visible.map((node) => node.y + node.height)) - top
-    // Use the new layout directly; React Flow's measured nodes can lag one frame
-    // after expanding members. Reserve room for the heading and canvas controls.
-    const scale = Math.min(
-      1,
-      Math.max(
-        0.25,
-        Math.min(
-          (wrapper.clientWidth - 64) / width,
-          (wrapper.clientHeight - 164) / height
-        )
+    selectedRef.current = selectedId
+  }, [layout, selectedId])
+  const canvasFrame = useCallback(() => {
+    const wrapper = container.current
+    if (!wrapper) return null
+    const panel = wrapper
+      .closest(".work-area")
+      ?.querySelector<HTMLElement>(".detail-panel")
+    // At narrow desktop widths the inspector overlays the work area. Reserve
+    // its actual width rather than measuring its animated entrance position.
+    const covered =
+      panel && getComputedStyle(panel).position === "absolute"
+        ? panel.offsetWidth
+        : 0
+    return {
+      width: wrapper.clientWidth - covered,
+      height: wrapper.clientHeight,
+    }
+  }, [])
+  const fitLayout = useCallback(
+    (minimumZoom = 0.25) => {
+      const frame = canvasFrame(),
+        instance = flow.current
+      if (!frame || !instance || frame.width < 220) return
+      instance.setViewport(
+        frameOrganization(
+          latestLayout.current.nodes,
+          frame,
+          selectedRef.current,
+          minimumZoom
+        ),
+        { duration: reduced ? 0 : 280 }
       )
-    )
-    instance.setViewport(
-      {
-        x: (wrapper.clientWidth - width * scale) / 2 - left * scale,
-        y:
-          108 + (wrapper.clientHeight - 164 - height * scale) / 2 - top * scale,
-        zoom: scale,
-      },
-      { duration: reduced ? 0 : 340 }
-    )
-  }, [reduced])
+    },
+    [canvasFrame, reduced]
+  )
   useEffect(() => {
     if (!fitSignal) return
-    const timer = requestAnimationFrame(fitLayout)
+    const timer = requestAnimationFrame(() => fitLayout(0.86))
     return () => cancelAnimationFrame(timer)
   }, [fitSignal, fitLayout])
   const previousScope = useRef({ rootId, layout, fitSignal })
@@ -314,46 +323,49 @@ export function OrganizationChart(props: ChartProps) {
       const wrapper = container.current,
         instance = flow.current
       if (!wrapper || !instance) return
-      const v = instance.getViewport()
+      const v = instance.getViewport(),
+        frame = canvasFrame()
+      if (!frame || frame.width < 220) return
       // Preserve the current view when the new branch fits. Reveal the full
       // layout only when expanding would leave its result outside the canvas.
       if (
         added.some(
           (node) =>
             node.x * v.zoom + v.x < 24 ||
-            (node.x + NODE_WIDTH) * v.zoom + v.x > wrapper.clientWidth - 24 ||
+            (node.x + NODE_WIDTH) * v.zoom + v.x > frame.width - 24 ||
             node.y * v.zoom + v.y < 96 ||
-            (node.y + node.height) * v.zoom + v.y > wrapper.clientHeight - 56
+            (node.y + node.height) * v.zoom + v.y > frame.height - 56
         )
       )
-        fitLayout()
+        fitLayout(0.86)
     })
     return () => cancelAnimationFrame(frame)
-  }, [layout, rootId, fitSignal, fitLayout])
+  }, [layout, rootId, fitSignal, fitLayout, canvasFrame])
   useEffect(() => {
-    // Keep scale and pan stable. Only nudge the selected card if a panel hides it.
-    const frame = requestAnimationFrame(() => {
-      const instance = flow.current,
-        wrapper = container.current
-      const node = latestLayout.current.nodes.find((n) => n.id === selectedId)
-      if (!instance || !wrapper || !node || !inspectorOpen) return
-      const v = instance.getViewport(),
-        left = node.x * v.zoom + v.x,
-        right = (node.x + NODE_WIDTH) * v.zoom + v.x
-      const delta =
-        right > wrapper.clientWidth - 24
-          ? wrapper.clientWidth - 24 - right
-          : left < 24
-            ? 24 - left
-            : 0
-      if (delta)
-        instance.setViewport(
-          { ...v, x: v.x + delta },
-          { duration: reduced ? 0 : 260 }
+    let scheduled = 0
+    const reveal = () => {
+      cancelAnimationFrame(scheduled)
+      scheduled = requestAnimationFrame(() => {
+        const instance = flow.current,
+          frame = canvasFrame()
+        const node = latestLayout.current.nodes.find(
+          (n) => n.id === selectedRef.current
         )
-    })
-    return () => cancelAnimationFrame(frame)
-  }, [selectedId, inspectorOpen, reduced])
+        if (!instance || !frame || !node || frame.width < 220) return
+        const current = instance.getViewport()
+        const next = revealOrganization(node, frame, current)
+        if (next.x !== current.x || next.y !== current.y)
+          instance.setViewport(next, { duration: reduced ? 0 : 260 })
+      })
+    }
+    reveal()
+    const observer = new ResizeObserver(reveal)
+    if (container.current) observer.observe(container.current)
+    return () => {
+      cancelAnimationFrame(scheduled)
+      observer.disconnect()
+    }
+  }, [selectedId, inspectorOpen, canvasFrame, reduced])
   const root = units.find((u) => u.id === rootId)!
   return (
     <div className="chart-canvas" ref={container} aria-label="组织架构画布">
@@ -373,10 +385,9 @@ export function OrganizationChart(props: ChartProps) {
         edgeTypes={edgeTypes}
         onInit={(instance) => {
           flow.current = instance
+          if (!viewport) requestAnimationFrame(() => fitLayout(0.86))
         }}
         defaultViewport={viewport || { x: 0, y: 0, zoom: 1 }}
-        fitView={!viewport}
-        fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
         onMove={syncViewport}
         minZoom={0.25}
         maxZoom={1.5}
@@ -392,10 +403,10 @@ export function OrganizationChart(props: ChartProps) {
         proOptions={{ hideAttribution: true }}
       >
         <Background
-          color="#dce1e7"
+          color="#cdd6e3"
           variant={BackgroundVariant.Dots}
-          gap={20}
-          size={0.7}
+          gap={24}
+          size={0.65}
         />
       </ReactFlow>
       <div className="canvas-footer">
@@ -442,7 +453,7 @@ export function OrganizationChart(props: ChartProps) {
             <Plus />
           </Button>
           <span className="control-divider" />
-          <Button variant="ghost" size="sm" onClick={fitLayout}>
+          <Button variant="ghost" size="sm" onClick={() => fitLayout()}>
             <Maximize />
             适应视图
           </Button>
