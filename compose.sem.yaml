@@ -1,7 +1,7 @@
 name: ${SEM_PROJECT:-jingneng-sem}
 
 x-app: &app
-  image: jingneng/sem:jn-0016
+  image: jingneng/sem:jn-0017
   platform: linux/amd64
   build:
     context: .
@@ -16,6 +16,7 @@ x-app: &app
     APP_URL: ${SEM_APP_URL:-http://127.0.0.1:8090}
   volumes:
     - sem-storage:/app/storage
+    - ./.local/sem/assistant-bridge:/run/jn-assistant:ro
 
 services:
   db:

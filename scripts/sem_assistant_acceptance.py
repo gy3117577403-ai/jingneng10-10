@@ -59,11 +59,11 @@ def main():
         passed('并发提交去重，真实后台完成摘录，来源锁定Word第二页，个人会话与下载权限独立')
         reader.api(f"/assistant/items/{ids['run_id']}/feedback",{'feedback':'incorrect','note':'虚构测试反馈'})
         assert wait(ids)['feedback']=='incorrect'
-        owner.api('/assistant/ask',dict(body,mode='openai'),expected=(409,))
+        reader.api('/assistant/ask',dict(body,mode='openai'),expected=(409,))
         reader.api('/assistant/ask',dict(body,mode='demo'),expected=(422,))
         demo=reader.api('/assistant/ask',dict(body,mode='demo',demo_ack=True)); assert wait(demo)['mode']=='demo'
         assert not reader.api('/assistant')['capabilities']['external_requests']
-        passed('模拟需明确选择，未接入模型请求被拒绝，反馈可保存且不伪装为AI推理')
+        passed('模拟需明确选择，未绑定套餐的账号不能调用模型，反馈可保存且不伪装为AI推理')
         owner.api(f'/records/{rid}/save',{'revision':revision(),'title':'新版核对制度（虚构）','values':{'ref':'DEMO-NEW'},'file_ids':[],'note':'验证旧版本来源'})
         new=publish(); assert wait(ids)['sources'][0]['historical'] is True
         assert wait(ask())['state']=='no_sources'

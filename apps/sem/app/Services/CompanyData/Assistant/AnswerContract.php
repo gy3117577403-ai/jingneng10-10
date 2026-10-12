@@ -5,6 +5,7 @@ class AnswerContract
 {
     public static function validate(array $answer, array $sources): array
     {
+        if (($answer['abstained'] ?? false) === true && ($answer['paragraphs'] ?? null) === []) return ['paragraphs' => [], 'abstained' => true];
         $paragraphs = $answer['paragraphs'] ?? null;
         if (!is_array($paragraphs) || !array_is_list($paragraphs) || !$paragraphs || count($paragraphs) > 12) throw new \UnexpectedValueException('INVALID_ANSWER');
         $map = array_column($sources, null, 'id'); $result = [];
