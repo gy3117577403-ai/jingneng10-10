@@ -1,0 +1,31 @@
+name: Organization component preview
+
+on:
+  push:
+    paths: ['apps/ui-preview/**', '.github/workflows/ui-preview.yml']
+  pull_request:
+    paths: ['apps/ui-preview/**', '.github/workflows/ui-preview.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  component-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: apps/ui-preview
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: apps/ui-preview/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build
