@@ -74,7 +74,7 @@ function joinNodes(nodes, separator) {
 
 function DefaultRowAction({ href, title }) {
     return (
-        <a href={href} className="btn btn-xs btn-info" title={title || '查看详情'} aria-label={title || '查看详情'}>
+        <a href={href} className="btn btn-xs btn-info jn-row-open" title={title || '查看详情'} aria-label={title || '查看详情'}>
             <i className="fas fa-eye" />
         </a>
     );
@@ -312,6 +312,7 @@ export default function DataTable({
                                 return (
                                     <th
                                         key={col.key}
+                                        data-column={col.key}
                                         className={alignClass(col.align)}
                                         tabIndex={field && onSort ? 0 : undefined}
                                         aria-sort={field === sortField ? (sortAsc ? 'ascending' : 'descending') : undefined}
@@ -420,6 +421,7 @@ export default function DataTable({
                                         {visible.map(col => (
                                             <td
                                                 key={col.key}
+                                                data-column={col.key}
                                                 className={`${alignClass(col.align)}${col.bold ? ' font-weight-bold' : ''}`}
                                                 style={(col.nowrap ?? (col.align === 'right' || col.bold)) ? { whiteSpace: 'nowrap' } : {}}
                                             >
