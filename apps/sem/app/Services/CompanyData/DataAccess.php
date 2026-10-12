@@ -9,6 +9,7 @@ class DataAccess
 {
     public const ACTIONS = ['discover' => '查看目录', 'view' => '查看内容', 'create' => '新增资料', 'edit' => '编辑草稿', 'submit' => '提交审核', 'review' => '审核发布', 'download' => '下载原件', 'export' => '导出台账', 'archive' => '归档与恢复', 'request' => '申请查看', 'access' => '审批查看申请', 'collaborate' => '协作与评论'];
     private array $rules; private array $members; private array $categories; private array $grants;
+    private array $organizations = [];
     public function __construct()
     {
         $this->rules = DB::table('jn_data_rules')->get()->groupBy(fn ($r) => "$r->scope_type:$r->scope_id")->all();
@@ -28,6 +29,11 @@ class DataAccess
             if ($r->action !== $action) continue;
             $match = $r->principal_type === 'everyone' || ($r->principal_type === 'user' && (int) $r->principal_id === (int) $user->id)
                 || ($r->principal_type === 'group' && in_array((int) $r->principal_id, $this->members[$user->id] ?? [], true));
+            if (in_array($r->principal_type, ['organization', 'organization_tree'], true)) {
+                $tree = $r->principal_type === 'organization_tree'; $key = $user->id.':'.(int) $tree;
+                $this->organizations[$key] ??= \App\Services\Organization\OrgAccess::membershipUnits($user->id, $tree);
+                $match = in_array((int) $r->principal_id, $this->organizations[$key], true);
+            }
             if ($match) $matches[] = $r;
         }
         $deny = collect($matches)->contains(fn ($r) => $r->effect === 'deny');

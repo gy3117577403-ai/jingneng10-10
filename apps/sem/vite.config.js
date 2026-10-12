@@ -31,6 +31,7 @@ export default defineConfig({
             input: [
                 'resources/sass/app.scss',
                 'resources/js/app.js',
+                'resources/js/organization.jsx',
                 'resources/js/presales.jsx',
                 'resources/js/workspace.js',
                 'resources/js/guest.js',

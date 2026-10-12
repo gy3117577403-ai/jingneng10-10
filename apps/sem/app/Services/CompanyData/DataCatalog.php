@@ -15,17 +15,19 @@ class DataCatalog
         return ['categories' => DB::table('jn_data_categories')->orderBy('position')->get()->map(fn ($c) => [...(array) $c, 'fields' => DataSupport::decode($c->fields)])->all(),
             'groups' => DB::table('jn_data_groups')->orderBy('id')->get()->map(fn ($g) => [...(array) $g, 'members' => DB::table('jn_data_members')->where('group_id', $g->id)->pluck('user_id')->all()])->all(),
             'rules' => DB::table('jn_data_rules')->get()->all(), 'users' => DataSupport::users(), 'actions' => DataAccess::ACTIONS,
+            'organizations' => DB::table('jn_org_units')->whereNull('deleted_at')->where('status', 'active')->get(['id', 'name', 'parent_id'])->all(),
             'events' => DB::table('jn_data_events')->whereIn('label', ['更新工作组', '更新分类与字段权限', '更新资料权限'])->orderByDesc('id')->limit(100)->get()->map(fn ($e) => ['id' => $e->id, 'label' => $e->label, 'actor' => User::withTrashed()->find($e->actor_id)?->name ?? '已停用人员', 'detail' => DataSupport::decode($e->detail), 'created_at' => $e->created_at])->all()];
     }
 
     public function rules(string $scope, int $id, array $rules): void
     {
-        validator(['rules' => $rules], ['rules' => 'array|max:500', 'rules.*.principal_type' => 'required|in:everyone,user,group',
+        validator(['rules' => $rules], ['rules' => 'array|max:500', 'rules.*.principal_type' => 'required|in:everyone,user,group,organization,organization_tree',
             'rules.*.principal_id' => 'required|integer|min:0', 'rules.*.action' => 'required|in:' . implode(',', array_keys(DataAccess::ACTIONS)), 'rules.*.effect' => 'required|in:allow,deny'])->validate();
         $seen = []; $rows = [];
         foreach ($rules as $r) {
             if ($r['principal_type'] === 'user') DataSupport::user($r['principal_id']);
             if ($r['principal_type'] === 'group') abort_unless(DB::table('jn_data_groups')->where('id', $r['principal_id'])->exists(), 422, '工作组不存在。');
+            if (in_array($r['principal_type'], ['organization', 'organization_tree'], true)) abort_unless(DB::table('jn_org_units')->where('id', $r['principal_id'])->whereNull('deleted_at')->where('status', 'active')->exists(), 422, '组织不存在或已停用。');
             $pid = $r['principal_type'] === 'everyone' ? 0 : (int) $r['principal_id'];
             $key = $r['principal_type'] . ':' . $pid . ':' . $r['action'];
             abort_if(isset($seen[$key]), 422, '同一人员或工作组的同一操作只能配置一次。'); $seen[$key] = true;

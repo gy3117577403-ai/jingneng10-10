@@ -95,8 +95,8 @@ def backup():
         metadata = {
             'created_at': datetime.now().astimezone().isoformat(),
             'git_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
-            'image': json.loads(subprocess.check_output(['docker', 'image', 'inspect', 'jingneng/sem:jn-0017'], text=True))[0]['Id'],
-            'baseline': {'counts': baseline['counts'], 'files': baseline['files'], 'locale': baseline['locale']},
+            'image': json.loads(subprocess.check_output(['docker', 'image', 'inspect', 'jingneng/sem:jn-0018'], text=True))[0]['Id'],
+            'baseline': {'counts': baseline['counts'], 'files': baseline['files'], 'locale': baseline['locale'], 'organization_integrity': baseline.get('organization_integrity', {})},
             'files': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in destination.iterdir() if p.is_file()},
         }
         (destination / 'manifest.json').write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
@@ -149,7 +149,9 @@ def restore_new(source):
     actual = snapshot(project)
     for field in ['counts', 'files', 'locale']:
         assert actual[field] == manifest['baseline'][field], f'Restored {field} differs'
-    print('New environment restored: database rows, file hashes and login match the backup.')
+    if 'organization_integrity' in manifest['baseline']:
+        assert actual.get('organization_integrity') == manifest['baseline']['organization_integrity'], 'Restored organization content differs'
+    print('New environment restored: database rows, file hashes, organization content and login match the backup.')
 
 
 def restore_check(source):
@@ -178,10 +180,12 @@ def restore_check(source):
         assert before['counts'] == after['counts'], 'Restored row counts differ'
         assert before['files'] == after['files'], 'Restored file hashes differ'
         assert before['locale'] == after['locale'] == 'zh-CN'
+        if 'organization_integrity' in before:
+            assert before['organization_integrity'] == after.get('organization_integrity'), 'Restored organization content differs'
         result = {'passed': True, 'project': project, 'backup': str(source), 'counts': after['counts'],
-                  'file_count': len(after['files']), 'file_hashes': after['files'], 'login': True,
+                  'file_count': len(after['files']), 'file_hashes': after['files'], 'organization_integrity': after.get('organization_integrity', {}), 'login': True,
                   'completed_at': datetime.now().astimezone().isoformat()}
-        destination = ROOT / '.local' / 'acceptance' / 'jn-0017' / 'restore.json'
+        destination = ROOT / '.local' / 'acceptance' / 'jn-0018' / 'restore.json'
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
         success = True
@@ -210,11 +214,11 @@ def package():
     shutil.copytree(saved, destination / 'backup')
     run(['git', 'archive', '--format=zip', '-o', str(destination / 'source.zip'), 'HEAD'])
     run(['git', 'bundle', 'create', str(destination / 'history.bundle'), '--all'])
-    images = ['jingneng/sem:jn-0017']
+    images = ['jingneng/sem:jn-0018']
     for service in ['db', 'redis', 'converter']:
         container = compose('ps', '-q', service, stdout=subprocess.PIPE).stdout.decode().strip()
         image = subprocess.check_output(['docker', 'inspect', '--format', '{{.Image}}', container], text=True).strip()
-        tag = f'jingneng/sem-{service}:jn-0017'
+        tag = f'jingneng/sem-{service}:jn-0018'
         run(['docker', 'tag', image, tag])
         images.append(tag)
     run(['docker', 'save', '-o', str(destination / 'images.tar'), *images])
@@ -226,9 +230,9 @@ def package():
 3. 把 backup 目录复制到新目录的 .local/sem/transfer；再把 backup 内的 compose.env、runtime.env、credentials.txt 复制到 .local/sem/。
 4. 在新目录打开终端，运行 docker load -i <本包路径>/images.tar（路径含空格时加双引号）。
 5. 在 .local/sem/compose.env 末尾加入以下三行，使用包内已校验镜像：
-   SEM_DB_IMAGE=jingneng/sem-db:jn-0017
-   SEM_REDIS_IMAGE=jingneng/sem-redis:jn-0017
-   SEM_CONVERTER_IMAGE=jingneng/sem-converter:jn-0017
+   SEM_DB_IMAGE=jingneng/sem-db:jn-0018
+   SEM_REDIS_IMAGE=jingneng/sem-redis:jn-0018
+   SEM_CONVERTER_IMAGE=jingneng/sem-converter:jn-0018
 6. 运行 python scripts/sem.py restore-new --backup .local/sem/transfer。
    已有同名容器或数据卷会被拒绝，不覆盖旧环境。首次恢复不要运行 start。
 7. 打开 http://127.0.0.1:8090，用 credentials.txt 登录。
@@ -295,7 +299,7 @@ def main():
             'BROADCAST_DRIVER=log', 'MAIL_MAILER=array', 'PULSE_ENABLED=false',
         ]) + '\n', encoding='utf-8')
         run(['docker', 'run', '--rm', '--network', 'none', '--env-file', str(test_env),
-             '--tmpfs', '/app/storage', '--tmpfs', '/app/tests_tmp:uid=33,gid=33,mode=0770', 'jingneng/sem:jn-0017', 'php',
+             '--tmpfs', '/app/storage', '--tmpfs', '/app/tests_tmp:uid=33,gid=33,mode=0770', 'jingneng/sem:jn-0018', 'php',
              # The full suite bootstraps hundreds of app instances in one process.
              # This limit applies only to this disposable, network-isolated test run.
              '-d', 'memory_limit=1G',

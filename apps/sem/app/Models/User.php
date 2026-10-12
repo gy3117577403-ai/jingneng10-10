@@ -38,6 +38,21 @@ class User extends Authenticatable implements MustVerifyEmail
 {
     use HasApiTokens, HasRoles, HasFactory, LogsActivity, Notifiable, SoftDeletes;
 
+    protected static function booted(): void
+    {
+        // Protect the single owner even when an existing account-management page is used.
+        $protectOwner = function (User $user): void {
+            if (\Illuminate\Support\Facades\Schema::hasTable('jn_org_state') &&
+                (int) \Illuminate\Support\Facades\DB::table('jn_org_state')->where('id', 1)->value('owner_user_id') === (int) $user->id) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['account' => '请先在组织权限设置中转交总管理员，再停用或删除此账号。']);
+            }
+        };
+        static::deleting($protectOwner);
+        static::updating(function (User $user) use ($protectOwner): void {
+            if ($user->isDirty('banned_until') && $user->banned_until && now()->lt($user->banned_until)) $protectOwner($user);
+        });
+    }
+
     public function sendEmailVerificationNotification(): void
     {
         $this->notify(new \App\Notifications\VerifyEmailNotification);

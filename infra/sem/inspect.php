@@ -25,6 +25,12 @@ $tables = ['users', 'companies', 'quotes', 'quote_lines', 'orders', 'order_lines
            'jn_data_state', 'jn_data_groups', 'jn_data_members', 'jn_data_categories', 'jn_data_records', 'jn_data_versions',
            'jn_data_files', 'jn_data_rules', 'jn_data_access_requests', 'jn_data_tasks', 'jn_data_comments', 'jn_data_imports', 'jn_data_events', 'jn_data_receipts', 'jn_data_documents', 'jn_data_chunks'];
 $tables = [...$tables, 'jn_data_conversations', 'jn_data_answers'];
+$orgTables = ['jn_org_state', 'jn_org_units', 'jn_org_positions', 'jn_org_people', 'jn_org_assignments', 'jn_org_roles', 'jn_org_grants', 'jn_org_events', 'jn_org_receipts'];
+$tables = [...$tables, ...$orgTables];
+$organizationIntegrity = [];
+foreach ($orgTables as $table) {
+    if (Illuminate\Support\Facades\Schema::hasTable($table)) $organizationIntegrity[$table] = hash('sha256', DB::table($table)->orderBy('id')->get()->toJson());
+}
 $counts = [];
 foreach ($tables as $table) {
     if (Illuminate\Support\Facades\Schema::hasTable($table)) { $counts[$table] = DB::table($table)->count(); }
@@ -58,7 +64,7 @@ echo json_encode([
     'stock_positions' => App\Models\Products\StockLocationProducts::get()->map(fn ($row) => [
         'id' => $row->id, 'qty' => $row->getCurrentStockMove(), 'product_id' => $row->products_id,
     ]),
-    'counts' => $counts, 'routes' => $routes, 'quotes' => $quotes, 'supplier' => $supplier,
+    'counts' => $counts, 'organization_integrity' => $organizationIntegrity, 'routes' => $routes, 'quotes' => $quotes, 'supplier' => $supplier,
     'sheet_product' => App\Models\Products\Products::where('code', 'DEMO-SHEET-2MM')->first(),
     'files' => $files, 'locale' => config('app.locale'), 'timezone' => config('app.timezone'),
     'queue_connection' => config('queue.default'), 'debug' => config('app.debug'),

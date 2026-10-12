@@ -11,6 +11,9 @@ class CheckUserRole
 {
     public function handle(Request $request, Closure $next): Response
     {
+        if (auth()->check()) {
+            abort_unless(\App\Services\CompanyData\DataSupport::active(auth()->user()), 403, '此账号或关联成员已停用，请联系总管理员。');
+        }
         if (auth()->check() && auth()->user()->roles()->count() === 0) {
             if (Route::has('setup.index')) {
                 return redirect()->route('setup.index');
