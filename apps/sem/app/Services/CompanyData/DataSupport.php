@@ -10,7 +10,12 @@ class DataSupport
     private array $createdFiles = [];
     public static function json(mixed $value): string { return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR); }
     public static function decode(?string $value): array { return $value === null ? [] : json_decode($value, true, 64, JSON_THROW_ON_ERROR); }
-    public static function active(User $user): bool { return !$user->trashed() && !($user->banned_until && now()->lt($user->banned_until)); }
+    public static function active(User $user): bool
+    {
+        if ($user->trashed() || ($user->banned_until && now()->lt($user->banned_until))) return false;
+        $person = DB::table('jn_org_people')->where('user_id', $user->id)->first(['status', 'deleted_at']);
+        return !$person || (!$person->deleted_at && $person->status === 'active');
+    }
     public static function manager(User $user): bool { return self::active($user) && ($user->hasRole('Admin') || $user->can('管理资料中心')); }
     public static function revision(object $row, mixed $revision): void { abort_unless((int) $row->revision === (int) $revision, 409, '内容已被更新，请重新读取后再提交。填写内容已保留。'); }
     public static function user(int $id): User { $user = User::find($id); abort_unless($user && self::active($user), 422, '所选人员当前不可用。'); return $user; }

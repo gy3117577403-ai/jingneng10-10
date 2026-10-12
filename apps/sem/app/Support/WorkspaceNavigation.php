@@ -36,6 +36,7 @@ class WorkspaceNavigation
             $groups[$mapping[$text] ?? 'system'][] = $item;
         }
         array_unshift($groups['workspace'], ['text' => '公司资料', 'url' => 'company-data', 'icon' => 'fas fa-folder-open', 'active' => ['company-data', 'company-data/*', '*/company-data', '*/company-data/*']]);
+        $groups['workspace'][] = ['text' => '组织与成员', 'url' => 'organization', 'icon' => 'fas fa-sitemap', 'active' => ['organization', 'organization/*', '*/organization', '*/organization/*']];
         $result = [...$top, $home, $presales];
         $labels = ['workspace' => ['协作与资料', 'far fa-copy'], 'sales' => ['销售与客户', 'far fa-handshake'],
             'production' => ['计划与制造', 'fas fa-layer-group'], 'supply' => ['采购与仓储', 'fas fa-boxes'],
