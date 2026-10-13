@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import {
   ArrowLeft,
@@ -7,13 +7,11 @@ import {
   CheckCheck,
   ChevronDown,
   ChevronRight,
-  CircleCheck,
-  CircleHelp,
-  FileCheck2,
   FileSearch,
   History,
   Info,
   Plus,
+  RotateCcw,
   ShieldCheck,
   Trash2,
 } from "lucide-react"
@@ -21,6 +19,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   costTotal,
   issues,
@@ -32,10 +38,14 @@ import {
   type DraftLine,
   type Quote,
 } from "./model"
-import { Empty, Status, TypeIcon } from "./shared"
+import { DetailSheet, Empty, Status } from "./shared"
+import { historyLines } from "./demo"
 
+export type EditorState = { tab: "lines" | "costs"; selected: string }
 export function Editor({
   quote,
+  state,
+  onStateChange,
   onChange,
   onBack,
   onHistory,
@@ -45,6 +55,8 @@ export function Editor({
   onRemove,
 }: {
   quote: Quote
+  state: EditorState
+  onStateChange: (state: EditorState) => void
   onChange: (quote: Quote) => void
   onBack: () => void
   onHistory: () => void
@@ -54,13 +66,26 @@ export function Editor({
   onRemove: (id: string) => void
 }) {
   const reduced = useReducedMotion()
-  const [selected, setSelected] = useState(quote.lines[0]?.id ?? ""),
-    [openCosts, setOpenCosts] = useState(true)
-  const [expanded, setExpanded] = useState<string[]>([quote.lines[0]?.id ?? ""])
+  const [noteOpen, setNoteOpen] = useState(false)
+  const [basisId, setBasisId] = useState<string | null>(null)
+  const [basisOpen, setBasisOpen] = useState(false)
+  const costTabRef = useRef<HTMLButtonElement>(null)
+  const costHeaders = useRef<Record<string, HTMLButtonElement | null>>({})
+  const [expandedCosts, setExpandedCosts] = useState<
+    Record<string, string | null>
+  >({})
   const line =
-    quote.lines.find((item) => item.id === selected) ?? quote.lines[0]
-  const problems = issues(quote),
-    locked = quote.status === "预览已核对"
+    quote.lines.find((item) => item.id === state.selected) ?? quote.lines[0]
+  const locked = quote.status === "预览已核对",
+    problems = issues(quote)
+  const pendingLines = quote.lines.filter((item) => !item.checked).length
+  const activeCost =
+    line &&
+    (line.id in expandedCosts
+      ? expandedCosts[line.id]
+      : (line.costs.find((cost) => !cost.checked)?.id ?? null))
+  const basis = line?.costs.find((cost) => cost.id === basisId)
+  const source = line && historyLines.find((item) => item.id === line.sourceId)
   const patch = (id: string, changes: Partial<DraftLine>) =>
     onChange({
       ...quote,
@@ -68,8 +93,8 @@ export function Editor({
         item.id === id ? updateLine(item, changes) : item
       ),
     })
-  const patchCost = (cost: Cost, changes: Partial<Cost>) =>
-    line &&
+  const patchCost = (cost: Cost, changes: Partial<Cost>) => {
+    if (!line || locked) return
     patch(line.id, {
       costs: line.costs.map((item) =>
         item.id === cost.id
@@ -83,469 +108,463 @@ export function Editor({
           : item
       ),
     })
+  }
   const allCostsChecked = line?.costs.every(
     (cost) =>
       cost.price !== null &&
+      Number.isFinite(cost.price) &&
       cost.price >= 0 &&
       cost.checked &&
       cost.source.trim()
   )
+  const showCosts = (id?: string) => {
+    onStateChange({ tab: "costs", selected: id ?? line?.id ?? "" })
+    costTabRef.current?.focus({ preventScroll: true })
+  }
   return (
     <div className="q-editor">
-      <div className="q-editor-heading">
-        <div>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="返回报价工作台"
-            onClick={onBack}
-          >
-            <ArrowLeft />
-          </Button>
-          <div>
-            <h1>{quote.title}</h1>
-            <p>
-              <span className="mono">{quote.id}</span>
-              <span>V{quote.revision}</span>
-              <span>{quote.customer}</span>
-            </p>
-          </div>
+      <header className="q-document-head">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="返回报价工作台"
+          onClick={onBack}
+        >
+          <ArrowLeft />
+        </Button>
+        <div className="q-document-title">
+          <h1>{quote.title}</h1>
+          <p>
+            {quote.customer}
+            <span>·</span>
+            <span className="mono">{quote.id}</span>
+            <span>· V{quote.revision}</span>
+          </p>
         </div>
-        <div>
+        <div className="q-document-actions">
           <Status tone={locked ? "green" : "neutral"}>
-            {locked ? "预览已核对" : "报价草稿"}
+            {locked ? "预览已核对" : "草稿"}
           </Status>
           <Button variant="outline" onClick={onDocument}>
             <FileSearch />
             报价单预览
           </Button>
-          {locked ? (
-            <Button onClick={onRevision}>
-              创建修订草稿
-              <Plus />
-            </Button>
-          ) : (
-            <Button onClick={onReview}>
-              <FileCheck2 />
-              核对报价
-            </Button>
-          )}
         </div>
-      </div>
-      <div className="q-editor-grid">
-        <section className="q-editor-main">
-          <div className="q-stepbar">
-            <span className="done">
-              <CircleCheck />
-              需求已记录
-            </span>
-            <i />
-            <span className={locked ? "done" : "active"}>
-              {locked ? <CircleCheck /> : <span className="q-step-dot">2</span>}
-              明细与核价
-            </span>
-            <i />
-            <span className={locked ? "done" : ""}>
-              {locked ? <CircleCheck /> : <span className="q-step-dot">3</span>}
-              报价核对
-            </span>
-          </div>
-          <div className={`q-context-note ${locked ? "success" : ""}`}>
-            {locked ? <ShieldCheck /> : <Info />}
-            <div>
-              <strong>
-                {locked
-                  ? "此演示版本已锁定"
-                  : quote.type === "成套"
-                    ? "整柜报价，分项核价"
-                    : "按图报价，逐项核对"}
-              </strong>
-              <span>
-                {locked
-                  ? "创建修订草稿可继续修改，已核对版本保留。此状态仅用于交互预览。"
-                  : "内部成本在展开项中维护，客户报价单仅展示产品与对外价格。"}
-              </span>
+      </header>
+      <Tabs
+        value={state.tab}
+        onValueChange={(value) =>
+          onStateChange({ ...state, tab: value as EditorState["tab"] })
+        }
+        className="q-editor-workspace"
+      >
+        <div className="q-editor-tabs">
+          <TabsList variant="line" aria-label="报价工作区">
+            <TabsTrigger value="lines">
+              报价明细 <span>{quote.lines.length}</span>
+            </TabsTrigger>
+            <TabsTrigger value="costs" ref={costTabRef}>
+              成本核价
+              {pendingLines > 0 && (
+                <span className="q-pending-count">{pendingLines}</span>
+              )}
+            </TabsTrigger>
+          </TabsList>
+          <span className="q-tab-context">
+            {quote.type}业务<span>·</span>人民币 / 未税
+          </span>
+        </div>
+        <TabsContent value="lines" className="q-editor-panel">
+          <motion.section
+            initial={{ opacity: 0, y: 3 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: reduced ? 0 : 0.16 }}
+          >
+            <div className="q-section-toolbar">
+              <div>
+                <h2>本次报价明细</h2>
+                <p>维护数量与对外价格，成本在「成本核价」中处理。</p>
+              </div>
+              {!locked && (
+                <Button variant="outline" onClick={onHistory}>
+                  <Plus />
+                  从历史添加
+                </Button>
+              )}
             </div>
-          </div>
-          <div className="q-section-heading">
-            <div>
-              <h2>报价明细</h2>
-              <span>
-                {quote.lines.length} 项 · {quote.type}业务
-              </span>
-            </div>
-            {!locked && (
-              <Button variant="outline" onClick={onHistory}>
-                <History />
-                从历史复用
-              </Button>
-            )}
-          </div>
-          <div className="q-line-grid q-line-labels">
-            <span>产品 / 配置</span>
-            <span>数量</span>
-            <span>未税单价</span>
-            <span>未税金额</span>
-            <span />
-          </div>
-          <div className="q-lines">
-            {quote.lines.map((item) => (
-              <div
-                className={`q-line-block ${line?.id === item.id ? "selected" : ""}`}
-                key={item.id}
-              >
-                <div className="q-line-grid q-line-row">
-                  <div className="q-line-name">
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      aria-label={`${expanded.includes(item.id) ? "收起" : "展开"}${item.name}成本`}
-                      aria-expanded={expanded.includes(item.id)}
-                      onClick={() => {
-                        setSelected(item.id)
-                        setExpanded(
-                          expanded.includes(item.id)
-                            ? expanded.filter((id) => id !== item.id)
-                            : [...expanded, item.id]
-                        )
-                      }}
-                    >
-                      <motion.span
-                        animate={{
-                          rotate: expanded.includes(item.id) ? 90 : 0,
-                        }}
-                      >
-                        <ChevronRight />
-                      </motion.span>
-                    </Button>
-                    <div>
-                      <button
-                        className="q-text-button"
-                        onClick={() => setSelected(item.id)}
-                      >
-                        {item.name}
-                      </button>
+            <div className="q-lines-table">
+              <div className="q-edit-columns q-list-labels" aria-hidden="true">
+                <span>产品 / 规格</span>
+                <span>数量</span>
+                <span>未税单价</span>
+                <span>未税金额</span>
+                <span>核价状态</span>
+                <span />
+              </div>
+              {quote.lines.map((item) => {
+                const missing = item.costs.some((cost) => cost.price === null)
+                return (
+                  <div className="q-edit-columns q-edit-row" key={item.id}>
+                    <div className="q-line-product">
+                      <strong>{item.name}</strong>
                       <span className="q-meta">{item.spec}</span>
+                      <span className="q-meta mono">{item.drawing}</span>
                     </div>
-                  </div>
-                  <label className="q-inline-input">
-                    <Input
-                      type="number"
-                      min="1"
-                      max="1000000"
-                      step="1"
-                      aria-label={`${item.name}数量`}
-                      value={item.qty || ""}
-                      disabled={locked}
-                      onChange={(event) =>
-                        patch(item.id, {
-                          qty: Math.max(0, Number(event.target.value)),
-                        })
+                    <label className="q-quantity-input">
+                      <span className="q-mobile-label">数量</span>
+                      <Input
+                        type="number"
+                        min="1"
+                        step="1"
+                        aria-label={item.name + "数量"}
+                        value={item.qty || ""}
+                        disabled={locked}
+                        onChange={(event) =>
+                          patch(item.id, {
+                            qty: Math.max(0, Number(event.target.value)),
+                          })
+                        }
+                      />
+                      <span>{item.unit}</span>
+                    </label>
+                    <label className="q-price-input">
+                      <span className="q-mobile-label">未税单价</span>
+                      <Input
+                        type="number"
+                        min="0"
+                        step=".01"
+                        aria-label={item.name + "未税单价"}
+                        value={item.price || ""}
+                        disabled={locked}
+                        onChange={(event) =>
+                          patch(item.id, {
+                            price: Math.max(0, Number(event.target.value)),
+                          })
+                        }
+                      />
+                    </label>
+                    <strong className="q-money q-line-amount">
+                      <span className="q-mobile-label">未税金额 </span>
+                      {money(lineAmount(item.price, item.qty))}
+                    </strong>
+                    <button
+                      className={
+                        "q-line-status " + (item.checked ? "complete" : "")
                       }
-                    />
-                    <span>{item.unit}</span>
-                  </label>
-                  <Input
-                    className="q-money-input"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    aria-label={`${item.name}未税单价`}
-                    value={item.price || ""}
-                    disabled={locked}
-                    onChange={(event) =>
-                      patch(item.id, {
-                        price: Math.max(0, Number(event.target.value)),
-                      })
-                    }
-                  />
-                  <strong className="q-money">
-                    {money(lineAmount(item.price, item.qty))}
-                  </strong>
-                  {!locked && (
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      aria-label={`移除${item.name}`}
-                      onClick={() => onRemove(item.id)}
+                      onClick={() => showCosts(item.id)}
+                      aria-label={"核价：" + item.name}
                     >
-                      <Trash2 />
-                    </Button>
-                  )}
-                </div>
-                <AnimatePresence initial={false}>
-                  {expanded.includes(item.id) && (
-                    <motion.div
-                      className="q-collapse"
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: reduced ? 0 : 0.22 }}
-                    >
-                      <div className="q-expanded-costs">
-                        <div className="q-cost-caption">
-                          <span>单{item.unit}内部成本</span>
-                          <span>金额 / 元</span>
-                        </div>
-                        {item.costs.map((cost) => (
-                          <button
-                            key={cost.id}
-                            className="q-cost-branch"
-                            onClick={() => {
-                              setSelected(item.id)
-                              setOpenCosts(true)
-                              requestAnimationFrame(() =>
-                                document
-                                  .getElementById(`price-${cost.id}`)
-                                  ?.focus()
-                              )
-                            }}
-                          >
-                            <span className="q-branch-dot" />
-                            <strong>{cost.name}</strong>
-                            <span className="q-cost-spec">{cost.spec}</span>
-                            <span
-                              className={
-                                cost.price === null
-                                  ? "q-amber-text"
-                                  : "q-number"
-                              }
-                            >
-                              {cost.price === null
-                                ? "待核价"
-                                : money(cost.price * cost.qty)}
-                            </span>
-                            {cost.checked ? (
-                              <Check className="q-green-icon" />
-                            ) : (
-                              <CircleHelp className="q-amber-icon" />
-                            )}
-                          </button>
-                        ))}
-                        <div className="q-cost-subtotal">
-                          <span>内部成本合计</span>
-                          <strong>
-                            {costTotal(item) === null
-                              ? "待补齐"
-                              : `¥ ${money(costTotal(item)!)}`}
-                          </strong>
-                        </div>
-                        <div className="q-line-diff">
-                          <History />
-                          <span>
-                            历史数量 {item.sourceQty} {item.unit}
-                            {item.qty !== item.sourceQty && (
-                              <>
-                                {" "}
-                                <ArrowRight />{" "}
-                                <b>
-                                  本次 {item.qty} {item.unit}
-                                </b>
-                              </>
-                            )}
-                            <span className="q-diff-separator">·</span>历史单价
-                            ¥ {money(item.sourcePrice)}
-                          </span>
-                          {item.checked ? (
-                            <span className="q-green-text">
-                              <Check />
-                              差异已核对
-                            </span>
-                          ) : (
-                            <button
-                              className="q-link"
-                              onClick={() => setSelected(item.id)}
-                            >
-                              核对本次差异
-                              <ArrowRight />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            ))}
-          </div>
-          {!quote.lines.length && (
-            <Empty
-              title="从一条历史明细开始"
-              message="找到相近配置，复用后核对本次差异。"
-            />
-          )}
-          {!locked && (
-            <button className="q-add-line" onClick={onHistory}>
-              <Plus />
-              从历史报价添加明细
-            </button>
-          )}
-          <div className="q-commercial">
-            <div>
-              <label htmlFor="quote-note">报价范围与说明</label>
-              <Textarea
-                id="quote-note"
-                value={quote.note}
-                disabled={locked}
-                onChange={(event) =>
-                  onChange({ ...quote, note: event.target.value })
-                }
-                placeholder="填写包含的供货、装配、调试范围及需要说明的条件"
-              />
+                      {item.checked ? (
+                        <Check />
+                      ) : (
+                        <span className="q-state-dot" />
+                      )}
+                      {item.checked
+                        ? "已核对"
+                        : missing
+                          ? "待补价格"
+                          : "待核对"}
+                      <ChevronRight />
+                    </button>
+                    {!locked && (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="q-remove-line"
+                        aria-label={"移除" + item.name}
+                        onClick={() => onRemove(item.id)}
+                      >
+                        <Trash2 />
+                      </Button>
+                    )}
+                  </div>
+                )
+              })}
+              {!quote.lines.length && (
+                <Empty
+                  title="添加第一条报价明细"
+                  message="从历史报价选择相近产品，再核对本次配置和价格。"
+                />
+              )}
             </div>
-            <div className="q-total">
-              <div>
-                <span>报价口径</span>
-                <span>人民币 · 未税</span>
-              </div>
-              <div>
-                <span>明细数量</span>
-                <span>{quote.lines.length} 项</span>
-              </div>
-              <div className="q-grand-total">
-                <span>报价合计</span>
-                <strong>
-                  <small>¥</small>
-                  {money(total(quote))}
-                </strong>
-              </div>
-              <p>含税及合同条件在正式接入时按企业规则配置</p>
-            </div>
-          </div>
-        </section>
-        <aside
-          className="q-inspector q-edit-inspector"
-          aria-label="本次核价面板"
-        >
-          <div className="q-inspector-head">
-            <span>本次核价</span>
-            <span
-              className={`q-small-count ${problems.length ? "amber" : "green"}`}
-            >
-              {problems.length ? `${problems.length} 项待处理` : "已完成核对"}
-            </span>
-          </div>
-          {line ? (
-            <>
-              <div className="q-inspector-product compact">
-                <TypeIcon type={quote.type} small />
-                <div>
-                  <h2>{line.name}</h2>
-                  <p>{line.drawing}</p>
-                </div>
-              </div>
-              <div className="q-review-difference">
-                <span>与历史报价相比</span>
-                <div>
-                  <span>数量</span>
-                  <span>
-                    {line.sourceQty} {line.unit}
-                    <ArrowRight />
-                    <b>
-                      {line.qty} {line.unit}
-                    </b>
-                  </span>
-                </div>
-                <div>
-                  <span>单价</span>
-                  <span>
-                    {money(line.sourcePrice)}
-                    <ArrowRight />
-                    <b>{money(line.price)}</b>
-                  </span>
-                </div>
-              </div>
+            <div className="q-note-section">
               <button
-                className="q-disclosure"
-                aria-expanded={openCosts}
-                onClick={() => setOpenCosts(!openCosts)}
+                className="q-note-toggle"
+                aria-expanded={noteOpen}
+                onClick={() => setNoteOpen(!noteOpen)}
               >
                 <span>
-                  价格与依据 <small>逐项确认</small>
+                  <ChevronRight className={noteOpen ? "q-open-chevron" : ""} />
+                  <strong>报价范围与说明</strong>
                 </span>
-                {openCosts ? <ChevronDown /> : <ChevronRight />}
+                <span>
+                  {noteOpen ? "收起" : locked ? "查看说明" : "编辑说明"}
+                </span>
               </button>
+              {!noteOpen && <p>{quote.note || "尚未填写报价说明"}</p>}
               <AnimatePresence initial={false}>
-                {openCosts && (
+                {noteOpen && (
                   <motion.div
                     className="q-collapse"
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: "auto", opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: reduced ? 0 : 0.2 }}
+                    transition={{ duration: reduced ? 0 : 0.18 }}
                   >
-                    <div className="q-cost-fields">
-                      {line.costs.map((cost) => (
-                        <div
-                          className={`q-cost-field ${cost.price === null ? "missing" : ""}`}
-                          key={cost.id}
-                        >
-                          <div>
-                            <label htmlFor={`price-${cost.id}`}>
-                              {cost.name}
-                              <small> / {cost.unit}</small>
-                            </label>
-                            <label className="q-check-label">
-                              <Checkbox
-                                aria-label={`确认${cost.name}依据`}
-                                checked={cost.checked}
-                                disabled={
-                                  locked ||
-                                  cost.price === null ||
-                                  !cost.source.trim()
-                                }
-                                onCheckedChange={(checked) =>
-                                  patchCost(cost, { checked })
-                                }
-                              />
-                              <span>{cost.checked ? "已确认" : "确认"}</span>
-                            </label>
-                          </div>
-                          <div className="q-currency-field">
-                            <span>¥</span>
-                            <Input
-                              id={`price-${cost.id}`}
-                              aria-label={`${cost.name}成本价格`}
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={cost.price ?? ""}
-                              placeholder="填写成本价格"
-                              disabled={locked}
-                              onChange={(event) =>
-                                patchCost(cost, {
-                                  price:
-                                    event.target.value === ""
-                                      ? null
-                                      : Math.max(0, Number(event.target.value)),
-                                })
-                              }
-                            />
-                          </div>
-                          <Input
-                            className="q-source-input"
-                            aria-label={`${cost.name}价格来源`}
-                            value={cost.source}
-                            disabled={locked}
-                            onChange={(event) =>
-                              patchCost(cost, { source: event.target.value })
-                            }
-                          />
-                          {cost.price === null && (
-                            <small className="q-field-error">
-                              填写价格与来源后，确认本次依据。
-                            </small>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                    <Textarea
+                      aria-label="报价范围与说明"
+                      value={quote.note}
+                      disabled={locked}
+                      onChange={(event) =>
+                        onChange({ ...quote, note: event.target.value })
+                      }
+                    />
                   </motion.div>
                 )}
               </AnimatePresence>
-              <div className="q-configuration-check">
+            </div>
+          </motion.section>
+        </TabsContent>
+        <TabsContent value="costs" className="q-editor-panel">
+          {line ? (
+            <motion.section
+              key={line.id}
+              initial={{ opacity: 0, y: 3 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: reduced ? 0 : 0.16 }}
+              className="q-cost-workspace"
+            >
+              <div className="q-section-toolbar q-cost-toolbar">
+                <div>
+                  <h2>核对当前产品成本</h2>
+                  <p>每次只展开一项。价格与依据确认后，再核对本次配置。</p>
+                </div>
+                {quote.lines.length > 1 && (
+                  <Select
+                    value={line.id}
+                    onValueChange={(value) =>
+                      value && onStateChange({ tab: "costs", selected: value })
+                    }
+                  >
+                    <SelectTrigger aria-label="选择核价产品">
+                      <SelectValue>{line.name}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="q-popover">
+                      {quote.lines.map((item, index) => (
+                        <SelectItem key={item.id} value={item.id}>
+                          {index + 1}. {item.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+              <div className="q-cost-product">
+                <div>
+                  <strong>{line.name}</strong>
+                  <span>
+                    {line.spec}
+                    <span className="q-meta-separator">·</span>
+                    {line.drawing}
+                  </span>
+                </div>
+                <div className="q-quantity-diff">
+                  <span>本次数量</span>
+                  <strong>
+                    {line.qty}
+                    <small>{line.unit}</small>
+                  </strong>
+                  <span>
+                    历史 {line.sourceQty} {line.unit}
+                  </span>
+                </div>
+              </div>
+              <div className="q-cost-list" aria-label={line.name + "成本构成"}>
+                <div className="q-cost-list-caption">
+                  <span>单{line.unit}成本构成</span>
+                  <span>
+                    {line.costs.filter((cost) => cost.checked).length} /{" "}
+                    {line.costs.length} 项已确认
+                  </span>
+                </div>
+                {line.costs.map((cost) => {
+                  const expanded = activeCost === cost.id
+                  const valid =
+                    cost.price !== null &&
+                    Number.isFinite(cost.price) &&
+                    cost.price >= 0 &&
+                    !!cost.source.trim()
+                  return (
+                    <div
+                      className={"q-cost-item " + (expanded ? "is-open" : "")}
+                      key={cost.id}
+                    >
+                      <button
+                        className="q-cost-item-toggle"
+                        ref={(element) => {
+                          costHeaders.current[cost.id] = element
+                        }}
+                        aria-label={
+                          (expanded ? "收起" : "展开") + cost.name + "核价"
+                        }
+                        aria-expanded={expanded}
+                        onClick={() =>
+                          setExpandedCosts({
+                            ...expandedCosts,
+                            [line.id]: expanded ? null : cost.id,
+                          })
+                        }
+                      >
+                        <span
+                          className={
+                            "q-cost-state " +
+                            (cost.checked ? "complete" : "pending")
+                          }
+                        >
+                          {cost.checked ? <Check /> : <span />}
+                        </span>
+                        <span className="q-cost-item-name">
+                          <strong>{cost.name}</strong>
+                          <span>{cost.spec}</span>
+                        </span>
+                        <span
+                          className={
+                            "q-cost-item-price " +
+                            (cost.price === null ? "pending" : "")
+                          }
+                        >
+                          {cost.price === null
+                            ? "待核价"
+                            : "¥ " + money(cost.price * cost.qty)}
+                        </span>
+                        <ChevronDown
+                          className={expanded ? "q-up-chevron" : ""}
+                        />
+                      </button>
+                      <AnimatePresence initial={false}>
+                        {expanded && (
+                          <motion.div
+                            className="q-collapse"
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: reduced ? 0 : 0.2 }}
+                          >
+                            <div className="q-cost-edit">
+                              <div className="q-cost-edit-fields">
+                                <label>
+                                  单价 / 元
+                                  <span className="q-unit-hint">
+                                    每{cost.unit}
+                                  </span>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step=".01"
+                                    aria-label={cost.name + "成本价格"}
+                                    value={cost.price ?? ""}
+                                    disabled={locked}
+                                    placeholder="填写价格"
+                                    onChange={(event) =>
+                                      patchCost(cost, {
+                                        price:
+                                          event.target.value === ""
+                                            ? null
+                                            : Math.max(
+                                                0,
+                                                Number(event.target.value)
+                                              ),
+                                      })
+                                    }
+                                  />
+                                </label>
+                                <label>
+                                  本次价格依据
+                                  <Input
+                                    aria-label={cost.name + "价格来源"}
+                                    value={cost.source}
+                                    disabled={locked}
+                                    placeholder="例如：供应商报价单与日期"
+                                    onChange={(event) =>
+                                      patchCost(cost, {
+                                        source: event.target.value,
+                                      })
+                                    }
+                                  />
+                                </label>
+                              </div>
+                              <div className="q-cost-edit-actions">
+                                <Button
+                                  variant="ghost"
+                                  onClick={() => {
+                                    setBasisId(cost.id)
+                                    setBasisOpen(true)
+                                  }}
+                                >
+                                  <History />
+                                  查看来源记录
+                                </Button>
+                                {!locked && (
+                                  <Button
+                                    variant={
+                                      cost.checked ? "outline" : "default"
+                                    }
+                                    disabled={!valid}
+                                    onClick={() => {
+                                      if (cost.checked) {
+                                        patchCost(cost, { checked: false })
+                                        return
+                                      }
+                                      patchCost(cost, { checked: true })
+                                      const next = line.costs.find(
+                                        (item) =>
+                                          item.id !== cost.id && !item.checked
+                                      )
+                                      setExpandedCosts({
+                                        ...expandedCosts,
+                                        [line.id]: next?.id ?? null,
+                                      })
+                                      costHeaders.current[
+                                        next?.id ?? cost.id
+                                      ]?.focus({ preventScroll: true })
+                                    }}
+                                  >
+                                    {cost.checked ? (
+                                      <RotateCcw />
+                                    ) : (
+                                      <CheckCheck />
+                                    )}
+                                    {cost.checked
+                                      ? "重新核对此项"
+                                      : "确认此项依据"}
+                                  </Button>
+                                )}
+                              </div>
+                              {!valid && (
+                                <p className="q-field-hint">
+                                  <Info />
+                                  填写价格和来源后，可以确认此项。
+                                </p>
+                              )}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  )
+                })}
+                <div className="q-cost-total">
+                  <span>单{line.unit}内部成本合计</span>
+                  <strong>
+                    {costTotal(line) === null
+                      ? "待补齐"
+                      : "¥ " + money(costTotal(line)!)}
+                  </strong>
+                </div>
+              </div>
+              <div className="q-final-line-check">
                 <label className="q-check-label">
                   <Checkbox
-                    id="q-configuration-check"
                     aria-label="确认本次数量与配置"
                     checked={line.checked}
                     disabled={
@@ -556,32 +575,123 @@ export function Editor({
                     }
                     onCheckedChange={(checked) => patch(line.id, { checked })}
                   />
-                  <span>已核对本次数量、配置与价格</span>
+                  <span>
+                    <strong>已核对本次数量、配置与价格</strong>
+                    <small>
+                      {allCostsChecked
+                        ? "本次 " +
+                          line.qty +
+                          " " +
+                          line.unit +
+                          "，对外单价 ¥ " +
+                          money(line.price) +
+                          "；历史单价 ¥ " +
+                          money(line.sourcePrice)
+                        : "先完成上方各项价格依据的确认。"}
+                    </small>
+                  </span>
                 </label>
-                {!allCostsChecked && <p>先补齐上方价格并逐项确认依据。</p>}
               </div>
-            </>
+            </motion.section>
           ) : (
-            <p className="q-footnote">添加报价明细后，在这里核对价格依据。</p>
+            <Empty
+              title="尚未添加报价明细"
+              message="返回报价明细，从历史报价添加产品。"
+            />
           )}
-          {problems.length === 0 && (
-            <div className="q-ready">
-              <CheckCheck />
-              <div>
-                <strong>明细已准备好</strong>
-                <p>
-                  {locked
-                    ? "此版本为预览核对状态。"
-                    : "可以进入报价核对并预览报价单。"}
-                </p>
-              </div>
+        </TabsContent>
+      </Tabs>
+      <footer className="q-editor-footer">
+        <div className="q-footer-total">
+          <span>
+            未税合计<small>{quote.lines.length} 项明细</small>
+          </span>
+          <strong>
+            <small>¥</small>
+            {money(total(quote))}
+          </strong>
+        </div>
+        <div className="q-footer-action">
+          <span className={problems.length ? "q-pending-text" : "q-green-text"}>
+            {locked ? (
+              <ShieldCheck />
+            ) : problems.length ? (
+              <span className="q-state-dot" />
+            ) : (
+              <Check />
+            )}
+            {locked
+              ? "此版本只读"
+              : problems.length
+                ? problems.length + " 项待核对"
+                : "明细已准备好"}
+          </span>
+          {locked ? (
+            <Button onClick={onRevision}>
+              <Plus />
+              创建修订草稿
+            </Button>
+          ) : state.tab === "lines" &&
+            quote.lines.length > 0 &&
+            problems.length > 0 ? (
+            <Button
+              onClick={() =>
+                showCosts(quote.lines.find((item) => !item.checked)?.id)
+              }
+            >
+              继续核价
+              <ArrowRight />
+            </Button>
+          ) : (
+            <Button onClick={onReview}>
+              核对报价
+              <ArrowRight />
+            </Button>
+          )}
+        </div>
+      </footer>
+      <DetailSheet
+        open={basisOpen && !!basis}
+        onClose={() => setBasisOpen(false)}
+        title={basis ? basis.name + " · 来源记录" : "来源记录"}
+        description="对照本次填写的依据与历史来源。"
+        footer={
+          <Button variant="outline" onClick={() => setBasisOpen(false)}>
+            返回核价
+          </Button>
+        }
+      >
+        {basis && (
+          <>
+            <div className="q-sheet-section">
+              <h3>本次依据</h3>
+              <p>{basis.source || "尚未填写"}</p>
+              <span className="q-meta">
+                单价{" "}
+                {basis.price === null ? "待补齐" : "¥ " + money(basis.price)} /{" "}
+                {basis.unit}
+              </span>
             </div>
-          )}
-          <div className="q-inline-boundary">
-            演示核价，不代表企业正式计价规则
-          </div>
-        </aside>
-      </div>
+            <div className="q-sheet-section">
+              <h3>历史报价来源</h3>
+              <p>{source ? source.quote + ".xlsx" : "未关联历史报价"}</p>
+              <span className="q-meta">{source?.date} · 演示报价索引</span>
+            </div>
+            <div className="q-sheet-section">
+              <h3>图纸版本</h3>
+              <p>
+                {source
+                  ? source.drawing + " · " + source.revision + " 版"
+                  : "未关联图纸"}
+              </p>
+              <span className="q-meta">图纸索引示例，未附真实图纸</span>
+            </div>
+            <p className="q-footnote">
+              来源均为虚构演示资料，不作为实际计价依据。
+            </p>
+          </>
+        )}
+      </DetailSheet>
     </div>
   )
 }

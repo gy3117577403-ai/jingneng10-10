@@ -1,7 +1,14 @@
-import type { ReactNode } from "react"
+import type { ReactNode, Ref } from "react"
 import { Box, Check, CircleDashed, Factory, Search, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import {
   Select,
   SelectContent,
@@ -70,15 +77,18 @@ export function SearchInput({
   value,
   onChange,
   label,
+  inputRef,
 }: {
   value: string
   onChange: (value: string) => void
   label: string
+  inputRef?: Ref<HTMLInputElement>
 }) {
   return (
     <div className="q-search">
       <Search />
       <Input
+        ref={inputRef}
         aria-label={label}
         placeholder={label}
         value={value}
@@ -95,6 +105,42 @@ export function SearchInput({
         </Button>
       )}
     </div>
+  )
+}
+export function DetailSheet({
+  open,
+  onClose,
+  title,
+  description,
+  children,
+  footer,
+}: {
+  open: boolean
+  onClose: () => void
+  title: string
+  description: string
+  children: ReactNode
+  footer: ReactNode
+}) {
+  return (
+    <Sheet open={open} onOpenChange={(value) => !value && onClose()}>
+      <SheetContent className="q-sheet" showCloseButton={false}>
+        <SheetHeader className="q-sheet-header">
+          <SheetTitle>{title}</SheetTitle>
+          <SheetDescription>{description}</SheetDescription>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="关闭详情面板"
+            onClick={onClose}
+          >
+            <X />
+          </Button>
+        </SheetHeader>
+        <div className="q-sheet-body">{children}</div>
+        <div className="q-sheet-footer">{footer}</div>
+      </SheetContent>
+    </Sheet>
   )
 }
 export function Empty({

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import {
   ArrowRight,
@@ -8,15 +8,11 @@ import {
   ClipboardList,
   Factory,
   FileCheck2,
-  FileText,
   History,
   Info,
-  LayoutList,
-  ListFilter,
   Network,
   PanelLeftClose,
   PanelLeftOpen,
-  Plus,
   RotateCcw,
   Search,
   ShieldCheck,
@@ -41,7 +37,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { historyLines, makeInitialQuotes } from "./demo"
 import {
   issues,
@@ -55,9 +50,10 @@ import {
   type HistoricalLine,
   type Quote,
 } from "./model"
-import { Empty, FilterSelect, SearchInput, Status, TypeIcon } from "./shared"
+import { TypeIcon } from "./shared"
 import { HistoryView } from "./HistoryView"
-import { Editor } from "./Editor"
+import { Editor, type EditorState } from "./Editor"
+import { Workbench } from "./Workbench"
 import "./quotation.css"
 
 type View = "workbench" | "history" | "edit"
@@ -121,12 +117,24 @@ export default function QuotationApp() {
       line: DraftLine
       index: number
     } | null>(null)
-  const searchRef = useRef<HTMLInputElement>(null)
+  const [searchFocus, setSearchFocus] = useState(0)
+  const [historyOrigin, setHistoryOrigin] = useState<string | null>(null)
+  const [editorStates, setEditorStates] = useState<Record<string, EditorState>>(
+    {}
+  )
   const quote = quotes.find((item) => item.id === currentId) ?? quotes[0]
   const problems = issues(quote)
+  const historyQuote = quotes.find((item) => item.id === historyOrigin)
+  const focusHistorySearch = useCallback(() => {
+    if (view === "edit") setHistoryOrigin(quote.id)
+    else if (view !== "history") setHistoryOrigin(null)
+    setView("history")
+    setSearchFocus((value) => value + 1)
+  }, [view, quote.id])
   const open = (item: Quote) => {
     setCurrentId(item.id)
     setView("edit")
+    setHistoryOrigin(null)
     setToast("")
     setUndoQuote(null)
   }
@@ -156,15 +164,17 @@ export default function QuotationApp() {
     }
     onStorageError()
     document.title = "京能 · 报价工作台（交互预览）"
+  }, [])
+  useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault()
-        searchRef.current?.focus()
+        focusHistorySearch()
       }
     }
     window.addEventListener("keydown", handler)
     return () => window.removeEventListener("keydown", handler)
-  }, [])
+  }, [focusHistorySearch])
   useEffect(() => {
     const url = new URL(location.href)
     url.searchParams.set("view", view)
@@ -186,7 +196,11 @@ export default function QuotationApp() {
   }
   const showReuse = (item: HistoricalLine) => {
     setReuse(item)
-    setTarget("new")
+    setTarget(
+      historyQuote?.status === "草稿" && historyQuote.type === item.type
+        ? historyQuote.id
+        : "new"
+    )
     setNewTitle(`${item.project} · 本次报价`)
     setNewCustomer(item.customer)
     setNewType(item.type)
@@ -202,11 +216,16 @@ export default function QuotationApp() {
         setFormError("请选择可编辑的同类报价草稿。")
         return
       }
+      const addedLine = reuseLine(source)
       const updated = {
         ...destination,
-        lines: [...destination.lines, reuseLine(source)],
+        lines: [...destination.lines, addedLine],
       }
       changeQuote(updated)
+      setEditorStates((values) => ({
+        ...values,
+        [destination.id]: { tab: "lines", selected: addedLine.id },
+      }))
       open(updated)
       setDialog(null)
       setToast("已加入草稿，请核对本次数量与价格依据。")
@@ -252,9 +271,6 @@ export default function QuotationApp() {
           : item.status === "预览已核对"))
   )
   const pendingCount = quotes.filter((q) => q.status === "草稿").length
-  const missingCount = quotes.filter((q) =>
-    q.lines.some((line) => line.costs.some((cost) => cost.price === null))
-  ).length
   const revise = () => {
     const item: Quote = {
       ...structuredClone(quote),
@@ -297,7 +313,10 @@ export default function QuotationApp() {
                   ? "active"
                   : ""
               }
-              onClick={() => setView(item.id)}
+              onClick={() => {
+                setHistoryOrigin(null)
+                setView(item.id)
+              }}
               title={item.label}
             >
               <item.icon />
@@ -306,26 +325,6 @@ export default function QuotationApp() {
             </button>
           ))}
         </nav>
-        <div className="q-nav-caption q-current-caption">
-          当前报价<span>{quotes.length}</span>
-        </div>
-        <div className="q-current-list">
-          {quotes.slice(0, 7).map((item) => (
-            <button
-              key={item.id}
-              className={
-                view === "edit" && item.id === quote.id ? "selected" : ""
-              }
-              onClick={() => open(item)}
-              title={item.title}
-            >
-              <span
-                className={`q-tiny-dot ${item.status === "预览已核对" ? "green" : ""}`}
-              />
-              <span>{item.title}</span>
-            </button>
-          ))}
-        </div>
         <div className="q-sidebar-bottom">
           <a href="/?view=organization">
             <Network />
@@ -369,23 +368,16 @@ export default function QuotationApp() {
               <b>{titles[view]}</b>
             </span>
           </div>
-          <div className="q-global-search">
+          <Button
+            variant="ghost"
+            className="q-search-shortcut"
+            onClick={focusHistorySearch}
+            aria-label="搜索历史报价"
+          >
             <Search />
-            <Input
-              ref={searchRef}
-              aria-label="全局搜索历史报价"
-              placeholder="搜索报价、图号或客户"
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value)
-                setView("history")
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") setView("history")
-              }}
-            />
+            <span>搜索历史报价</span>
             <kbd>Ctrl K</kbd>
-          </div>
+          </Button>
           <span className="q-preview-pill">
             <span />
             交互预览
@@ -394,14 +386,20 @@ export default function QuotationApp() {
         <nav className="q-mobile-nav" aria-label="窄屏报价导航">
           <button
             className={view !== "history" ? "active" : ""}
-            onClick={() => setView("workbench")}
+            onClick={() => {
+              setHistoryOrigin(null)
+              setView("workbench")
+            }}
           >
             <ClipboardList />
             报价工作台
           </button>
           <button
             className={view === "history" ? "active" : ""}
-            onClick={() => setView("history")}
+            onClick={() => {
+              setHistoryOrigin(null)
+              setView("history")
+            }}
           >
             <History />
             历史报价
@@ -427,14 +425,34 @@ export default function QuotationApp() {
                   verified={onlyVerified}
                   setVerified={setOnlyVerified}
                   onReuse={showReuse}
+                  focusRequest={searchFocus}
+                  returnTitle={historyQuote?.title}
+                  onBack={historyQuote ? () => open(historyQuote) : undefined}
                 />
               ) : view === "edit" ? (
                 <Editor
                   quote={quote}
+                  state={
+                    editorStates[quote.id] ?? {
+                      tab: "lines",
+                      selected: quote.lines[0]?.id ?? "",
+                    }
+                  }
+                  onStateChange={(state) =>
+                    setEditorStates((values) => ({
+                      ...values,
+                      [quote.id]: state,
+                    }))
+                  }
                   onChange={changeQuote}
                   onBack={() => setView("workbench")}
-                  onHistory={() => setView("history")}
+                  onHistory={() => {
+                    setHistoryOrigin(quote.id)
+                    setHistoryType(quote.type)
+                    setView("history")
+                  }}
                   onReview={() => {
+                    setUndoQuote(null)
                     setAck(false)
                     setDialog("review")
                   }}
@@ -458,227 +476,22 @@ export default function QuotationApp() {
                   }}
                 />
               ) : (
-                <div className="q-workbench">
-                  <div className="q-page-title">
-                    <div>
-                      <div className="q-eyebrow">售前 · 成套 / 钣金</div>
-                      <h1>报价工作台</h1>
-                      <p>从客户需求到可交付报价，每一步都有依据。</p>
-                    </div>
-                    <Button onClick={showNew}>
-                      <Plus />
-                      新建报价
-                    </Button>
-                  </div>
-                  <div className="q-work-summary">
-                    <div>
-                      <span>进行中的报价</span>
-                      <strong>
-                        {pendingCount}
-                        <small>份</small>
-                      </strong>
-                    </div>
-                    <div>
-                      <span>待补齐成本</span>
-                      <strong className={missingCount ? "q-amber-text" : ""}>
-                        {missingCount}
-                        <small>份</small>
-                      </strong>
-                    </div>
-                    <div>
-                      <span>可检索历史明细</span>
-                      <button onClick={() => setView("history")}>
-                        {historyLines.length}
-                        <ArrowRight />
-                      </button>
-                    </div>
-                    <div className="q-summary-context">
-                      <ShieldCheck />
-                      <span>
-                        每次修改保留依据
-                        <br />
-                        复用后重新核对
-                      </span>
-                    </div>
-                  </div>
-                  <div className="q-work-layout">
-                    <section className="q-work-list">
-                      <div className="q-work-tabs">
-                        <Tabs value={scope} onValueChange={setScope}>
-                          <TabsList>
-                            <TabsTrigger value="all">
-                              全部报价 <small>{quotes.length}</small>
-                            </TabsTrigger>
-                            <TabsTrigger value="pending">待处理</TabsTrigger>
-                            <TabsTrigger value="reviewed">已核对</TabsTrigger>
-                          </TabsList>
-                        </Tabs>
-                      </div>
-                      <div className="q-filterbar">
-                        <SearchInput
-                          value={workQuery}
-                          onChange={setWorkQuery}
-                          label="查找项目、客户或报价编号"
-                        />
-                        <FilterSelect
-                          label="全部业务"
-                          value={type}
-                          values={["全部", "成套", "钣金"]}
-                          onChange={setType}
-                        />
-                      </div>
-                      <div className="q-work-table-label">
-                        <span>项目 / 客户</span>
-                        <span>未税金额</span>
-                        <span>当前状态</span>
-                        <span />
-                      </div>
-                      <div className="q-work-rows">
-                        {shown.map((item) => (
-                          <div
-                            key={item.id}
-                            className={`q-work-row ${quote.id === item.id ? "selected" : ""}`}
-                          >
-                            <button
-                              className="q-work-project"
-                              onClick={() => setCurrentId(item.id)}
-                              aria-label={`查看${item.title}`}
-                            >
-                              <TypeIcon type={item.type} small />
-                              <div>
-                                <strong>{item.title}</strong>
-                                <span>
-                                  {item.customer.replace("（虚构）", "")}
-                                  <i />
-                                  {item.type} · V{item.revision}
-                                </span>
-                              </div>
-                            </button>
-                            <span className="q-money">
-                              ¥ {money(total(item))}
-                            </span>
-                            <Status
-                              tone={
-                                item.status === "预览已核对"
-                                  ? "green"
-                                  : issues(item).length
-                                    ? "amber"
-                                    : "blue"
-                              }
-                            >
-                              {item.status === "预览已核对"
-                                ? "已核对"
-                                : !item.lines.length
-                                  ? "待加明细"
-                                  : item.lines.some((line) =>
-                                        line.costs.some(
-                                          (cost) => cost.price === null
-                                        )
-                                      )
-                                    ? "待补价格"
-                                    : issues(item).length
-                                      ? "待核依据"
-                                      : "待核对"}
-                            </Status>
-                            <Button
-                              variant="ghost"
-                              size="icon-xs"
-                              aria-label={`编辑${item.title}`}
-                              onClick={() => open(item)}
-                            >
-                              <ArrowRight />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                      {!shown.length && (
-                        <Empty
-                          title="这个视图下没有报价"
-                          message="调整关键词或筛选条件，继续查找。"
-                          onClear={() => {
-                            setWorkQuery("")
-                            setType("全部")
-                            setScope("all")
-                          }}
-                        />
-                      )}
-                      <div className="q-table-note">
-                        <LayoutList />
-                        {shown.length} 份报价<span>金额均为演示未税金额</span>
-                      </div>
-                      <button
-                        className="q-history-entry"
-                        onClick={() => setView("history")}
-                      >
-                        <span className="q-history-entry-icon">
-                          <History />
-                        </span>
-                        <div>
-                          <strong>有类似项目？从历史报价开始。</strong>
-                          <span>找到产品明细，带着配置与来源一起复用。</span>
-                        </div>
-                        <ArrowRight />
-                      </button>
-                    </section>
-                    <aside className="q-work-detail" aria-label="当前报价概览">
-                      <div className="q-inspector-head">
-                        <span>继续这份报价</span>
-                        <span className="q-rev">V{quote.revision}</span>
-                      </div>
-                      <TypeIcon type={quote.type} />
-                      <h2>{quote.title}</h2>
-                      <p>{quote.customer}</p>
-                      <div className="q-mini-reference">
-                        <FileText />
-                        {quote.id}
-                      </div>
-                      <dl className="q-spec-list">
-                        <div>
-                          <dt>业务类型</dt>
-                          <dd>{quote.type}</dd>
-                        </div>
-                        <div>
-                          <dt>期望报价日期</dt>
-                          <dd>{quote.due}</dd>
-                        </div>
-                        <div>
-                          <dt>报价明细</dt>
-                          <dd>{quote.lines.length} 项</dd>
-                        </div>
-                      </dl>
-                      <div className="q-divider" />
-                      <div className="q-next-title">
-                        <ListFilter />
-                        <strong>
-                          {problems.length ? "接下来要处理" : "报价准备完成"}
-                        </strong>
-                      </div>
-                      {problems.length ? (
-                        <div className="q-next-list">
-                          {problems.slice(0, 3).map((item, index) => (
-                            <div key={`${item.lineId}-${index}`}>
-                              <span>{index + 1}</span>
-                              <p>{item.text.replace(/^[^：]+：/, "")}</p>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="q-footnote">
-                          明细与价格依据已核对，可以查看报价单。
-                        </p>
-                      )}
-                      <Button className="q-wide" onClick={() => open(quote)}>
-                        {quote.status === "预览已核对"
-                          ? "查看报价"
-                          : "继续报价"}
-                        <ArrowRight />
-                      </Button>
-                      <p className="q-footnote">
-                        本轮先体验交互，尚未提交至业务系统。
-                      </p>
-                    </aside>
-                  </div>
-                </div>
+                <Workbench
+                  quotes={quotes}
+                  shown={shown}
+                  query={workQuery}
+                  onQuery={setWorkQuery}
+                  type={type}
+                  onType={setType}
+                  scope={scope}
+                  onScope={setScope}
+                  onOpen={open}
+                  onNew={showNew}
+                  onHistory={() => {
+                    setHistoryOrigin(null)
+                    setView("history")
+                  }}
+                />
               )}
             </motion.div>
           </AnimatePresence>
@@ -912,7 +725,7 @@ export default function QuotationApp() {
                     ))}
                   </ul>
                   <p>
-                    回到右侧核价面板，补齐价格与依据，再确认本次数量和配置。
+                    回到「成本核价」，补齐价格与依据，再确认本次数量和配置。
                   </p>
                 </>
               ) : (
@@ -985,7 +798,8 @@ export default function QuotationApp() {
                 <b>复用</b>选择一条明细，查看原数量、单价和成本，加入新草稿。
               </li>
               <li>
-                <b>核价</b>修改数量、补齐成本与来源，逐项勾选确认。
+                <b>核价</b>
+                切到「成本核价」，展开一项并补齐价格与来源，确认后继续下一项。
               </li>
               <li>
                 <b>核对</b>确认本次数量与配置，完成演示核对，预览客户报价单。
@@ -1027,6 +841,8 @@ export default function QuotationApp() {
                   const initial = makeInitialQuotes()
                   setQuotes(initial)
                   setCurrentId(initial[0].id)
+                  setEditorStates({})
+                  setHistoryOrigin(null)
                   setView("workbench")
                   setQuery("")
                   setHistoryType("全部")
