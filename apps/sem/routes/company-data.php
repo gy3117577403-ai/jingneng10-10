@@ -21,6 +21,7 @@ Route::middleware(['auth', 'verified', 'has.role', 'check.factory'])->prefix('co
         Route::get('/export/{id}', [C::class, 'export'])->whereNumber('id');
         Route::get('/records/{id}/versions/{version}/files/{file}', [C::class, 'file'])->whereNumber(['id', 'version', 'file']);
         Route::middleware('throttle:90,1')->group(function () {
+            Route::post('/catalog/preview', [C::class, 'preview']);
             Route::post('/catalog/{kind}/{id}', [C::class, 'catalog'])->whereIn('kind', ['category', 'group', 'policy'])->whereNumber('id');
             Route::post('/records/{id}/{action}', [C::class, 'record'])->whereIn('action', ['create', 'save', 'submit', 'approve', 'reject', 'withdraw', 'archive', 'restore'])->whereNumber('id');
             Route::post('/collaboration/{id}/{action}', [C::class, 'collaborate'])->whereIn('action', ['comment', 'task', 'request', 'task-action', 'access-action'])->whereNumber('id');

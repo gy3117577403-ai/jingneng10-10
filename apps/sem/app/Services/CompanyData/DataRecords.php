@@ -17,11 +17,23 @@ class DataRecords
             if (!empty($p['category']) && (int) $p['category'] !== (int) $r->category_id) continue;
             if ((bool) ($p['archived'] ?? false) !== (bool) $r->archived) continue;
             $readable = $a->canVersion($user, $r, $v);
+            if (!empty($p['kind']) && $p['kind'] !== $r->kind) continue;
+            if (($p['scope'] ?? 'all') === 'created' && (int) $r->owner_id !== (int) $user->id) continue;
+            if (($p['scope'] ?? 'all') === 'review' && (!$readable || $v->state !== 'pending'
+                || (int) $v->id !== (int) $r->draft_version_id || (int) $v->reviewer_id !== (int) $user->id
+                || !$a->can($user, 'review', $r))) continue;
             if ($q !== '' && !str_contains(mb_strtolower($r->code . ' ' . $v->title . ($readable ? ' ' . $v->values : '')), $q)) continue;
             if (!empty($p['state']) && $p['state'] !== $v->state) continue;
             $rows[] = ['id' => $r->id, 'code' => $r->code, 'kind' => $r->kind, 'category_id' => $r->category_id, 'title' => $v->title, 'version' => $v->number, 'state' => $v->state,
-                'readable' => $readable, 'archived' => (bool) $r->archived, 'updated_at' => $r->updated_at];
+                'readable' => $readable, 'archived' => (bool) $r->archived, 'updated_at' => $r->updated_at,
+                ...($readable && !empty($p['category']) ? ['values' => DataSupport::decode($v->values)] : [])];
         }
+        // Sort the full authorized result before pagination, never just the visible page.
+        $sort = $p['sort'] ?? 'updated';
+        if ($sort !== 'updated') usort($rows, function ($left, $right) use ($sort) {
+            $key = match ($sort) { 'title' => 'title', 'code' => 'code', default => 'updated_at' };
+            return strnatcmp(mb_strtolower($left[$key]), mb_strtolower($right[$key])) ?: $left['id'] <=> $right['id'];
+        });
         $cats = DB::table('jn_data_categories')->orderBy('position')->orderBy('id')->get()->keyBy('id');
         foreach ($cats as $c) if ($a->can($user, 'discover', $c) || $a->can($user, 'create', $c)) $visibleCats[$c->id] = true;
         foreach (array_keys($visibleCats) as $id) { $parent = $cats[$id]->parent_id; while ($parent) { $visibleCats[$parent] = true; $parent = $cats[$parent]->parent_id; } }
@@ -45,6 +57,7 @@ class DataRecords
             'version' => $readable ? [...(array) $v, 'values' => DataSupport::decode($v->values), 'fields' => DataSupport::decode($v->fields), 'file_ids' => DataSupport::decode($v->file_ids)] : ['id' => $v->id, 'title' => $v->title, 'number' => $v->number, 'state' => $v->state],
             'readable' => $readable, 'borrowed' => $readable && !$a->can($user, 'view', $r, false), 'abilities' => $a->abilities($user, $r), 'permissions' => $a->explain($user, $r), 'versions' => $versions,
             'edit_fields' => $a->can($user, 'edit', $r) ? DataSupport::decode($a->category($r->category_id)->fields) : [],
+            'schema_current' => $readable ? (int) $v->schema_version === (int) $a->category($r->category_id)->schema_version : null,
             'files' => $readable ? DB::table('jn_data_files')->whereIn('id', DataSupport::decode($v->file_ids))->get(['id', 'filename', 'extension', 'mime', 'size', 'sha256'])->map(fn ($f) => [...(array) $f, 'reading' => app(DataDocuments::class)->status($f->id)])->all() : [],
             'comments' => $readable ? DB::table('jn_data_comments')->join('users', 'users.id', '=', 'actor_id')->where('record_id', $id)->where('version_id', $v->id)->orderBy('jn_data_comments.id')->get(['jn_data_comments.id', 'body', 'users.name as actor', 'jn_data_comments.created_at'])->all() : [],
             'events' => $readable ? $events : [], 'reviewers' => $a->can($user, 'submit', $r) ? $eligible('review') : [], 'approvers' => $a->can($user, 'request', $r) ? $eligible('access') : [],

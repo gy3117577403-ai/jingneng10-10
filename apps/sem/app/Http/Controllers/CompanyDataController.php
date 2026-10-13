@@ -5,9 +5,10 @@ use Illuminate\Http\Request;
 class CompanyDataController extends Controller
 {
     public function page() { return view('company-data.page'); }
-    public function index(Request $r, DataRecords $s) { return $this->json($s->listing($r->user(), $r->validate(['q' => 'nullable|string|max:200', 'category' => 'nullable|integer', 'state' => 'nullable|in:draft,pending,published,rejected,withdrawn', 'archived' => 'nullable|boolean', 'page' => 'nullable|integer|min:1']))); }
+    public function index(Request $r, DataRecords $s) { return $this->json($s->listing($r->user(), $r->validate(['q' => 'nullable|string|max:200', 'category' => 'nullable|integer', 'state' => 'nullable|in:draft,pending,published,rejected,withdrawn', 'kind' => 'nullable|in:file,ledger', 'scope' => 'nullable|in:all,created,review', 'sort' => 'nullable|in:updated,oldest,title,code', 'archived' => 'nullable|boolean', 'page' => 'nullable|integer|min:1']))); }
     public function detail(Request $r, DataRecords $s, int $id) { return $this->json($s->detail($r->user(), $id, $r->integer('version') ?: null)); }
     public function configuration(Request $r, DataCatalog $s) { return $this->json($s->configuration($r->user())); }
+    public function preview(Request $r, DataCatalog $s) { return $this->json($s->preview($r->user(), $r->all())); }
     public function catalog(Request $r, DataCatalog $s, string $kind, int $id) { return $this->json($s->save($r->user(), $this->key($r), $kind, $id, $r->except('request_key'))); }
     public function record(Request $r, DataRecords $s, int $id, string $action) { return $this->json($s->save($r->user(), $this->key($r), $action, $id, $r->except('request_key'))); }
     public function collaboration(Request $r, DataCollaboration $s) { return $this->json(['items' => $s->items($r->user()), 'users' => DataSupport::users()]); }

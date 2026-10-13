@@ -37,6 +37,80 @@ class JingnengCompanyDataTest extends TestCase
         $this->actingAs($this->reviewer); $this->action($id, 'approve', ['note' => '已核对'])->assertOk(); $this->actingAs($this->owner); return $this->record($id)->published_version_id;
     }
     private function revise(int $id, string $title = '虚构版本二') { return $this->action($id, 'save', ['title' => $title, 'values' => ['amount' => '2', 'summary' => '新内容'], 'file_ids' => [], 'note' => '更新资料']); }
+    public function test_configuration_counts_include_archived_records_and_are_manager_only(): void
+    {
+        $id = $this->fixture(); $this->action($id, 'archive')->assertOk();
+        $this->getJson('/company-data/api/configuration')->assertOk()->assertJsonPath('categories.0.record_count', 1);
+        $this->actingAs($this->reader); $this->getJson('/company-data/api/configuration')->assertForbidden();
+    }
+    public function test_category_preview_uses_draft_group_deny_without_writing_or_granting_anything(): void
+    {
+        $group = DB::table('jn_data_groups')->insertGetId(['name' => '虚构预览组']);
+        DB::table('jn_data_members')->insert(['group_id' => $group, 'user_id' => $this->reader->id]);
+        $snapshot = fn () => collect(['jn_data_categories', 'jn_data_rules', 'jn_data_events', 'jn_data_receipts'])->mapWithKeys(fn ($table) => [$table => DB::table($table)->orderBy('id')->get()->toJson()])->all();
+        $before = $snapshot();
+        $rules = [['principal_type' => 'user', 'principal_id' => $this->reader->id, 'action' => 'view', 'effect' => 'allow'], ['principal_type' => 'group', 'principal_id' => $group, 'action' => 'view', 'effect' => 'deny']];
+        $preview = $this->postJson('/company-data/api/catalog/preview', ['category_id' => $this->cat, 'user_id' => $this->reader->id, 'enabled' => true, 'rules' => $rules])->assertOk();
+        $view = collect($preview->json('permissions'))->firstWhere('action', 'view');
+        $this->assertFalse($view['allowed']); $this->assertTrue($view['denied']);
+        $this->assertSame($before, $snapshot());
+        $access = new DataAccess(); $this->assertTrue($access->can($this->reader, 'view', $access->category($this->cat)));
+        $this->actingAs($this->reader); $this->postJson('/company-data/api/catalog/preview', ['category_id' => $this->cat, 'user_id' => $this->owner->id, 'enabled' => true, 'rules' => []])->assertForbidden();
+    }
+    public function test_preview_new_disabled_category_and_create_without_view_do_not_report_effective_access(): void
+    {
+        $rules = [['principal_type' => 'everyone', 'principal_id' => 0, 'action' => 'create', 'effect' => 'allow']];
+        $preview = $this->postJson('/company-data/api/catalog/preview', ['category_id' => 0, 'user_id' => $this->reader->id, 'enabled' => true, 'rules' => $rules])->assertOk();
+        $this->assertFalse(collect($preview->json('permissions'))->firstWhere('action', 'create')['allowed']);
+        $rules[] = ['principal_type' => 'everyone', 'principal_id' => 0, 'action' => 'view', 'effect' => 'allow'];
+        $preview = $this->postJson('/company-data/api/catalog/preview', ['category_id' => 0, 'user_id' => $this->reader->id, 'enabled' => false, 'rules' => $rules])->assertOk();
+        $this->assertEmpty(array_filter($preview->json('permissions'), fn ($permission) => $permission['allowed']));
+        $this->assertSame(1, DB::table('jn_data_categories')->count());
+        $this->postJson('/company-data/api/catalog/preview', ['category_id' => $this->cat, 'user_id' => $this->reader->id, 'enabled' => true, 'rules' => [...$rules, $rules[0]]])->assertUnprocessable();
+    }
+    public function test_preview_distinguishes_direct_members_from_descendants_and_rechecks_departure(): void
+    {
+        $root = DB::table('jn_org_units')->insertGetId(['name' => '虚构上级', 'kind' => 'department', 'code' => 'PREVIEW-ROOT']);
+        $child = DB::table('jn_org_units')->insertGetId(['name' => '虚构下级', 'kind' => 'team', 'code' => 'PREVIEW-CHILD', 'parent_id' => $root]);
+        $person = DB::table('jn_org_people')->insertGetId(['name' => '虚构账号成员', 'code' => 'PREVIEW-PERSON', 'user_id' => $this->reader->id]);
+        DB::table('jn_org_assignments')->insert(['person_id' => $person, 'unit_id' => $child]);
+        $check = function (string $type) use ($root) {
+            $result = $this->postJson('/company-data/api/catalog/preview', ['category_id' => $this->cat, 'user_id' => $this->reader->id, 'enabled' => true,
+                'rules' => [['principal_type' => $type, 'principal_id' => $root, 'action' => 'view', 'effect' => 'allow']]])->assertOk();
+            return collect($result->json('permissions'))->firstWhere('action', 'view')['allowed'];
+        };
+        $this->assertFalse($check('organization')); $this->assertTrue($check('organization_tree'));
+        DB::table('jn_org_assignments')->where('person_id', $person)->update(['ended_at' => now()]);
+        $this->assertFalse($check('organization_tree'));
+    }
+    public function test_selected_category_returns_only_values_from_the_authorized_version(): void
+    {
+        $id = $this->fixture(); $old = $this->publish($id); $this->revise($id)->assertOk();
+        $this->getJson('/company-data/api?category=' . $this->cat)->assertOk()->assertJsonPath('items.0.values.amount', '2');
+        $this->actingAs($this->reader); $this->getJson('/company-data/api?category=' . $this->cat)->assertOk()->assertJsonPath('items.0.version', 1)->assertJsonPath('items.0.values.amount', '0');
+        $this->getJson('/company-data/api')->assertJsonMissingPath('items.0.values');
+        $this->rules(['discover']); $this->getJson('/company-data/api?category=' . $this->cat)->assertJsonPath('items.0.readable', false)->assertJsonMissingPath('items.0.values');
+        $this->getJson('/company-data/api?category=' . $this->cat . '&q=内部内容')->assertJsonCount(0, 'items');
+    }
+    public function test_personal_review_scope_requires_current_designated_reviewer_and_current_permission(): void
+    {
+        $id = $this->fixture(); $this->action($id, 'submit', ['reviewer_id' => $this->reviewer->id, 'note' => '待审核'])->assertOk();
+        $this->getJson('/company-data/api?scope=review')->assertJsonCount(0, 'items');
+        $this->getJson('/company-data/api?scope=created&kind=file')->assertJsonCount(0, 'items');
+        $this->getJson('/company-data/api?scope=created&kind=ledger')->assertJsonCount(1, 'items');
+        $this->actingAs($this->reviewer); $this->getJson('/company-data/api?scope=review')->assertJsonPath('items.0.id', $id);
+        $this->getJson('/company-data/api?scope=created')->assertJsonCount(0, 'items');
+        $this->action($id, 'approve', ['note' => '已核对'])->assertOk(); $this->getJson('/company-data/api?scope=review')->assertJsonCount(0, 'items');
+        $this->getJson('/company-data/api?sort=arbitrary')->assertUnprocessable();
+    }
+    public function test_sorting_happens_before_pagination_and_schema_change_is_visible_in_detail(): void
+    {
+        for ($index = 31; $index >= 1; $index--) $this->fixture('SORT-' . str_pad((string) $index, 2, '0', STR_PAD_LEFT));
+        $this->getJson('/company-data/api?sort=code&page=2')->assertOk()->assertJsonPath('total', 31)->assertJsonPath('items.0.code', 'SORT-31')->assertJsonCount(1, 'items');
+        $id = DB::table('jn_data_records')->value('id'); $this->getJson("/company-data/api/records/$id")->assertJsonPath('schema_current', true);
+        DB::table('jn_data_categories')->where('id', $this->cat)->increment('schema_version');
+        $this->getJson("/company-data/api/records/$id")->assertJsonPath('schema_current', false);
+    }
     public function test_default_deny_includes_admin_and_tree_position_does_not_grant_access(): void
     {
         $id = $this->fixture(); $this->publish($id);

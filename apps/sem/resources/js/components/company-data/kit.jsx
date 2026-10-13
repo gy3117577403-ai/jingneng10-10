@@ -43,9 +43,9 @@ export function useWrite(api){
 }
 
 export function EditDialog({title,initial,children,onSave,onClose,label='保存',wide=false}){
-    const [value,setValue]=useState(initial),[busy,setBusy]=useState(false),[error,setError]=useState('');const lock=useRef(false);
+    const [value,setValue]=useState(initial),[busy,setBusy]=useState(false),[error,setError]=useState('');const lock=useRef(false),closing=useRef(false);
     const dirty=JSON.stringify(value)!==JSON.stringify(initial);
-    async function close(){if(lock.current)return;if(!dirty||await confirmAction('尚有未保存内容，关闭后将放弃本次填写。',{title:'放弃修改',confirmLabel:'放弃修改'}))onClose();}
+    async function close(){if(lock.current||closing.current)return;closing.current=true;if(!dirty||await confirmAction('尚有未保存内容，关闭后将放弃本次填写。',{title:'放弃修改',confirmLabel:'放弃修改'}))onClose();else closing.current=false;}
     return <SurfaceDialog title={title} onClose={close} className={`dc-dialog ${wide?'dc-wide':''}`}><form onSubmit={async e=>{e.preventDefault();if(lock.current)return;lock.current=true;setBusy(true);setError('');try{await onSave(value);onClose();}catch(e){setError(e.message);}finally{lock.current=false;setBusy(false);}}}>
         <div className="dc-dialog-body"><ErrorBox error={error}/>{children(value,setValue)}</div><footer><button type="button" className="btn btn-default" onClick={close} disabled={busy}>取消</button><button className="btn btn-primary" disabled={busy}>{busy?'正在保存…':label}</button></footer>
     </form></SurfaceDialog>;

@@ -12,14 +12,15 @@ class DataCatalog
     public function configuration(User $user): array
     {
         abort_unless(DataSupport::manager($user), 403, '需要资料中心配置权限。');
-        return ['categories' => DB::table('jn_data_categories')->orderBy('position')->get()->map(fn ($c) => [...(array) $c, 'fields' => DataSupport::decode($c->fields)])->all(),
+        $counts = DB::table('jn_data_records')->selectRaw('category_id, COUNT(*) as total')->groupBy('category_id')->pluck('total', 'category_id');
+        return ['categories' => DB::table('jn_data_categories')->orderBy('position')->get()->map(fn ($c) => [...(array) $c, 'record_count' => (int) ($counts[$c->id] ?? 0), 'fields' => DataSupport::decode($c->fields)])->all(),
             'groups' => DB::table('jn_data_groups')->orderBy('id')->get()->map(fn ($g) => [...(array) $g, 'members' => DB::table('jn_data_members')->where('group_id', $g->id)->pluck('user_id')->all()])->all(),
             'rules' => DB::table('jn_data_rules')->get()->all(), 'users' => DataSupport::users(), 'actions' => DataAccess::ACTIONS,
             'organizations' => DB::table('jn_org_units')->whereNull('deleted_at')->where('status', 'active')->get(['id', 'name', 'parent_id'])->all(),
             'events' => DB::table('jn_data_events')->whereIn('label', ['更新工作组', '更新分类与字段权限', '更新资料权限'])->orderByDesc('id')->limit(100)->get()->map(fn ($e) => ['id' => $e->id, 'label' => $e->label, 'actor' => User::withTrashed()->find($e->actor_id)?->name ?? '已停用人员', 'detail' => DataSupport::decode($e->detail), 'created_at' => $e->created_at])->all()];
     }
 
-    public function rules(string $scope, int $id, array $rules): void
+    private function validatedRules(array $rules): array
     {
         validator(['rules' => $rules], ['rules' => 'array|max:500', 'rules.*.principal_type' => 'required|in:everyone,user,group,organization,organization_tree',
             'rules.*.principal_id' => 'required|integer|min:0', 'rules.*.action' => 'required|in:' . implode(',', array_keys(DataAccess::ACTIONS)), 'rules.*.effect' => 'required|in:allow,deny'])->validate();
@@ -31,10 +32,39 @@ class DataCatalog
             $pid = $r['principal_type'] === 'everyone' ? 0 : (int) $r['principal_id'];
             $key = $r['principal_type'] . ':' . $pid . ':' . $r['action'];
             abort_if(isset($seen[$key]), 422, '同一人员或工作组的同一操作只能配置一次。'); $seen[$key] = true;
-            $rows[] = ['scope_type' => $scope, 'scope_id' => $id, 'principal_type' => $r['principal_type'], 'principal_id' => $pid, 'action' => $r['action'], 'effect' => $r['effect']];
+            $rows[] = ['principal_type' => $r['principal_type'], 'principal_id' => $pid, 'action' => $r['action'], 'effect' => $r['effect']];
         }
+        return $rows;
+    }
+
+    public function rules(string $scope, int $id, array $rules): void
+    {
+        $rows = array_map(fn ($r) => ['scope_type' => $scope, 'scope_id' => $id, ...$r], $this->validatedRules($rules));
         DB::table('jn_data_rules')->where('scope_type', $scope)->where('scope_id', $id)->delete();
         if ($rows) DB::table('jn_data_rules')->insert($rows);
+    }
+
+    public function preview(User $user, array $p): array
+    {
+        abort_unless(DataSupport::manager($user), 403, '需要资料中心配置权限。');
+        validator($p, ['category_id' => 'nullable|integer|min:0', 'user_id' => 'required|integer', 'enabled' => 'required|boolean', 'rules' => 'present|array'])->validate();
+        $id = (int) ($p['category_id'] ?? 0);
+        $category = $id ? DB::table('jn_data_categories')->where('id', $id)->firstOrFail() : (object) ['id' => 0];
+        $category->enabled = $p['enabled'];
+        $subject = DataSupport::user((int) $p['user_id']);
+        $rules = $this->validatedRules($p['rules']);
+        // Evaluate the draft in memory with the same membership and deny rules as live requests.
+        $access = (new DataAccess())->withCategoryPolicy($category, $rules);
+        $permissions = $access->explain($subject, $category);
+        foreach ($permissions as &$permission) {
+            if ($permission['action'] === 'create' && !$access->can($subject, 'view', $category, false)) {
+                $permission['allowed'] = false;
+                $permission['reason'] = '新增资料同时需要正常内容查看权限。';
+            }
+        }
+        unset($permission);
+        return ['user' => ['id' => $subject->id, 'name' => $subject->name], 'permissions' => $permissions,
+            'note' => '这是尚未保存的分类规则预览。独立资料权限、具体版本和审批身份仍会另行校验；没有修改任何授权。'];
     }
 
     public function save(User $user, string $key, string $kind, int $id, array $p): array

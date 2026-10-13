@@ -18,6 +18,13 @@ class DataAccess
         $this->grants = DB::table('jn_data_access_requests')->where('state', 'approved')->where('expires_at', '>', now())->orderByDesc('id')->get()->groupBy('applicant_id')->all();
     }
     public function category(int $id): object { abort_unless(isset($this->categories[$id]), 404, '资料分类不存在。'); return $this->categories[$id]; }
+    public function withCategoryPolicy(object $category, array $rules): self
+    {
+        $preview = clone $this;
+        $preview->categories[$category->id] = clone $category;
+        $preview->rules['category:' . $category->id] = array_map(fn ($rule) => (object) $rule, $rules);
+        return $preview;
+    }
     public function record(int $id): object { $r = DB::table('jn_data_records')->where('id', $id)->first(); abort_unless($r, 404, '资料不存在。'); return $r; }
     public function version(int $id): object { $v = DB::table('jn_data_versions')->where('id', $id)->first(); abort_unless($v, 404, '资料版本不存在。'); return $v; }
     public function ruleDecision(User $user, string $action, object $target): array
