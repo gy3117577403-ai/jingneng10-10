@@ -1,0 +1,215 @@
+/* The adapted shadcn Base UI controls share one visual contract across hosts. */
+:is(.jn-ui, .org-body) {
+    --jn-control-ink: #27313f;
+    --jn-control-muted: #5c6879;
+    --jn-control-border: #d8dfe8;
+    --jn-control-surface: #fff;
+    --jn-control-soft: #f0f3f7;
+    --jn-control-accent: #2468ce;
+    --jn-control-selected: #e8f0fc;
+    --jn-control-ring: #77a2df;
+}
+.dark-mode {
+    --jn-control-ink: #e5eaf2;
+    --jn-control-muted: #aab7c8;
+    --jn-control-border: #465467;
+    --jn-control-surface: #252e3b;
+    --jn-control-soft: #303c4e;
+    --jn-control-accent: #8dbbff;
+    --jn-control-selected: #304965;
+    --jn-control-ring: #85b5ff;
+}
+.jn-control-button,
+.jn-control-select {
+    font: inherit;
+    font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 32px;
+    padding: 5px 11px;
+    border: 1px solid var(--jn-control-border);
+    border-radius: 8px;
+    background: var(--jn-control-surface);
+    color: var(--jn-control-ink);
+    box-shadow:
+        0 1px 2px #182a4010,
+        inset 0 1px 0 #ffffff70;
+    cursor: pointer;
+    outline: none;
+    transition:
+        background 0.14s,
+        border-color 0.14s,
+        box-shadow 0.14s;
+    white-space: nowrap;
+}
+.jn-control-button[data-size="icon"] {
+    width: 32px;
+    height: 32px;
+    padding: 6px;
+}
+.jn-control-button[data-variant="ghost"] {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+}
+.jn-control-button:hover,
+.jn-control-select:hover {
+    background: var(--jn-control-soft);
+    border-color: var(--jn-control-border);
+}
+.jn-control-button:focus-visible,
+.jn-control-select:focus-visible,
+.jn-control-switch:focus-visible {
+    outline: 2px solid var(--jn-control-ring);
+    outline-offset: 3px;
+}
+.jn-control-button:disabled,
+.jn-control-select[data-disabled],
+.jn-control-switch[data-disabled] {
+    opacity: 0.48;
+    cursor: not-allowed;
+}
+.jn-control-button svg,
+.jn-control-select svg,
+.jn-control-option svg {
+    flex-shrink: 0;
+    stroke-width: 1.65;
+}
+.jn-control-select {
+    justify-content: space-between;
+    min-width: 112px;
+}
+.jn-control-select [data-slot="select-value"] {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.jn-combobox-popup { display: flex; flex-direction: column; overflow: hidden; width: max(var(--anchor-width), 280px); }
+.jn-combobox-search {
+    width: 100%; min-height: 34px; border: 0; border-bottom: 1px solid var(--jn-control-border);
+    padding: 8px 9px; margin-bottom: 5px; background: var(--jn-control-surface); color: var(--jn-control-ink);
+    font: inherit; border-radius: 0; outline: none;
+}
+.jn-combobox-search:focus-visible { box-shadow: inset 0 -2px var(--jn-control-ring); }
+.jn-combobox-list { overflow: auto; min-height: 0; overscroll-behavior: contain; }
+.jn-combobox-list .jn-control-option { white-space: normal; line-height: 1.5; align-items: center; }
+.jn-combobox-list .jn-control-option > span:first-child { flex: 1; }
+.jn-combobox-empty { padding: 16px 9px; color: var(--jn-control-muted); font-size: 12px; }
+.jn-combobox-empty:empty { display: none; }
+.jn-control-positioner {
+    z-index: 180;
+    max-width: calc(100vw - 24px);
+}
+.jn-control-popup {
+    min-width: var(--anchor-width, 160px);
+    max-width: min(360px, calc(100vw - 24px));
+    max-height: min(var(--available-height, 360px), 360px);
+    overflow: auto;
+    padding: 5px;
+    background: var(--jn-control-surface, #fff);
+    color: var(--jn-control-ink, #27313f);
+    border: 1px solid var(--jn-control-border, #d8dfe8);
+    border-radius: 11px;
+    box-shadow:
+        0 10px 32px #1830491c,
+        0 2px 5px #18304912,
+        inset 0 1px 0 #ffffffa0;
+    font: inherit;
+    font-size: 13px;
+    transform-origin: var(--transform-origin);
+    transition:
+        opacity 0.12s,
+        transform 0.12s;
+}
+.jn-control-popup[data-starting-style],
+.jn-control-popup[data-ending-style] {
+    opacity: 0;
+    transform: translateY(-3px) scale(0.99);
+}
+.jn-control-option {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 32px;
+    padding: 6px 9px;
+    border-radius: 6px;
+    cursor: pointer;
+    outline: none;
+    white-space: nowrap;
+}
+.jn-control-option [data-slot="select-item-indicator"],
+.jn-control-option > span:last-child:not(:first-child) {
+    margin-left: auto;
+}
+.jn-control-option[data-highlighted] {
+    background: var(--jn-control-selected, #e8f0fc);
+}
+.jn-control-option[data-disabled] {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+.jn-control-option.danger {
+    color: #ad424b;
+}
+.jn-control-scroll {
+    height: 22px;
+    display: grid;
+    place-items: center;
+    background: var(--jn-control-surface, #fff);
+}
+.jn-control-switch {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    width: 30px;
+    height: 18px;
+    min-height: 0;
+    padding: 1px;
+    border: 1px solid #c7d0dd;
+    border-radius: 99px;
+    background: #cbd3df;
+    box-shadow: inset 0 1px 2px #23395413;
+    cursor: pointer;
+    transition:
+        background 0.16s,
+        border-color 0.16s;
+}
+.jn-control-switch::after {
+    content: "";
+    position: absolute;
+    inset: -7px -4px;
+}
+.jn-control-switch[data-checked] {
+    background: var(--jn-control-accent, #2468ce);
+    border-color: var(--jn-control-accent, #2468ce);
+}
+.jn-control-switch [data-slot="switch-thumb"] {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px #142d4b30;
+    transition: transform 0.18s cubic-bezier(0.2, 0.7, 0.2, 1);
+    pointer-events: none;
+}
+.jn-control-switch [data-slot="switch-thumb"][data-checked] {
+    transform: translateX(12px);
+}
+@media (prefers-reduced-motion: reduce) {
+    .jn-control-popup,
+    .jn-control-switch,
+    .jn-control-switch [data-slot="switch-thumb"],
+    .jn-control-button,
+    .jn-control-select {
+        transition: none;
+    }
+}
+@media (prefers-contrast: more) {
+    .jn-control-popup,
+    .jn-control-button,
+    .jn-control-select {
+        border-color: currentColor;
+    }
+}

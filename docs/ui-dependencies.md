@@ -1,6 +1,6 @@
-# 界面组件与参考记录（JN-0010）
+# 界面组件与参考记录（接续至 JN-0020）
 
-核对日期：2026-10-10。版本以 `apps/sem/package-lock.json` 锁定安装结果为准。
+核对日期：2026-10-13。版本以 `apps/sem/package-lock.json` 锁定安装结果为准。
 
 ## 实际采用
 
@@ -24,3 +24,13 @@ PDF.js 的 worker、字符映射、标准字体、ICC 与解码资源在构建�
 - [shadcn Sidebar](https://ui.shadcn.com/docs/components/base/sidebar)、[Motion Primitives](https://motion-primitives.com/docs)、[Prompt Kit](https://www.prompt-kit.com/)：借鉴导航组合、内容连续性、来源与步骤表达；本批没有复制这些组件源码或安装其整套代码。
 
 未引入 NumberFlow、Paper Shaders、外部 3D 模型、付费模板或展示素材。任务页面的层次来自边框、阴影与短促切换，不增加持续播放的装饰背景。日后采用具体素材时单独核对其来源和授权。
+
+## JN-0020 的实际组件取用
+
+JN-0010时的“仅参考shadcn”描述属于当时状态。JN-0019在独立预览中使用shadcn/ui Base UI registry组件，JN-0020将Button、Select、Switch、Dropdown Menu组合适配到实际应用，代码在 `apps/sem/resources/js/ui/shadcn/controls.jsx`，保留相邻的 [shadcn MIT许可](../apps/sem/resources/js/ui/shadcn/LICENSE.shadcn-ui.txt)。采用CSS作用域和应用已有依赖，不引入全局Tailwind重置或替换业务状态管理。参考 [Base UI Button](https://ui.shadcn.com/docs/components/base/button)。
+
+实际运行关系：Base UI负责键盘、焦点、弹出层和选择语义；Motion负责短促按压与组织布局过渡；Lucide用于新控件图标；原React Flow继续承担画布缩放和平移，连接路径与紧凑树布局由应用实现。依赖版本继续锁定，未为外观增加重复React组件运行时。
+
+用户提供的其他库按用途评估：参考 [HeroUI Button](https://heroui.com/en/docs/react/components/button) 的悬停/按压/禁用状态和 [Ant Design Table](https://ant.design/components/table/) 的信息密度；查看 [Aceternity组件目录](https://ui.aceternity.com/components) 后，本批不采用持续展示装饰；Magic UI本批未复制组件或安装依赖。不能把参考、适配源码和安装包混为同一件事。后续新增需求仍逐项判断现成组件是否适合当前功能，不机械混合五套视觉主题。
+
+用户提供的 [UI设计文章](https://x.com/longhaiqwe123/status/2106216781174251724) 用于复核文字权重、主次操作、组间距离、基线、状态语义、边框与留白；实际验收以应用界面和可操作流程为准。
