@@ -61,7 +61,8 @@ class QuotationWorkspace
             $kind = ['cabinet' => '成套', 'sheet_metal' => '钣金'][$source ?? ''] ?? '待分类';
         }
         return ['id' => (string) $q->id, 'code' => $q->code, 'title' => $q->label, 'customer' => $q->companie?->label ?? '原客户不可用',
-            'companyId' => $q->companies_id, 'type' => $kind, 'due' => $q->validity_date ? substr((string) $q->validity_date, 0, 10) : '', 'revision' => (int) $m['revision'],
+            'companyId' => $q->companies_id, 'owner' => User::find($q->user_id)?->name ?? '未指定', 'updatedAt' => $q->updated_at?->format('Y-m-d H:i'),
+            'type' => $kind, 'due' => $q->validity_date ? substr((string) $q->validity_date, 0, 10) : '', 'revision' => (int) $m['revision'],
             'status' => [1 => '草稿', 2 => '已发送', 3 => '已成交', 4 => '未成交', 5 => '已关闭', 6 => '已作废'][(int) $q->statu] ?? '待处理',
             'readOnly' => $this->locked($q), 'note' => $q->comment ?? '', 'token' => $this->token($q),
             'lines' => $q->QuoteLines->filter(fn ($l) => $l->isArticle())->map(fn ($l) => $this->line($l, $m))->values()->all(),
@@ -72,6 +73,7 @@ class QuotationWorkspace
     }
     public function index(User $u, array $input): array {
         $q = $this->query($u)->with('companie');
+        if (!empty($input['companyId'])) $q->where('companies_id', (int) $input['companyId']);
         $this->typeFilter($q, (string) ($input['type'] ?? '全部'));
         if (($input['scope'] ?? '') === 'pending') $q->whereIn('statu', [1, 2]);
         if (($input['scope'] ?? '') === 'reviewed') $q->whereNotIn('statu', [1, 2]);
@@ -124,6 +126,7 @@ class QuotationWorkspace
         if (!empty($input['q'])) $companies->where('label', 'like', '%' . mb_substr($input['q'], 0, 100) . '%');
         $company = isset($input['company']) ? (int) $input['company'] : null;
         return [...app(SalesHandoff::class)->options((object) ['company_id' => $company]),
+            'canCustomers' => FlowSupport::can($u, 'companies-menu'),
             'companies' => $companies->orderBy('label')->limit(30)->get(['id', 'label']),
             'units' => MethodsUnits::get(['id', 'label']), 'vats' => AccountingVat::get(['id', 'label', 'rate'])];
     }

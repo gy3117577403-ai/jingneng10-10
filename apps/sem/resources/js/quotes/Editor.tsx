@@ -58,6 +58,7 @@ export function Editor({
     saving,
     dirty,
     onVersions,
+    onCustomer,
 }: {
     quote: Quote;
     state: EditorState;
@@ -72,6 +73,7 @@ export function Editor({
     onEditLine: (id: string) => void;
     onSave: () => void;
     onVersions: () => void;
+    onCustomer?: () => void;
     saving: boolean;
     dirty: boolean;
     onRemove: (id: string) => void;
@@ -149,7 +151,16 @@ export function Editor({
                 <div className="q-document-title">
                     <h1>{quote.title}</h1>
                     <p>
-                        {quote.customer}
+                        {onCustomer ? (
+                            <button
+                                className="q-customer-link"
+                                onClick={onCustomer}
+                            >
+                                {quote.customer}
+                            </button>
+                        ) : (
+                            quote.customer
+                        )}
                         <span>·</span>
                         <span className="mono">{quote.code ?? quote.id}</span>
                         <span>
@@ -161,7 +172,9 @@ export function Editor({
                     </p>
                 </div>
                 <div className="q-document-actions">
-                    <Status tone={locked ? "green" : "neutral"}>
+                    <Status
+                        tone={quote.status === "已成交" ? "green" : "neutral"}
+                    >
                         {quote.status}
                     </Status>
                     <Button variant="ghost" onClick={onVersions}>

@@ -1,6 +1,7 @@
 <?php
 namespace App\Http\Controllers;
 use App\Services\Quotes\QuotationWorkspace;
+use App\Services\Quotes\CustomerWorkspace;
 use Illuminate\Http\Request;
 
 class QuotationWorkspaceController extends Controller
@@ -14,5 +15,9 @@ class QuotationWorkspaceController extends Controller
     public function create(Request $r, QuotationWorkspace $s) { return $this->json($s->create($r->user(), $r->header('X-Request-ID', ''), $r->all())); }
     public function save(Request $r, QuotationWorkspace $s, int $id) { return $this->json($s->save($r->user(), $id, $r->header('X-Request-ID', ''), $r->all())); }
     public function reuse(Request $r, QuotationWorkspace $s, int $id) { return $this->json($s->reuse($r->user(), $id, $r->header('X-Request-ID', ''), $r->all())); }
+    public function customers(Request $r, CustomerWorkspace $s) { return $this->json($s->index($r->user(), $r->all())); }
+    public function customer(Request $r, CustomerWorkspace $s, int $id) { return $this->json($s->detail($r->user(), $id)); }
+    public function createCustomer(Request $r, CustomerWorkspace $s) { return $this->json($s->save($r->user(), null, $r->header('X-Request-ID', ''), $r->all())); }
+    public function saveCustomer(Request $r, CustomerWorkspace $s, int $id) { return $this->json($s->save($r->user(), $id, $r->header('X-Request-ID', ''), $r->all())); }
     private function json(array $data) { return response()->json($data)->header('Cache-Control', 'private, no-store'); }
 }

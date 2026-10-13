@@ -6,9 +6,13 @@ Route::middleware(['auth', 'verified', 'has.role', 'check.factory'])->prefix('qu
     Route::get('/api', [C::class, 'index'])->name('index');
     Route::get('/api/history', [C::class, 'history']);
     Route::get('/api/options', [C::class, 'options']);
+    Route::get('/api/customers', [C::class, 'customers']);
+    Route::get('/api/customers/{id}', [C::class, 'customer'])->whereNumber('id');
     Route::get('/api/{id}', [C::class, 'detail'])->whereNumber('id');
     Route::get('/api/{id}/versions/{revision}', [C::class, 'version'])->whereNumber(['id', 'revision']);
     Route::middleware('throttle:60,1')->group(function () {
+        Route::post('/api/customers', [C::class, 'createCustomer']);
+        Route::put('/api/customers/{id}', [C::class, 'saveCustomer'])->whereNumber('id');
         Route::post('/api', [C::class, 'create']);
         Route::put('/api/{id}', [C::class, 'save'])->whereNumber('id');
         Route::post('/api/{id}/reuse', [C::class, 'reuse'])->whereNumber('id');

@@ -56,6 +56,9 @@ export type DraftLine = {
     costs: Cost[];
 };
 export type Quote = {
+    companyId?: number;
+    owner?: string;
+    updatedAt?: string;
     readOnly?: boolean;
     token?: string;
     code?: string;

@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
     ArrowLeft,
     ArrowRight,
+    Building2,
     ClipboardList,
     Factory,
     History,
@@ -31,9 +32,11 @@ import {
 import { Workbench } from "./Workbench";
 import { HistoryView } from "./HistoryView";
 import { Editor } from "./Editor";
+import { Customers, CustomerDialog } from "./Customers";
 import { DetailSheet, Empty } from "./shared";
 import { money } from "./model";
 import "./quotation.css";
+import "./customer-workspace.css";
 
 export async function api(
     endpoint,
@@ -131,11 +134,13 @@ export default function QuotationWorkspace({
     const reduced = useReducedMotion();
     const initial = new URLSearchParams(location.search);
     const [view, setView] = useState(
-        initial.get("view") === "history"
-            ? "history"
-            : initial.get("id")
-              ? "edit"
-              : "workbench",
+        initial.get("view") === "customers"
+            ? "customers"
+            : initial.get("view") === "history"
+              ? "history"
+              : initial.get("id")
+                ? "edit"
+                : "workbench",
     );
     const [quote, setQuote] = useState(null),
         [base, setBase] = useState(null),
@@ -144,7 +149,23 @@ export default function QuotationWorkspace({
     const [workQuery, setWorkQuery] = useState(""),
         [query, setQuery] = useState(""),
         [type, setType] = useState("全部"),
-        [scope, setScope] = useState("all");
+        [scope, setScope] = useState("pending");
+    const [customerId, setCustomerId] = useState(initial.get("customer") || ""),
+        [customerFilters, setCustomerFilters] = useState({
+            q: "",
+            scope: "active",
+            page: 1,
+        }),
+        [customerReturn, setCustomerReturn] = useState(false),
+        [customerEditor, setCustomerEditor] = useState(null),
+        [customerOpen, setCustomerOpen] = useState(false);
+    const customerResume = useRef(null),
+        customerPending = useRef(null);
+    const request = useCallback(
+        (path, signal) =>
+            api(endpoint, path, undefined, "GET", undefined, signal),
+        [endpoint],
+    );
     const [historyType, setHistoryType] = useState("全部"),
         [verified, setVerified] = useState(false),
         [page, setPage] = useState(1),
@@ -197,7 +218,10 @@ export default function QuotationWorkspace({
     useEffect(() => {
         const controller = new AbortController();
         const timer = setTimeout(async () => {
-            if (view === "edit") return;
+            if (view === "edit" || view === "customers") {
+                setLoading(false);
+                return;
+            }
             setLoading(true);
             setError("");
             try {
@@ -274,14 +298,17 @@ export default function QuotationWorkspace({
             clearTimeout(timer);
             c.abort();
         };
-    }, [endpoint, form.companyId, customerQuery]);
+    }, [endpoint, form.companyId, customerQuery, refresh]);
     useEffect(() => {
         const url = new URL(location.href);
         url.searchParams.set("view", view);
         if (view === "edit" && quote) url.searchParams.set("id", quote.id);
         else if (view !== "edit") url.searchParams.delete("id");
+        if (view === "customers" && customerId)
+            url.searchParams.set("customer", customerId);
+        else url.searchParams.delete("customer");
         history.replaceState(null, "", url);
-    }, [view, quote?.id]);
+    }, [view, quote?.id, customerId]);
     useEffect(() => {
         const handler = (e) => {
             if (dirty) {
@@ -317,12 +344,64 @@ export default function QuotationWorkspace({
         }
     };
     const go = async (next, origin = false) => {
-        if (dirty && !(await save())) return;
+        if (dirty && !(await save())) return false;
         setHistoryOrigin(origin);
         setView(next);
         setPage(1);
         setError("");
         setRefresh((x) => x + 1);
+        return true;
+    };
+    const openCustomer = async (id) => {
+        const fromQuote = view === "edit";
+        if (!(await go("customers"))) return;
+        setCustomerReturn(fromQuote);
+        setCustomerId(String(id));
+    };
+    const beginCustomer = (customer = null, resume = null) => {
+        customerResume.current = resume;
+        if (dialogOpen) {
+            customerPending.current = { customer };
+            setDialogOpen(false);
+        } else {
+            setCustomerEditor(customer);
+            setCustomerOpen(true);
+        }
+    };
+    const editSelectedCustomer = async () => {
+        try {
+            const c = await request("/customers/" + form.companyId);
+            if (!c.canEdit) {
+                setFormError("请联系客户负责人或管理员补充联系人与地址。");
+                return;
+            }
+            beginCustomer(c, dialog);
+        } catch (e) {
+            setFormError(e.message);
+        }
+    };
+    const customerSaved = (c) => {
+        setCustomerOpen(false);
+        setRefresh((x) => x + 1);
+        setToast("客户资料已就绪，可以继续报价");
+        if (customerResume.current) {
+            setCustomerQuery(c.name);
+            setForm((f) => ({
+                ...f,
+                companyId: c.id,
+                contactId: c.contacts.some((x) => x.id === f.contactId)
+                    ? f.contactId
+                    : c.contacts.find((x) => x.default)?.id ||
+                      (c.contacts.length === 1 ? c.contacts[0].id : ""),
+                addressId: c.addresses.some((x) => x.id === f.addressId)
+                    ? f.addressId
+                    : c.addresses.find((x) => x.default)?.id ||
+                      (c.addresses.length === 1 ? c.addresses[0].id : ""),
+            }));
+        } else {
+            setCustomerId(c.id);
+            setView("customers");
+        }
     };
     const searchHistory = () => {
         if (document.querySelector('[role="dialog"][data-open]')) return;
@@ -348,22 +427,52 @@ export default function QuotationWorkspace({
     const close = () => {
         if (!saving) setDialogOpen(false);
     };
-    const open = async (item) => {
+    const open = async (item, nextTab = "lines") => {
+        if (dirty && !(await save())) return;
         setError("");
         try {
             const q = await api(endpoint, "/" + item.id);
             accept(q);
-            setEditorState({ tab: "lines", selected: "" });
+            setEditorState({
+                tab: nextTab,
+                selected:
+                    nextTab === "costs"
+                        ? q.lines.find(
+                              (l) =>
+                                  !l.costs.length ||
+                                  l.costs.some(
+                                      (c) => c.price === null || !c.checked,
+                                  ),
+                          )?.id || ""
+                        : "",
+            });
             setView("edit");
         } catch (e) {
             report(e);
         }
     };
-    const newQuote = () => {
+    const newQuote = (customer = null) => {
         setReuse(null);
         setTarget("new");
-        setForm(emptyForm);
-        setCustomerQuery("");
+        setForm(
+            customer?.id
+                ? {
+                      ...emptyForm,
+                      companyId: customer.id,
+                      contactId:
+                          customer.contacts.find((c) => c.default)?.id ||
+                          (customer.contacts.length === 1
+                              ? customer.contacts[0].id
+                              : ""),
+                      addressId:
+                          customer.addresses.find((a) => a.default)?.id ||
+                          (customer.addresses.length === 1
+                              ? customer.addresses[0].id
+                              : ""),
+                  }
+                : emptyForm,
+        );
+        setCustomerQuery(customer?.id ? customer.name : "");
         show("new");
     };
     const showReuse = (item, el) => {
@@ -509,6 +618,15 @@ export default function QuotationWorkspace({
                             icon: ClipboardList,
                         },
                         { id: "history", label: "历史报价", icon: History },
+                        ...(options.canCustomers
+                            ? [
+                                  {
+                                      id: "customers",
+                                      label: "客户资料",
+                                      icon: Building2,
+                                  },
+                              ]
+                            : []),
                     ].map((i) => (
                         <button
                             key={i.id}
@@ -580,11 +698,13 @@ export default function QuotationWorkspace({
                         <span className="q-breadcrumb">
                             销售与报价 <ArrowRight />
                             <b>
-                                {view === "history"
-                                    ? "历史报价"
-                                    : view === "edit"
-                                      ? "编辑报价"
-                                      : "报价工作台"}
+                                {view === "customers"
+                                    ? "客户资料"
+                                    : view === "history"
+                                      ? "历史报价"
+                                      : view === "edit"
+                                        ? "编辑报价"
+                                        : "报价工作台"}
                             </b>
                         </span>
                     </div>
@@ -608,6 +728,11 @@ export default function QuotationWorkspace({
                 <nav className="q-mobile-nav" aria-label="窄屏报价导航">
                     <button onClick={() => go("workbench")}>报价工作台</button>
                     <button onClick={() => go("history")}>历史报价</button>
+                    {options.canCustomers && (
+                        <button onClick={() => go("customers")}>
+                            客户资料
+                        </button>
+                    )}
                 </nav>
                 {error && (
                     <div className="q-server-error" role="alert">
@@ -645,6 +770,11 @@ export default function QuotationWorkspace({
                                     scope={scope}
                                     onScope={setFilter(setScope)}
                                     onOpen={open}
+                                    onCustomer={
+                                        options.canCustomers
+                                            ? openCustomer
+                                            : undefined
+                                    }
                                     onNew={newQuote}
                                     onHistory={() => go("history")}
                                 />
@@ -669,6 +799,21 @@ export default function QuotationWorkspace({
                                             : undefined
                                     }
                                 />
+                            ) : view === "customers" ? (
+                                <Customers
+                                    request={request}
+                                    selected={customerId}
+                                    onSelect={setCustomerId}
+                                    filters={customerFilters}
+                                    onFilters={setCustomerFilters}
+                                    refresh={refresh}
+                                    onNew={() => beginCustomer()}
+                                    onEdit={beginCustomer}
+                                    onQuote={newQuote}
+                                    onOpenQuote={open}
+                                    returnQuote={customerReturn && quote}
+                                    onReturn={() => open(quote)}
+                                />
                             ) : quote ? (
                                 <fieldset
                                     disabled={saving}
@@ -682,6 +827,15 @@ export default function QuotationWorkspace({
                                 >
                                     <Editor
                                         quote={quote}
+                                        onCustomer={
+                                            options.canCustomers &&
+                                            quote.companyId
+                                                ? () =>
+                                                      openCustomer(
+                                                          quote.companyId,
+                                                      )
+                                                : undefined
+                                        }
                                         state={editorState}
                                         onStateChange={setEditorState}
                                         onChange={setQuote}
@@ -735,7 +889,7 @@ export default function QuotationWorkspace({
                         </motion.div>
                     </AnimatePresence>
                 </div>
-                {view !== "edit" && (
+                {view !== "edit" && view !== "customers" && (
                     <div className="q-pagination">
                         <span>
                             {loading
@@ -763,6 +917,13 @@ export default function QuotationWorkspace({
                 open={dialogOpen}
                 onOpenChange={(open) => {
                     if (!saving) setDialogOpen(open);
+                }}
+                onOpenChangeComplete={(open) => {
+                    if (!open && customerPending.current) {
+                        setCustomerEditor(customerPending.current.customer);
+                        customerPending.current = null;
+                        setCustomerOpen(true);
+                    }
                 }}
             >
                 <DialogContent
@@ -870,6 +1031,37 @@ export default function QuotationWorkspace({
                                             }
                                         />
                                     </label>
+                                    <div className="q-customer-picker-actions">
+                                        {options.canCustomers && (
+                                            <Button
+                                                variant="ghost"
+                                                onClick={() =>
+                                                    beginCustomer(null, dialog)
+                                                }
+                                            >
+                                                <Plus />
+                                                新建客户
+                                            </Button>
+                                        )}
+                                        {options.canCustomers &&
+                                            form.companyId && (
+                                                <Button
+                                                    variant="ghost"
+                                                    onClick={
+                                                        editSelectedCustomer
+                                                    }
+                                                >
+                                                    维护客户资料
+                                                </Button>
+                                            )}
+                                    </div>
+                                    {form.companyId &&
+                                        (!options.contacts?.length ||
+                                            !options.addresses?.length) && (
+                                            <p className="q-customer-notice">
+                                                报价需要联系人和客户地址，请先补充档案。
+                                            </p>
+                                        )}
                                     <Pick
                                         label="客户档案"
                                         value={form.companyId}
@@ -1083,6 +1275,23 @@ export default function QuotationWorkspace({
                     </div>
                 )}
             </DetailSheet>
+            <CustomerDialog
+                open={customerOpen}
+                customer={customerEditor}
+                request={request}
+                mutate={mutate}
+                onSaved={customerSaved}
+                onClose={() => setCustomerOpen(false)}
+                onClosed={() => {
+                    const resume = customerResume.current;
+                    customerResume.current = null;
+                    if (resume) {
+                        setFormError("");
+                        setDialog(resume);
+                        setDialogOpen(true);
+                    }
+                }}
+            />
             <AnimatePresence>
                 {toast && (
                     <motion.div
