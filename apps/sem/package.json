@@ -40,6 +40,7 @@
         "@dnd-kit/utilities": "^3.2.2",
         "@fortawesome/fontawesome-free": "^5.15.4",
         "@popperjs/core": "^2.11.8",
+        "@tanstack/react-table": "8.21.3",
         "@univerjs/core": "^1.0.3",
         "@univerjs/design": "^1.0.3",
         "@univerjs/docs": "^1.0.3",

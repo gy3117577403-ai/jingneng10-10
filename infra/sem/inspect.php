@@ -26,7 +26,7 @@ $tables = ['users', 'companies', 'quotes', 'quote_lines', 'orders', 'order_lines
            'jn_data_files', 'jn_data_rules', 'jn_data_access_requests', 'jn_data_tasks', 'jn_data_comments', 'jn_data_imports', 'jn_data_events', 'jn_data_receipts', 'jn_data_documents', 'jn_data_chunks'];
 $tables = [...$tables, 'jn_data_conversations', 'jn_data_answers'];
 $orgTables = ['jn_org_state', 'jn_org_units', 'jn_org_positions', 'jn_org_people', 'jn_org_assignments', 'jn_org_roles', 'jn_org_grants', 'jn_org_events', 'jn_org_receipts'];
-$tables = [...$tables, ...$orgTables];
+$tables = [...$tables, ...$orgTables, 'jn_quote_workspaces', 'jn_quote_workspace_versions'];
 $organizationIntegrity = [];
 foreach ($orgTables as $table) {
     if (Illuminate\Support\Facades\Schema::hasTable($table)) $organizationIntegrity[$table] = hash('sha256', DB::table($table)->orderBy('id')->get()->toJson());

@@ -393,7 +393,11 @@ return [
             'submenu' => array_merge(
                 [
                     [
-                        'text' => 'quotes_list_trans_key',
+                        'text' => '报价工作台',
+                        'url' => 'quotation-workspace',
+                    ],
+                    [
+                        'text' => '原报价与打印',
                         'url'  => 'quotes',
                     ],
                     [

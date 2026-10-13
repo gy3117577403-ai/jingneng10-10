@@ -31,6 +31,9 @@ $arrowSteps = json_encode([
 @section('right-sidebar')
 
 @section('content')
+@if(!$Quote->is_template && (auth()->user()->hasRole('Admin') || (int) $Quote->user_id === (int) auth()->id()))
+<a class="btn btn-sm btn-outline-primary mb-3" href="{{ route('quotation-workspace.page', ['view' => 'edit', 'id' => $Quote->id]) }}">在报价工作台维护明细与成本</a>
+@endif
 @if(app(\App\Services\SalesControl\QuoteReview::class)->visible($Quote, auth()->user()))
     @include('sales-control.mount', ['mode' => 'quote', 'recordId' => $Quote->id])
 @endif

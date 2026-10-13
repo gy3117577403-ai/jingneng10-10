@@ -30,6 +30,7 @@ Route::group(['prefix' => LaravelLocalization::setLocale(),
 
     require __DIR__ . '/presales.php';
     require __DIR__ . '/sales-control.php';
+    require __DIR__ . '/quotation-workspace.php';
     require __DIR__ . '/company-data.php';
     require __DIR__ . '/organization.php';
 
