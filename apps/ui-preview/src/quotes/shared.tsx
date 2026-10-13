@@ -1,4 +1,4 @@
-import type { ReactNode, Ref } from "react"
+import type { ReactNode, Ref, RefObject } from "react"
 import { Box, Check, CircleDashed, Factory, Search, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -110,6 +110,8 @@ export function SearchInput({
 export function DetailSheet({
   open,
   onClose,
+  onCloseComplete,
+  returnFocus,
   title,
   description,
   children,
@@ -117,14 +119,26 @@ export function DetailSheet({
 }: {
   open: boolean
   onClose: () => void
+  onCloseComplete?: () => void
+  returnFocus?: RefObject<HTMLElement | null>
   title: string
   description: string
   children: ReactNode
   footer: ReactNode
 }) {
   return (
-    <Sheet open={open} onOpenChange={(value) => !value && onClose()}>
-      <SheetContent className="q-sheet" showCloseButton={false}>
+    <Sheet
+      open={open}
+      onOpenChange={(value) => !value && onClose()}
+      onOpenChangeComplete={(value) => {
+        if (!value) onCloseComplete?.()
+      }}
+    >
+      <SheetContent
+        className="q-sheet"
+        showCloseButton={false}
+        finalFocus={returnFocus}
+      >
         <SheetHeader className="q-sheet-header">
           <SheetTitle>{title}</SheetTitle>
           <SheetDescription>{description}</SheetDescription>

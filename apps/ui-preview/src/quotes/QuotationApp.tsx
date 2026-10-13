@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import {
   ArrowRight,
@@ -57,6 +57,7 @@ import { Workbench } from "./Workbench"
 import "./quotation.css"
 
 type View = "workbench" | "history" | "edit"
+type QuoteDialog = "new" | "reuse" | "review" | "document" | "reset" | "guide"
 type Stored = { version: 1; quotes: Quote[] }
 function loadQuotes() {
   try {
@@ -100,9 +101,16 @@ export default function QuotationApp() {
   const [type, setType] = useState("全部"),
     [scope, setScope] = useState("all"),
     [collapsed, setCollapsed] = useState(false)
-  const [dialog, setDialog] = useState<
-    "new" | "reuse" | "review" | "document" | "reset" | "guide" | null
-  >(null)
+  const [dialog, setDialog] = useState<QuoteDialog | null>(null)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const dialogReturnFocus = useRef<HTMLElement | null>(null)
+  const showDialog = (kind: QuoteDialog, returnFocus?: HTMLElement | null) => {
+    dialogReturnFocus.current = returnFocus ?? null
+    setDialog(kind)
+    setDialogOpen(true)
+  }
+  // Keep the last dialog's content stable until its exit animation has finished.
+  const closeDialog = () => setDialogOpen(false)
   const [reuse, setReuse] = useState<HistoricalLine | null>(null),
     [target, setTarget] = useState("new")
   const [newTitle, setNewTitle] = useState(""),
@@ -169,6 +177,7 @@ export default function QuotationApp() {
     const handler = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault()
+        if (document.querySelector('[role="dialog"][data-open]')) return
         focusHistorySearch()
       }
     }
@@ -192,9 +201,9 @@ export default function QuotationApp() {
     setNewCustomer("")
     setNewType("成套")
     setFormError("")
-    setDialog("new")
+    showDialog("new")
   }
-  const showReuse = (item: HistoricalLine) => {
+  const showReuse = (item: HistoricalLine, returnFocus: HTMLElement | null) => {
     setReuse(item)
     setTarget(
       historyQuote?.status === "草稿" && historyQuote.type === item.type
@@ -205,7 +214,7 @@ export default function QuotationApp() {
     setNewCustomer(item.customer)
     setNewType(item.type)
     setFormError("")
-    setDialog("reuse")
+    showDialog("reuse", returnFocus)
   }
   const createQuote = (source?: HistoricalLine) => {
     if (target !== "new" && source) {
@@ -227,7 +236,7 @@ export default function QuotationApp() {
         [destination.id]: { tab: "lines", selected: addedLine.id },
       }))
       open(updated)
-      setDialog(null)
+      closeDialog()
       setToast("已加入草稿，请核对本次数量与价格依据。")
       return
     }
@@ -251,7 +260,7 @@ export default function QuotationApp() {
     }
     setQuotes((items) => [item, ...items])
     open(item)
-    setDialog(null)
+    closeDialog()
     setToast(
       source
         ? "已复用为新草稿，历史报价保持原样。"
@@ -330,7 +339,7 @@ export default function QuotationApp() {
             <Network />
             <span>组织与成员</span>
           </a>
-          <button onClick={() => setDialog("guide")}>
+          <button onClick={() => showDialog("guide")}>
             <BookOpen />
             <span>预览操作说明</span>
           </button>
@@ -344,7 +353,7 @@ export default function QuotationApp() {
               variant="ghost"
               size="icon-xs"
               aria-label="重置报价演示数据"
-              onClick={() => setDialog("reset")}
+              onClick={() => showDialog("reset")}
             >
               <RotateCcw />
             </Button>
@@ -454,9 +463,9 @@ export default function QuotationApp() {
                   onReview={() => {
                     setUndoQuote(null)
                     setAck(false)
-                    setDialog("review")
+                    showDialog("review")
                   }}
-                  onDocument={() => setDialog("document")}
+                  onDocument={() => showDialog("document")}
                   onRevision={revise}
                   onRemove={(id) => {
                     const index = quote.lines.findIndex(
@@ -515,6 +524,7 @@ export default function QuotationApp() {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: reduced ? 0 : 0.18 }}
           >
             <CircleCheck />
             <span>{toast}</span>
@@ -554,14 +564,14 @@ export default function QuotationApp() {
           </motion.div>
         )}
       </AnimatePresence>
-      <Dialog
-        open={dialog !== null}
-        onOpenChange={(isOpen) => {
-          if (!isOpen) setDialog(null)
-        }}
-      >
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent
           className={`q-dialog ${dialog === "document" ? "q-document-dialog" : ""}`}
+          finalFocus={() =>
+            dialogReturnFocus.current?.isConnected
+              ? dialogReturnFocus.current
+              : true
+          }
         >
           <DialogHeader>
             <DialogTitle>
@@ -810,7 +820,7 @@ export default function QuotationApp() {
             </ol>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialog(null)}>
+            <Button variant="outline" onClick={closeDialog}>
               {dialog === "document" || dialog === "guide" ? "关闭" : "返回"}
             </Button>
             {(dialog === "new" || dialog === "reuse") && (
@@ -827,7 +837,7 @@ export default function QuotationApp() {
                 onClick={() => {
                   if (issues(quote).length || !ack) return
                   changeQuote({ ...quote, status: "预览已核对" })
-                  setDialog(null)
+                  closeDialog()
                   setToast("演示核对已完成，此版本保持只读。")
                 }}
               >
@@ -850,7 +860,7 @@ export default function QuotationApp() {
                   setWorkQuery("")
                   setScope("all")
                   setType("全部")
-                  setDialog(null)
+                  closeDialog()
                   setToast("已恢复初始演示资料。")
                   setUndoQuote(null)
                 }}

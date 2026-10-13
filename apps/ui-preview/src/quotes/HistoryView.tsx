@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import {
   ArrowDown,
@@ -6,7 +6,6 @@ import {
   ArrowLeft,
   ArrowRight,
   ChevronDown,
-  ChevronRight,
   FileSpreadsheet,
   FileText,
 } from "lucide-react"
@@ -58,13 +57,16 @@ export function HistoryView({
   setType: (value: string) => void
   verified: boolean
   setVerified: (value: boolean) => void
-  onReuse: (line: HistoricalLine) => void
+  onReuse: (line: HistoricalLine, returnFocus: HTMLElement | null) => void
   focusRequest: number
   returnTitle?: string
   onBack?: () => void
 }) {
   const reduced = useReducedMotion()
+  const costDisclosureId = useId()
   const inputRef = useRef<HTMLInputElement>(null)
+  const detailReturnFocus = useRef<HTMLElement | null>(null)
+  const pendingReuse = useRef<HistoricalLine | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [expanded, setExpanded] = useState(false)
@@ -88,13 +90,7 @@ export function HistoryView({
           <div className="q-product-cell">
             <TypeIcon type={row.original.type} small />
             <div>
-              <button
-                className="q-text-button"
-                onClick={() => {
-                  setSelected(row.original.id)
-                  setDetailOpen(true)
-                }}
-              >
+              <button className="q-text-button" aria-haspopup="dialog">
                 {row.original.name}
               </button>
               <span className="q-meta mono">
@@ -240,7 +236,12 @@ export function HistoryView({
               <TableRow
                 key={row.id}
                 data-selected={detailOpen && selected === row.original.id}
-                onClick={() => {
+                onClick={(event) => {
+                  detailReturnFocus.current =
+                    event.currentTarget.querySelector<HTMLButtonElement>(
+                      ".q-text-button"
+                    )
+                  pendingReuse.current = null
                   setSelected(row.original.id)
                   setDetailOpen(true)
                   setExpanded(false)
@@ -274,6 +275,12 @@ export function HistoryView({
       <DetailSheet
         open={detailOpen && !!item}
         onClose={() => setDetailOpen(false)}
+        returnFocus={detailReturnFocus}
+        onCloseComplete={() => {
+          const next = pendingReuse.current
+          pendingReuse.current = null
+          if (next) onReuse(next, detailReturnFocus.current)
+        }}
         title={item?.name ?? "历史明细"}
         description={
           item
@@ -288,8 +295,8 @@ export function HistoryView({
             <Button
               onClick={() => {
                 if (item) {
+                  pendingReuse.current = item
                   setDetailOpen(false)
-                  onReuse(item)
                 }
               }}
             >
@@ -353,6 +360,7 @@ export function HistoryView({
               <button
                 className="q-disclosure"
                 aria-expanded={expanded}
+                aria-controls={expanded ? costDisclosureId : undefined}
                 onClick={() => setExpanded(!expanded)}
               >
                 <span>单{item.unit}成本构成</span>
@@ -360,12 +368,13 @@ export function HistoryView({
                   {costTotal(item) === null
                     ? "待核价"
                     : "¥ " + money(costTotal(item)!)}
-                  {expanded ? <ChevronDown /> : <ChevronRight />}
+                  <ChevronDown />
                 </span>
               </button>
               <AnimatePresence initial={false}>
                 {expanded && (
                   <motion.div
+                    id={costDisclosureId}
                     className="q-collapse"
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: "auto", opacity: 1 }}
