@@ -1,6 +1,8 @@
-# 组织与成员 · 真实组件预览
+# 京能 · 真实组件交互预览
 
 JN-0019 的独立 React 预览。两个视图共用组织范围、搜索、详情和紧凑排版；使用虚构数据，不连接 8090 业务应用。
+
+JN-0022 增加销售报价工作台、历史明细查询与成套/钣金报价编辑，复用同一组件基础。设计和体验路径见 [报价预览说明](../../docs/quotation-ui-preview.md)。报价预览使用独立存储键，不修改组织演示或实际业务。
 
 ## 启动
 
@@ -14,6 +16,10 @@ npm run dev
 
 - 组织架构：<http://127.0.0.1:5181/?view=organization>
 - 成员：<http://127.0.0.1:5181/?view=members>
+- 报价工作台：<http://127.0.0.1:5181/quotes?view=workbench>
+- 历史报价：<http://127.0.0.1:5181/quotes?view=history>
+- 成套核价：<http://127.0.0.1:5181/quotes?view=edit&id=DEMO-Q-1013-01>
+- 钣金核价：<http://127.0.0.1:5181/quotes?view=edit&id=DEMO-Q-1013-02>
 - 只监听本机地址。5181 被占用时会明确失败，不自动改端口。
 - `npm run test`、`npm run lint`、`npm run build` 分别运行逻辑测试、静态检查和含类型检查的构建。
 
