@@ -6,6 +6,7 @@ import React, {
     useState,
 } from "react";
 import { Handle, Position } from "reactflow";
+import { Collapsible } from "@base-ui/react/collapsible";
 import OrganizationGraph from "./OrganizationGraph";
 import {
     Button,
@@ -21,7 +22,6 @@ import {
     Search,
     Plus,
     ChevronRight,
-    ChevronDown,
     Building2,
     Folder,
     Factory,
@@ -132,6 +132,8 @@ function UnitNode({ data }) {
             >
                 <Button
                     className="org-node-main nodrag nopan"
+                    feedback="surface"
+                    disabled={data.leaving}
                     aria-pressed={selected}
                     onClick={() => onSelect(u.id)}
                     aria-label={`查看组织 ${u.name}`}
@@ -152,15 +154,12 @@ function UnitNode({ data }) {
                 {hasChildren && (
                     <Button
                         className="org-expand icon nodrag nopan"
+                        disabled={data.leaving}
                         aria-expanded={open}
                         aria-label={`${open ? "收起" : "展开"} ${u.name}`}
                         onClick={() => onToggle(u.id)}
                     >
-                        {open ? (
-                            <ChevronDown size={13} />
-                        ) : (
-                            <ChevronRight size={13} />
-                        )}
+                        <ChevronRight className="org-disclosure-chevron" size={14} />
                     </Button>
                 )}
             </div>
@@ -174,6 +173,8 @@ function PersonNode({ data }) {
             <Handle type="target" position={Position.Left} />
             <Button
                 className={`org-chart-person nodrag nopan ${data.selected ? "selected" : ""}`}
+                feedback="surface"
+                disabled={data.leaving}
                 onClick={() => data.onSelect(data.person.id)}
                 aria-label={`查看成员资料 ${data.person.name}`}
                 title={`${data.person.name} · ${positionName(data.person.assignments.find((a) => a.unit_id === data.unit.id) || assignment(data.person), data.positions)}`}
@@ -203,6 +204,8 @@ function MoreNode({ data }) {
             <Handle type="target" position={Position.Left} />
             <Button
                 className="org-more-members nodrag nopan"
+                feedback="surface"
+                disabled={data.leaving}
                 onClick={() => data.onMembers(data.unit.id)}
                 aria-label={`查看${data.unit.name}全部${data.count}条成员记录`}
             >
@@ -237,35 +240,28 @@ function Tree({ data, selected, onSelect, expanded, setExpanded, query }) {
                       ? BriefcaseBusiness
                       : Folder;
         return (
-            <React.Fragment key={u.id}>
+            <Collapsible.Root key={u.id} open={open} onOpenChange={(nextOpen) =>
+                setExpanded((old) => {
+                    const next = new Set(old);
+                    nextOpen ? next.add(u.id) : next.delete(u.id);
+                    return next;
+                })
+            }>
                 <div
                     className={`org-tree-row ${selected === u.id ? "active" : ""}`}
                     style={{ "--level": depth }}
                 >
-                    <Button
+                    <Collapsible.Trigger
+                        render={<Button feedback="surface" />}
                         className="org-tree-toggle"
                         aria-label={`${open ? "收起" : "展开"}目录 ${u.name}`}
                         disabled={!children.length}
-                        onClick={() =>
-                            setExpanded((old) => {
-                                const next = new Set(old);
-                                next.has(u.id)
-                                    ? next.delete(u.id)
-                                    : next.add(u.id);
-                                return next;
-                            })
-                        }
                     >
-                        {children.length ? (
-                            open ? (
-                                <ChevronDown size={13} />
-                            ) : (
-                                <ChevronRight size={13} />
-                            )
-                        ) : null}
-                    </Button>
+                        {children.length ? <ChevronRight className="org-disclosure-chevron" size={13} /> : null}
+                    </Collapsible.Trigger>
                     <Button
                         className="org-tree-title"
+                        feedback="surface"
                         onClick={() => onSelect(u.id)}
                         title={unitPath(data.units, u.id)}
                     >
@@ -278,8 +274,10 @@ function Tree({ data, selected, onSelect, expanded, setExpanded, query }) {
                         )}
                     </Button>
                 </div>
-                {open && children.map((x) => row(x, depth + 1))}
-            </React.Fragment>
+                {children.length > 0 && <Collapsible.Panel className="org-tree-children" inert={!open}>
+                    {children.map((x) => row(x, depth + 1))}
+                </Collapsible.Panel>}
+            </Collapsible.Root>
         );
     }
     const roots = data.units.filter(
@@ -293,9 +291,11 @@ function Tree({ data, selected, onSelect, expanded, setExpanded, query }) {
     );
 }
 function Profile({
+    open,
     person,
     data,
     onClose,
+    onCloseComplete,
     onEdit,
     onAvatar,
     onAccount,
@@ -308,8 +308,10 @@ function Profile({
     useEffect(() => setTab("basic"), [p.id]);
     return (
         <SurfaceDialog
+            open={open}
             title="成员资料"
             onClose={onClose}
+            onCloseComplete={onCloseComplete}
             modal={false}
             disablePointerDismissal
             className="org-profile"
@@ -641,7 +643,6 @@ export default function Organization({
     }, [load, editor, avatar]);
     useEffect(() => {
         if (!selectedPerson) {
-            setPerson(null);
             setPersonError("");
             return;
         }
@@ -731,7 +732,6 @@ export default function Organization({
     };
     const closePerson = () => {
         setSelectedPerson(null);
-        setPerson(null);
         if (personFocus.current?.isConnected) personFocus.current.focus();
     };
     const toggleChart = (id) =>
@@ -1895,9 +1895,11 @@ export default function Organization({
             )}
             {person && (
                 <Profile
+                    open={!!selectedPerson}
                     person={person}
                     data={{ ...data, documents: links.documents }}
                     onClose={closePerson}
+                    onCloseComplete={() => { if (!selectedPerson) setPerson(null); }}
                     onEdit={() => editPerson(person)}
                     onAvatar={() => setAvatar(true)}
                     onAccount={account}

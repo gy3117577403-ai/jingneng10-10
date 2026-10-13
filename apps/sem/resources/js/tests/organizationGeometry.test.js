@@ -1,9 +1,27 @@
 import {describe,it,expect} from 'vitest';
-import {arrangeTree,branchGeometry,branchPaths,interpolateChart,frameChart,revealNode,NODE_WIDTH,ROW_GAP} from '../components/organization/chartGeometry';
+import {arrangeTree,anchorChart,branchGeometry,branchPaths,interpolateChart,frameChart,revealNode,NODE_WIDTH,ROW_GAP} from '../components/organization/chartGeometry';
 
 const node=(id,children=[],height=80)=>({id,type:'unit',height,data:{active:id==='project'},children});
 const full=()=>arrangeTree(node('root',[node('workshop',[node('sheet',[node('a',[],60),node('b',[],60)]),node('project',[node('c',[],60)])]),node('warehouse')]));
 describe('organization geometry contract',()=>{
+    it('keeps the clicked disclosure still when a subtree expands, collapses or reverses mid-flight',()=>{
+        const open=full(),closed=arrangeTree(node('root',[node('workshop'),node('warehouse')]));
+        open.nodes.find(n=>n.id==='workshop').data.open=true;
+        closed.nodes.find(n=>n.id==='workshop').data.open=false;
+        const position=open.nodes.find(n=>n.id==='workshop').position;
+        const destination=anchorChart(open,closed,'warehouse');
+        expect(destination.nodes.find(n=>n.id==='workshop').position).toEqual(position);
+        const interrupted=interpolateChart(open,destination,.45);
+        const reversed=anchorChart(interrupted,open,'warehouse');
+        expect(reversed.nodes.find(n=>n.id==='workshop').position).toEqual(position);
+        for(const frame of [destination,interrupted,reversed]){
+            for(const branch of frame.branches){const b=branchGeometry(branch,frame.nodes);
+                for(const arm of b.targets){const n=frame.nodes.find(n=>n.id===arm.id);expect(arm.x).toBe(n.position.x);expect(arm.y).toBe(n.position.y+n.height/2);}
+            }
+        }
+        const unrelated={...open,rootId:'new-root'};
+        expect(anchorChart(closed,unrelated,'workshop')).toBe(unrelated);
+    });
     it('keeps sibling columns separated and uses one connector trunk per parent',()=>{
         const chart=full();
         const columns=Map.groupBy(chart.nodes,n=>n.position.x);

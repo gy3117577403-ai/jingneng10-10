@@ -23,9 +23,9 @@ export function Segments({ value, onChange, items, label, className = '' }) {
     </div></LayoutGroup>;
 }
 
-export function SurfaceDialog({ open = true, onClose, title, children, className = '', initialFocus, finalFocus, modal = true, disablePointerDismissal = false }) {
+export function SurfaceDialog({ open = true, onClose, onCloseComplete, title, children, className = '', initialFocus, finalFocus, modal = true, disablePointerDismissal = false }) {
     const closeRef = useRef(null);
-    return <Dialog.Root open={open} onOpenChange={next => { if (!next) onClose(); }} modal={modal} disablePointerDismissal={disablePointerDismissal}>
+    return <Dialog.Root open={open} onOpenChange={next => { if (!next) onClose(); }} onOpenChangeComplete={next => { if (!next) onCloseComplete?.(); }} modal={modal} disablePointerDismissal={disablePointerDismissal}>
         <Dialog.Portal>
             {modal && <Dialog.Backdrop className="jn-backdrop" />}
             <Dialog.Popup className={`jn-surface-dialog ${className}`} initialFocus={initialFocus || closeRef} finalFocus={finalFocus}>

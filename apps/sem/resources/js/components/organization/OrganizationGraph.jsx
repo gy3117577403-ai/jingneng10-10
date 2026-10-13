@@ -8,6 +8,7 @@ import React, {
 import ReactFlow from "reactflow";
 import { animate, useReducedMotion } from "motion/react";
 import {
+    anchorChart,
     branchGeometry,
     branchPaths,
     frameChart,
@@ -59,16 +60,17 @@ export default function OrganizationGraph({
         focus = useRef(focusId);
     const [frame, setFrame] = useState(graph);
     useEffect(() => {
-        target.current = graph;
         focus.current = focusId;
-    }, [graph, focusId]);
+    }, [focusId]);
     useEffect(() => {
         const from = latest.current,
-            scopeChanged = previousRoot.current !== graph.rootId;
+            scopeChanged = previousRoot.current !== graph.rootId,
+            destination = anchorChart(from, graph, focus.current);
+        target.current = destination;
         previousRoot.current = graph.rootId;
         const same =
-            from.nodes.length === graph.nodes.length &&
-            graph.nodes.every((n, i) => {
+            from.nodes.length === destination.nodes.length &&
+            destination.nodes.every((n, i) => {
                 const p = from.nodes[i];
                 return (
                     p.id === n.id &&
@@ -78,15 +80,15 @@ export default function OrganizationGraph({
                 );
             });
         if (reduced || scopeChanged || same) {
-            latest.current = graph;
-            setFrame(graph);
+            latest.current = destination;
+            setFrame(destination);
             return;
         }
         const animation = animate(0, 1, {
-            duration: 0.32,
-            ease: [0.22, 1, 0.36, 1],
+            duration: destination.nodes.length < from.nodes.length ? 0.28 : 0.38,
+            ease: [0.25, 0.8, 0.25, 1],
             onUpdate: (t) => {
-                const next = interpolateChart(from, graph, t);
+                const next = interpolateChart(from, destination, t);
                 latest.current = next;
                 setFrame(next);
             },
@@ -170,6 +172,9 @@ export default function OrganizationGraph({
                     pointerEvents: n.leaving ? "none" : "all",
                     opacity: n.opacity ?? 1,
                 },
+                // Departing nodes remain visible for the transition but cannot
+                // keep keyboard focus after their branch has been collapsed.
+                data: { ...n.data, leaving: !!n.leaving },
                 width: NODE_WIDTH,
                 height: n.height,
             })),

@@ -12,10 +12,13 @@ import "../../../css/component-controls.css";
 
 const MotionButton = motion.create(ButtonPrimitive);
 export const Button = React.forwardRef(function Button(
-    { className = "", variant = "outline", size = "default", ...props },
+    { className = "", variant = "outline", size = "default", feedback = "control", ...props },
     ref,
 ) {
     const reduced = useReducedMotion();
+    // Graph cards and directory labels keep their attachment/baseline fixed.
+    // Their feedback comes from surface and edge changes; controls can depress.
+    const anchored = feedback === "surface";
     return (
         <MotionButton
             ref={ref}
@@ -23,13 +26,13 @@ export const Button = React.forwardRef(function Button(
             data-variant={variant}
             data-size={size}
             className={`jn-control-button ${className}`}
-            whileHover={reduced || props.disabled ? undefined : { y: -0.6 }}
-            whileTap={reduced || props.disabled ? undefined : { scale: 0.98, y: 0.5 }}
+            whileHover={reduced || props.disabled || anchored ? undefined : { y: -0.5 }}
+            whileTap={reduced || props.disabled || anchored ? undefined : { scale: 0.97, y: 0.7 }}
             transition={{
                 type: "spring",
-                stiffness: 650,
-                damping: 40,
-                mass: 0.5,
+                stiffness: 760,
+                damping: 42,
+                mass: 0.45,
             }}
             {...props}
         />

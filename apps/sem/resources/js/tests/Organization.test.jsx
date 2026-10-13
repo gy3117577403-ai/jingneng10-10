@@ -15,6 +15,26 @@ beforeEach(()=>{data=fixture();window.matchMedia=vi.fn(()=>({matches:false,addLi
 afterEach(()=>{cleanup();vi.restoreAllMocks();});
 const show=()=>render(<Organization endpoint="/organization/api" links={{home:'/',documents:'/company-data',presales:'/presales'}} user="管理员"/>);
 describe('组织工作区的真实交互状态',()=>{
+    it('collapses directory descendants without removing the current chart selection',async()=>{
+        show(); const toggle=await screen.findByRole('button',{name:'收起目录 示例公司'});
+        toggle.focus(); fireEvent.click(toggle);
+        const directory=within(screen.getByLabelText('组织目录'));
+        await waitFor(()=>expect(directory.queryByTitle('示例公司 / 钣金车间')).toBeNull());
+        expect(toggle).toHaveAttribute('aria-expanded','false'); expect(toggle).toHaveFocus();
+        expect(screen.getByRole('button',{name:'查看组织 钣金车间'})).toHaveAttribute('aria-pressed','true');
+        fireEvent.click(toggle);
+        expect(await directory.findByTitle('示例公司 / 钣金车间')).toBeVisible();
+    });
+    it('closes and reopens the member inspector with focus returned to its opener',async()=>{
+        show(); const opener=await screen.findByRole('button',{name:'查看成员资料 林辰'});
+        opener.focus(); fireEvent.click(opener);
+        const dialog=await screen.findByRole('dialog',{name:'成员资料'});
+        fireEvent.click(within(dialog).getByRole('button',{name:'关闭窗口'}));
+        await waitFor(()=>expect(screen.queryByRole('dialog',{name:'成员资料'})).toBeNull());
+        expect(opener).toHaveFocus();
+        fireEvent.click(opener);
+        expect(await screen.findByRole('dialog',{name:'成员资料'})).toHaveTextContent('林辰');
+    });
     it('opens a member panel from a chart node and preserves data navigation',async()=>{show();fireEvent.click(await screen.findByRole('button',{name:'查看成员资料 林辰'}));const dialog=await screen.findByRole('dialog',{name:'成员资料'});expect(within(dialog).getByRole('heading',{name:'林辰'})).toBeVisible();expect(within(dialog).getByText('demo-001')).toBeVisible();fireEvent.click(within(dialog).getByRole('tab',{name:'任职关系'}));expect(within(dialog).getByText('当前任职 · 1')).toBeVisible();});
     it('keeps failed form values and shows revision conflict feedback',async()=>{show();fireEvent.click(await screen.findByRole('button',{name:'新增组织',exact:true}));fireEvent.change(screen.getByLabelText('组织名称'),{target:{value:'新部门'}});fetch.mockImplementationOnce(async()=>({ok:false,status:409,json:async()=>({message:'内容已被更新，请重新读取后再提交。'})}));fireEvent.click(screen.getByRole('button',{name:'保存',exact:true}));expect(await screen.findByRole('alert')).toHaveTextContent('内容已被更新');expect(screen.getByLabelText('组织名称')).toHaveValue('新部门');});
     it('submits a new organization with a stable request key and explicit parent',async()=>{show();fireEvent.click(await screen.findByRole('button',{name:'新增组织',exact:true}));fireEvent.change(screen.getByLabelText('组织名称'),{target:{value:'示例新部门'}});fireEvent.click(screen.getByRole('button',{name:'保存',exact:true}));await waitFor(()=>expect(fetch.mock.calls.some(([url,opts])=>url.endsWith('/unit/0')&&opts?.method==='POST')).toBe(true));const call=fetch.mock.calls.find(([url,opts])=>url.endsWith('/unit/0')&&opts?.method==='POST');const payload=JSON.parse(call[1].body);expect(payload).toMatchObject({name:'示例新部门',parent_id:2,status:'active'});expect(payload.request_key).toMatch(/^[a-f0-9-]{36}$/);});

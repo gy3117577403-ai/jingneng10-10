@@ -129,6 +129,26 @@ export function branchPaths(branch) {
     };
 }
 
+// Keep the disclosure control under the pointer while its subtree rearranges.
+// Translate the layout as a whole, never the cards separately from their edges.
+export function anchorChart(from, to, preferredId) {
+    if (from.rootId !== to.rootId) return to;
+    const old = new Map(from.nodes.map((n) => [n.id, n]));
+    const toggled = to.nodes.filter((n) => old.has(n.id) &&
+        old.get(n.id).data.open !== n.data.open);
+    const id = toggled.length === 1 ? toggled[0].id : preferredId;
+    const anchor = to.nodes.find((n) => n.id === id && old.has(n.id)) ||
+        to.nodes.find((n) => n.id === to.rootId && old.has(n.id));
+    if (!anchor) return to;
+    const previous = old.get(anchor.id);
+    const dx = previous.position.x - anchor.position.x;
+    const dy = previous.position.y - anchor.position.y;
+    if (!dx && !dy) return to;
+    return {...to, nodes: to.nodes.map((n) => ({...n, position: {
+        x: n.position.x + dx, y: n.position.y + dy,
+    }}))};
+}
+
 // Cards and connectors consume this same interruptible animation frame.
 export function interpolateChart(from, to, progress) {
     const t = Math.max(0, Math.min(1, progress));
