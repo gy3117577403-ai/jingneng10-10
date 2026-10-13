@@ -35,8 +35,17 @@ describe('organization geometry contract',()=>{
     });
     it('retains readable automatic zoom and reveals the selected node beside an inspector',()=>{
         const chart=full(),area={width:640,height:580};
-        const initial=frameChart(chart.nodes,area,'project',.86);
-        expect(initial.zoom).toBeGreaterThanOrEqual(.86);
+        const initial=frameChart(chart.nodes,area,'project',1);
+        expect(initial.zoom).toBe(1);
+        const localFrame = frameChart(chart.nodes,{width:840,height:600},'project',1,chart.branches);
+        for (const id of ['workshop','project','c']) {
+            const n = chart.nodes.find(n => n.id === id);
+            expect(n.position.x + localFrame.x).toBeGreaterThanOrEqual(28);
+            expect(n.position.x + NODE_WIDTH + localFrame.x).toBeLessThanOrEqual(812);
+        }
+        // A distant ancestor remains reachable by pan without showing a clipped
+        // strip of its card at the edge of the initially framed columns.
+        expect(chart.nodes.find(n => n.id === 'root').position.x + NODE_WIDTH + localFrame.x).toBeLessThanOrEqual(0);
         const target=chart.nodes.find(n=>n.id==='project'),after=revealNode(target,area,{x:0,y:0,zoom:1});
         expect(after.zoom).toBe(1);
         expect(target.position.x+NODE_WIDTH+after.x).toBeLessThanOrEqual(area.width-28);

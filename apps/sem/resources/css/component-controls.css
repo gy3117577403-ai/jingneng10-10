@@ -85,6 +85,18 @@
     overflow: hidden;
     text-overflow: ellipsis;
 }
+.jn-combobox-popup { display: flex; flex-direction: column; overflow: hidden; width: max(var(--anchor-width), 280px); }
+.jn-combobox-search {
+    width: 100%; min-height: 34px; border: 0; border-bottom: 1px solid var(--jn-control-border);
+    padding: 8px 9px; margin-bottom: 5px; background: var(--jn-control-surface); color: var(--jn-control-ink);
+    font: inherit; border-radius: 0; outline: none;
+}
+.jn-combobox-search:focus-visible { box-shadow: inset 0 -2px var(--jn-control-ring); }
+.jn-combobox-list { overflow: auto; min-height: 0; overscroll-behavior: contain; }
+.jn-combobox-list .jn-control-option { white-space: normal; line-height: 1.5; align-items: center; }
+.jn-combobox-list .jn-control-option > span:first-child { flex: 1; }
+.jn-combobox-empty { padding: 16px 9px; color: var(--jn-control-muted); font-size: 12px; }
+.jn-combobox-empty:empty { display: none; }
 .jn-control-positioner {
     z-index: 180;
     max-width: calc(100vw - 24px);

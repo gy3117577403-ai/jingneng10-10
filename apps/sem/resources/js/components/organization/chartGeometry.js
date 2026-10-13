@@ -2,8 +2,8 @@ export const NODE_WIDTH = 212,
     UNIT_HEIGHT = 80,
     PERSON_HEIGHT = 60,
     MORE_HEIGHT = 44,
-    COLUMN_GAP = 64,
-    ROW_GAP = 24;
+    COLUMN_GAP = 48,
+    ROW_GAP = 20;
 
 // A contour per depth packs only columns occupied by both sibling branches.
 export function arrangeTree(root) {
@@ -211,28 +211,44 @@ export function revealNode(node, frame, view) {
             view.y +
             (bottom > frame.height - 64
                 ? frame.height - 64 - bottom
-                : top < 66
-                  ? 66 - top
+                : top < 28
+                  ? 28 - top
                   : 0),
     };
 }
-export function frameChart(nodes, frame, focusId, minimumZoom = 0.25) {
-    if (!nodes.length) return { x: 28, y: 66, zoom: 1 };
-    const x = Math.min(...nodes.map((n) => n.position.x)),
-        y = Math.min(...nodes.map((n) => n.position.y));
-    const w = Math.max(...nodes.map((n) => n.position.x + NODE_WIDTH)) - x,
-        h = Math.max(...nodes.map((n) => n.position.y + n.height)) - y;
+export function frameChart(nodes, frame, focusId, minimumZoom = 0.25, branches = []) {
+    if (!nodes.length) return { x: 28, y: 28, zoom: 1 };
+    let composition = nodes;
+    const focus = nodes.find((n) => n.id === focusId);
+    const fullWidth = Math.max(...nodes.map(n => n.position.x + NODE_WIDTH)) - Math.min(...nodes.map(n => n.position.x));
+    // At readable size, frame the selected unit with its parent and children.
+    // All ancestors remain on the canvas and in the breadcrumb, reachable by pan.
+    if (minimumZoom === 1 && focus && fullWidth > frame.width - 56) {
+        const parent = branches.find(b => b.targets.some(t => t.id === focusId));
+        const children = branches.find(b => b.source === focusId);
+        const ids = new Set([focusId, parent?.source, ...(children?.targets.map(t => t.id) || [])]);
+        composition = nodes.filter(n => ids.has(n.id));
+        const localWidth = Math.max(...composition.map(n => n.position.x + NODE_WIDTH)) - Math.min(...composition.map(n => n.position.x));
+        if (localWidth > frame.width - 56) composition = composition.filter(n => n.id !== parent?.source);
+    }
+    // Retain the vertical extent of every node in the visible columns, including
+    // siblings of the selected unit, so framing does not cut through their cards.
+    const columns = new Set(composition.map(n => n.position.x));
+    const visible = nodes.filter(n => columns.has(n.position.x));
+    const x = Math.min(...composition.map((n) => n.position.x)),
+        y = Math.min(...visible.map((n) => n.position.y));
+    const w = Math.max(...composition.map((n) => n.position.x + NODE_WIDTH)) - x,
+        h = Math.max(...visible.map((n) => n.position.y + n.height)) - y;
     const width = Math.max(1, frame.width - 56),
-        height = Math.max(1, frame.height - 130);
+        height = Math.max(1, frame.height - 92);
     const zoom = Math.min(
         1,
         Math.max(minimumZoom, Math.min(width / w, height / h)),
     );
     const view = {
-        x: (frame.width - w * zoom) / 2 - x * zoom,
-        y: 66 + (height - h * zoom) * 0.42 - y * zoom,
+        x: (composition === nodes ? (frame.width - w * zoom) / 2 : 28) - x * zoom,
+        y: 28 + (height - h * zoom) * 0.42 - y * zoom,
         zoom,
     };
-    const focus = nodes.find((n) => n.id === focusId);
     return minimumZoom > 0.25 && focus ? revealNode(focus, frame, view) : view;
 }

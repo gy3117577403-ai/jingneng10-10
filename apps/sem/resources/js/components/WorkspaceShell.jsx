@@ -1,14 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { Search, Star, Inbox, LayoutGrid, PanelLeftClose, PanelLeftOpen, ChevronDown, ChevronRight, ArrowUpRight, SlidersHorizontal, Folder, Factory, ShoppingBag, ShieldCheck, ChartNoAxesCombined, Settings2, Users, FileText, House, ClipboardList, Package, Wrench, CalendarDays, Truck, Wallet, Contact, BriefcaseBusiness } from 'lucide-react';
+import { Search, Star, Inbox, LayoutGrid, PanelLeftClose, PanelLeftOpen, ChevronDown, ChevronRight, ArrowUpRight, SlidersHorizontal, Folder, Factory, ShoppingBag, ShieldCheck, ChartNoAxesCombined, Settings2, Users, FileText, House, ClipboardList, Package, Wrench, CalendarDays, Truck, Wallet, Contact, BriefcaseBusiness, Network } from 'lucide-react';
 import { Button } from '../ui/shadcn/controls';
 import { SurfaceDialog, readPreference, savePreference } from '../ui/WorkspaceKit';
 import { navigationModel, currentModule, pathOf } from '../ui/navigationModel';
 
 const GROUP_ICONS = {'协作与资料':Folder,'销售与客户':Users,'计划与制造':Factory,'采购与仓储':ShoppingBag,'质量与交付':ShieldCheck,'经营与管理':ChartNoAxesCombined,'设置与工具':Settings2};
 const iconFor = title => GROUP_ICONS[title] || FileText;
-const MODULE_ICONS={'售前询价':ClipboardList,'公司':Contact,'潜在客户':Users,'商机':BriefcaseBusiness,'报价':FileText,'订单':ShoppingBag,'计划':CalendarDays,'方法':Settings2,'设备维护':Wrench,'产品':Package,'采购':ShoppingBag,'送货单':Truck,'质量':ShieldCheck,'发票':Wallet,'时间管理':CalendarDays,'会计':Wallet,'人力资源':Users,'报表':ChartNoAxesCombined};
+const MODULE_ICONS={'组织与成员':Network,'售前询价':ClipboardList,'公司':Contact,'潜在客户':Users,'商机':BriefcaseBusiness,'报价':FileText,'订单':ShoppingBag,'计划':CalendarDays,'方法':Settings2,'设备维护':Wrench,'产品':Package,'采购':ShoppingBag,'送货单':Truck,'质量':ShieldCheck,'发票':Wallet,'时间管理':CalendarDays,'会计':Wallet,'人力资源':Users,'报表':ChartNoAxesCombined};
 function storedFavorites() { const value = readPreference('nav.favorites', []); return Array.isArray(value) ? value.filter(v => typeof v === 'string').slice(0,12) : []; }
 
 export default function WorkspaceShell({ menu, searchUrl, homeUrl, sidebarHost, viewsHost }) {
@@ -57,7 +57,7 @@ export default function WorkspaceShell({ menu, searchUrl, homeUrl, sidebarHost, 
     },[query,panel,onlyFavorites,searchUrl]);
     function toggle(item) { const next=favorites.includes(item.href)?favorites.filter(v=>v!==item.href):[...favorites,item.href].slice(-12);setFavorites(next);savePreference('nav.favorites',next); }
     function chooseGroup(title) {setGroupName(title);setPanel(null);}
-    const navLink = (href,title,Icon,selected=false) => <a className={`jn-nav-link ${selected?'is-current':''}`} href={href} aria-current={selected?'page':undefined} title={collapsed?title:undefined}><Icon size={18}/><span>{title}</span></a>;
+    const navLink = (href,title,Icon,selected=false) => <a className={`jn-nav-link ${selected?'is-current':''}`} href={href} aria-current={selected?'page':undefined} aria-label={title} title={collapsed?title:undefined}><Icon size={18}/><span>{title}</span></a>;
     return <>
         {sidebarHost && createPortal(<div className="jn-navigation">
             <Button type="button" className="jn-area-switch" onClick={e=>open('groups',e)} title={collapsed?'切换工作领域':undefined}><span className="jn-area-mark"><Factory size={19}/></span><span><small>工作领域</small><strong>{group?.title || '我的工作'}</strong></span><ChevronDown size={14}/></Button>
@@ -70,7 +70,7 @@ export default function WorkspaceShell({ menu, searchUrl, homeUrl, sidebarHost, 
             <div className="jn-nav-section-label">{group?.title}</div>
             <nav className="jn-nav-modules" aria-label="当前领域模块">{group?.modules.map(m=><React.Fragment key={m.title}>{navLink(m.pages[0].href,m.title,MODULE_ICONS[m.title] || iconFor(group.title),active?.module.title===m.title)}</React.Fragment>)}</nav>
             <div className="jn-nav-bottom"><Button type="button" className="jn-nav-link" onClick={e=>open('catalog',e)} title={collapsed?'全部功能':undefined}><LayoutGrid size={18}/><span>全部功能</span><kbd>Ctrl K</kbd></Button>
-                <Button type="button" className="jn-nav-link" onClick={()=>setCollapsed(v=>!v)} aria-label={collapsed?'展开导航':'收起导航'}>{collapsed?<PanelLeftOpen size={18}/>:<PanelLeftClose size={18}/>}<span>收起导航</span></Button></div>
+                <Button type="button" className="jn-nav-link" onClick={()=>setCollapsed(v=>!v)} aria-label={collapsed?'展开导航':'收起导航'} aria-expanded={!collapsed}>{collapsed?<PanelLeftOpen size={18}/>:<PanelLeftClose size={18}/>}<span>收起导航</span></Button></div>
         </div>,sidebarHost)}
         {viewsHost && active?.module.pages.length>1 && createPortal(<nav className="jn-module-views" aria-label={`${active.module.title}页面视图`}><span>{active.module.title}</span>{active.module.pages.map(page=><a key={page.href} href={page.href} className={pathOf(page.href)===currentPath?'is-current':''} aria-current={pathOf(page.href)===currentPath?'page':undefined}>{page.title==='查看全部'?'概览':page.title}{Number(page.label)>0&&<b>{page.label}</b>}</a>)}</nav>,viewsHost)}
         {panel && <SurfaceDialog title={panel==='groups'?'切换工作领域':'查找与前往'} onClose={()=>setPanel(null)} className="jn-catalog" initialFocus={panel==='catalog'?inputRef:undefined} finalFocus={triggerRef}>

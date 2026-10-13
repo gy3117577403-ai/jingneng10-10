@@ -336,7 +336,7 @@
     --org-surface: var(--jn-surface);
     background: var(--jn-bg);
 }
-.org-body button {
+.org-body :where(#organization-app, .org-dialog, .org-profile) button {
     font-size: 13px;
     padding: 6px 10px;
     background: var(--jn-surface);
@@ -344,11 +344,11 @@
     box-shadow: 0 1px 2px #1c273006;
     border-radius: 7px;
 }
-.org-body button:hover:not(:disabled) {
-    background: #f1f4f8;
+.org-body :where(#organization-app, .org-dialog, .org-profile) button:hover:not(:disabled) {
+    background: var(--jn-soft);
     box-shadow: 0 2px 5px #1c27300b;
 }
-.org-body button.icon {
+.org-body :where(#organization-app, .org-dialog, .org-profile) button.icon {
     background: transparent;
     border-color: transparent;
     box-shadow: none;
@@ -1404,6 +1404,23 @@
     background: none;
     border: 0;
     box-shadow: none;
+}
+.jn-ui .jn-work-next {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    width: 132px;
+    flex-shrink: 0;
+    text-align: left;
+    padding-left: 16px;
+    border-left: 1px solid var(--jn-border);
+    color: var(--jn-ink);
+    font-size: 12px;
+}
+.jn-ui .jn-work-next small { font-size: 11px; color: var(--jn-muted); }
+.jn-ui .jn-work-next > span { line-height: 18px; }
+@media (max-width: 760px) {
+    .jn-ui .jn-work-next { width: 100%; padding: 0; border: 0; flex-direction: row; gap: 7px; }
 }
 .jn-ui .jn-inbox-search > .jn-control-select {
     min-width: 140px;

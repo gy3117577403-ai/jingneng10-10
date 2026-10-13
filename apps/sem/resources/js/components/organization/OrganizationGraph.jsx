@@ -101,7 +101,9 @@ export default function OrganizationGraph({
         const panelWidth = panel?.getBoundingClientRect().width || 0;
         // Docked layouts reserve margin in CSS. Narrow layouts retain a real
         // overlay; its final width, not its moving entrance, defines the inset.
-        const overlay = panel && window.innerWidth <= 1120 ? panelWidth : 0;
+        const docked = element.closest('.org-canvas-wrap') &&
+            parseFloat(getComputedStyle(element.closest('.org-canvas-wrap')).marginRight) >= panelWidth;
+        const overlay = panel && !docked ? panelWidth + 16 : 0;
         return {
             width: Math.max(0, rect.width - overlay),
             height: rect.height,
@@ -112,7 +114,7 @@ export default function OrganizationGraph({
             const area = canvasFrame();
             if (!area || area.width < 240 || !flow.current?.setViewport) return;
             flow.current.setViewport(
-                frameChart(target.current.nodes, area, focus.current, minimum),
+                frameChart(target.current.nodes, area, focus.current, minimum, target.current.branches),
                 // Start in a readable composition. Only an explicit fit action
                 // animates the viewport; expansion animates the graph itself.
                 { duration: reduced || minimum > 0.25 ? 0 : 280 },
@@ -121,7 +123,7 @@ export default function OrganizationGraph({
         [canvasFrame, flow, reduced],
     );
     useEffect(() => {
-        const timer = requestAnimationFrame(() => fit(0.86));
+        const timer = requestAnimationFrame(() => fit(1));
         return () => cancelAnimationFrame(timer);
     }, [graph.rootId, fit]);
     useEffect(() => {
@@ -203,7 +205,8 @@ export default function OrganizationGraph({
                 onInit={(instance) => {
                     flow.current = instance;
                     instance.fitOrganization = () => fit();
-                    requestAnimationFrame(() => fit(0.86));
+                    instance.readOrganization = () => fit(1);
+                    requestAnimationFrame(() => fit(1));
                 }}
                 onMove={(_, v) => onZoom(v.zoom)}
                 minZoom={0.25}

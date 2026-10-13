@@ -5,6 +5,7 @@ import { Button as ButtonPrimitive } from "@base-ui/react/button";
 import { Select as SelectPrimitive } from "@base-ui/react/select";
 import { Switch as SwitchPrimitive } from "@base-ui/react/switch";
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
+import { Combobox as ComboboxPrimitive } from "@base-ui/react/combobox";
 import { motion, useReducedMotion } from "motion/react";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import "../../../css/component-controls.css";
@@ -54,6 +55,10 @@ export function Select({
     label,
     className = "",
     disabled = false,
+    id,
+    required = false,
+    name,
+    describedBy,
 }) {
     return (
         <SelectPrimitive.Root
@@ -61,10 +66,14 @@ export function Select({
             onValueChange={onValueChange}
             items={items}
             disabled={disabled}
+            id={id}
+            required={required}
+            name={name}
         >
             <SelectPrimitive.Trigger
                 data-slot="select-trigger"
                 aria-label={label}
+                aria-describedby={describedBy}
                 className={`jn-control-select ${className}`}
             >
                 <SelectPrimitive.Value data-slot="select-value" />
@@ -142,6 +151,33 @@ export function ActionMenu({ label, icon, children }) {
             </MenuPrimitive.Portal>
         </MenuPrimitive.Root>
     );
+}
+
+// Searchable-select composition from the shadcn/Base UI combobox pattern.
+// Use for organization paths and job catalogs, keeping the form value stable.
+export function SearchSelect({value, onValueChange, items, label, id, disabled, required, describedBy}) {
+    const selected = items.find(item => item.value === value) ?? null;
+    return <ComboboxPrimitive.Root items={items} value={selected}
+        onValueChange={item => onValueChange(item?.value ?? '')}
+        isItemEqualToValue={(a, b) => a.value === b.value}
+        disabled={disabled} required={required}>
+        <ComboboxPrimitive.Trigger id={id} className="jn-control-select" aria-label={label} aria-describedby={describedBy}>
+            <span data-slot="select-value"><ComboboxPrimitive.Value /></span><ChevronDown size={14}/>
+        </ComboboxPrimitive.Trigger>
+        <ComboboxPrimitive.Portal>
+            <ComboboxPrimitive.Positioner align="start" sideOffset={5} className="jn-control-positioner">
+                <ComboboxPrimitive.Popup className="jn-control-popup jn-combobox-popup" aria-label={label}>
+                    <ComboboxPrimitive.Input className="jn-combobox-search" aria-label={`搜索${label}`} placeholder="输入名称查找…"/>
+                    <ComboboxPrimitive.Empty className="jn-combobox-empty">没有匹配选项</ComboboxPrimitive.Empty>
+                    <ComboboxPrimitive.List className="jn-combobox-list">
+                        {item => <ComboboxPrimitive.Item key={item.value} value={item} className="jn-control-option">
+                            <span>{item.label}</span><ComboboxPrimitive.ItemIndicator><Check size={14}/></ComboboxPrimitive.ItemIndicator>
+                        </ComboboxPrimitive.Item>}
+                    </ComboboxPrimitive.List>
+                </ComboboxPrimitive.Popup>
+            </ComboboxPrimitive.Positioner>
+        </ComboboxPrimitive.Portal>
+    </ComboboxPrimitive.Root>;
 }
 export function MenuItem({ className = "", ...props }) {
     return (

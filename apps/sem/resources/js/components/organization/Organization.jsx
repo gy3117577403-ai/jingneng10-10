@@ -16,9 +16,6 @@ import {
 } from "../../ui/shadcn/controls";
 import "reactflow/dist/style.css";
 import {
-    Home,
-    ClipboardCheck,
-    Files,
     Network,
     Settings2,
     Search,
@@ -1026,80 +1023,10 @@ export default function Organization({
         <div
             className={`org-shell ${sidebar ? "" : "org-no-sidebar"} ${selectedPerson ? "org-has-profile" : ""}`}
         >
-            <nav className="org-rail" aria-label="工作区导航">
-                <a
-                    className="org-brand"
-                    href={links.home}
-                    aria-label="返回工作台"
-                >
-                    <span>
-                        <Network size={25} />
-                    </span>
-                    <strong>京能</strong>
-                </a>
-                <a href={links.home} title="工作台" aria-label="工作台">
-                    <Home />
-                </a>
-                <a
-                    href={links.presales}
-                    title="售前工作台"
-                    aria-label="售前工作台"
-                >
-                    <ClipboardCheck />
-                </a>
-                <a
-                    href={links.documents}
-                    title="公司资料"
-                    aria-label="公司资料"
-                >
-                    <Files />
-                </a>
-                <Button
-                    className={
-                        ["chart", "members"].includes(view) ? "active" : ""
-                    }
-                    title="组织与成员"
-                    aria-label="组织与成员"
-                    onClick={() => setView("chart")}
-                >
-                    <Network />
-                </Button>
-                {data?.owner && (
-                    <Button
-                        className={view === "permissions" ? "active" : ""}
-                        title="权限设置"
-                        aria-label="权限设置"
-                        onClick={() => {
-                            closePerson();
-                            setView("permissions");
-                        }}
-                    >
-                        <ShieldCheck />
-                    </Button>
-                )}
-                <span className="org-rail-spacer" />
-                {data?.can_audit && (
-                    <Button
-                        className={view === "history" ? "active" : ""}
-                        aria-label="变更记录"
-                        title="变更记录"
-                        onClick={() => {
-                            closePerson();
-                            setView("history");
-                        }}
-                    >
-                        <Clock3 />
-                    </Button>
-                )}
-                <Button
-                    aria-label={sidebar ? "收起组织目录" : "展开组织目录"}
-                    title={sidebar ? "收起组织目录" : "展开组织目录"}
-                    onClick={() => setSidebar((v) => !v)}
-                >
-                    {sidebar ? <PanelLeftClose /> : <PanelLeftOpen />}
-                </Button>
-            </nav>
             <header className="org-topbar">
+                <Button className="icon org-directory-toggle" aria-label={sidebar ? "收起组织目录" : "展开组织目录"} aria-expanded={sidebar} onClick={() => setSidebar(v => !v)}>
+                    {sidebar ? <PanelLeftClose size={18}/> : <PanelLeftOpen size={18}/>}
+                </Button>
                 <h1>组织与成员</h1>
                 <div className="org-global-search">
                     <Search size={18} />
@@ -1160,13 +1087,12 @@ export default function Organization({
                         </div>
                     )}
                 </div>
-                <div className="org-user">
-                    <span className="org-user-avatar">{user.slice(-1)}</span>
-                    <div>
-                        <strong>{user}</strong>
-                        <small>{data?.owner ? "总管理员" : "已登录"}</small>
-                    </div>
-                </div>
+                <ActionMenu label="组织管理入口" icon={<Settings2 size={16}/>}>
+                    {data?.can_positions && <MenuItem onClick={() => { closePerson(); setView("positions"); }}><BriefcaseBusiness size={16}/>岗位管理</MenuItem>}
+                    {data?.owner && <MenuItem onClick={() => { closePerson(); setView("permissions"); }}><ShieldCheck size={16}/>权限设置</MenuItem>}
+                    {data?.can_audit && <MenuItem onClick={() => { closePerson(); setView("history"); }}><Clock3 size={16}/>变更记录</MenuItem>}
+                    <MenuItem onClick={() => { closePerson(); setView("chart"); }}><Network size={16}/>组织架构</MenuItem>
+                </ActionMenu>
             </header>
             {sidebar && (
                 <aside className="org-sidebar">
@@ -1239,26 +1165,6 @@ export default function Organization({
                 <div className="org-toolbar">
                     {["chart", "members"].includes(view) ? (
                         <>
-                            <div className="org-breadcrumb">
-                                {ancestors(data?.units || [], selected)
-                                    .slice(-3)
-                                    .map((u, i) => (
-                                        <React.Fragment key={u.id}>
-                                            {i > 0 && (
-                                                <ChevronRight size={13} />
-                                            )}
-                                            <Button
-                                                title={unitPath(
-                                                    data.units,
-                                                    u.id,
-                                                )}
-                                                onClick={() => selectUnit(u.id)}
-                                            >
-                                                {u.name}
-                                            </Button>
-                                        </React.Fragment>
-                                    ))}
-                            </div>
                             <Segments
                                 label="组织工作视图"
                                 items={viewItems}
@@ -1266,31 +1172,6 @@ export default function Organization({
                                 onChange={setView}
                             />
                             <div className="org-toolbar-actions">
-                                {view === "chart" && (
-                                    <Button
-                                        className="org-text-button"
-                                        onClick={() =>
-                                            setChartExpanded((old) =>
-                                                data.units.every((u) =>
-                                                    old.has(u.id),
-                                                )
-                                                    ? new Set()
-                                                    : new Set(
-                                                          data.units.map(
-                                                              (u) => u.id,
-                                                          ),
-                                                      ),
-                                            )
-                                        }
-                                    >
-                                        <ListTree size={16} />
-                                        {data?.units.every((u) =>
-                                            chartExpanded.has(u.id),
-                                        )
-                                            ? "收起分支"
-                                            : "展开全部"}
-                                    </Button>
-                                )}
                                 {(unit?.can_edit || data?.can_root) && (
                                     <Button
                                         className={
@@ -1378,6 +1259,73 @@ export default function Organization({
                         </>
                     )}
                 </div>
+                {["chart", "members"].includes(view) && data && <div className="org-context-bar">
+                            <div className="org-breadcrumb">
+                                {ancestors(data?.units || [], selected)
+                                    .slice(-3)
+                                    .map((u, i) => (
+                                        <React.Fragment key={u.id}>
+                                            {i > 0 && (
+                                                <ChevronRight size={13} />
+                                            )}
+                                            <Button
+                                                title={unitPath(
+                                                    data.units,
+                                                    u.id,
+                                                )}
+                                                onClick={() => selectUnit(u.id)}
+                                            >
+                                                {u.name}
+                                            </Button>
+                                        </React.Fragment>
+                                    ))}
+                            </div>
+                    {view === "chart" && <>
+                                {view === "chart" && (
+                                    <Button
+                                        className="org-text-button"
+                                        onClick={() =>
+                                            setChartExpanded((old) =>
+                                                data.units.every((u) =>
+                                                    old.has(u.id),
+                                                )
+                                                    ? new Set()
+                                                    : new Set(
+                                                          data.units.map(
+                                                              (u) => u.id,
+                                                          ),
+                                                      ),
+                                            )
+                                        }
+                                    >
+                                        <ListTree size={16} />
+                                        {data?.units.every((u) =>
+                                            chartExpanded.has(u.id),
+                                        )
+                                            ? "收起分支"
+                                            : "展开全部"}
+                                    </Button>
+                                )}
+                        <div className="org-context-options">
+                            <label className="org-people-toggle">
+                                <Switch
+                                    checked={showPeople}
+                                    onCheckedChange={setShowPeople}
+                                    aria-label="显示成员"
+                                />
+                                显示成员
+                            </label>
+                            {unit && (
+                                <small>
+                                    {unit.total_count} 条记录 ·{" "}
+                                    {unit.pending_count
+                                        ? `${unit.pending_count} 条待核对`
+                                        : `直属 ${unit.direct_count} 位`}
+                                </small>
+                            )}
+                        </div>
+                    </>}
+                </div>}
                 {error && (
                     <div className="org-page-error">
                         <ErrorBox error={error} />
@@ -1407,24 +1355,6 @@ export default function Organization({
                     </div>
                 ) : view === "chart" ? (
                     <div className="org-canvas-wrap">
-                        <div className="org-canvas-options">
-                            <label className="org-people-toggle">
-                                <Switch
-                                    checked={showPeople}
-                                    onCheckedChange={setShowPeople}
-                                    aria-label="显示成员"
-                                />
-                                显示成员
-                            </label>
-                            {unit && (
-                                <small>
-                                    {unit.total_count} 条记录 ·{" "}
-                                    {unit.pending_count
-                                        ? `${unit.pending_count} 条待核对`
-                                        : `直属 ${unit.direct_count} 位`}
-                                </small>
-                            )}
-                        </div>
                         {graph.nodes.length ? (
                             <OrganizationGraph
                                 graph={graph}
@@ -1481,7 +1411,7 @@ export default function Organization({
                                 >
                                     <Minus size={17} />
                                 </Button>
-                                <span>{Math.round(zoom * 100)}%</span>
+                                <Button className="org-zoom-value" aria-label="恢复架构图原始大小" title="恢复 100% 可读大小" onClick={() => flow.current?.readOrganization()}>{Math.round(zoom * 100)}%</Button>
                                 <Button
                                     aria-label="放大架构图"
                                     onClick={() => flow.current?.zoomIn()}
