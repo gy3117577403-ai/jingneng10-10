@@ -33,6 +33,7 @@ export default defineConfig({
                 'resources/js/app.js',
                 'resources/js/organization.jsx',
                 'resources/js/presales.jsx',
+                'resources/js/quotation.jsx',
                 'resources/js/workspace.js',
                 'resources/js/guest.js',
                 'resources/js/spreadsheet.js',

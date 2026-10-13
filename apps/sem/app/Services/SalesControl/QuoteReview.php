@@ -62,7 +62,9 @@ class QuoteReview
         ] as $relation => $visibleFields) {
             $relations[$relation] = $quote->$relation?->only($visibleFields);
         }
-        return ['document' => $quote->only($fields), 'relations' => $relations, 'lines' => $lines,
+        $costs = DB::table('jn_quote_workspaces')->where('quote_id', $quote->id)->first();
+        return [...($costs ? ['cost_basis' => FlowSupport::decode($costs->payload), 'cost_revision' => $costs->revision] : []),
+            'document' => $quote->only($fields), 'relations' => $relations, 'lines' => $lines,
             'currency' => app('Factory')->curency ?? 'CNY', 'subtotal' => $calc->getSubTotal(), 'total' => $calc->getTotalPrice(),
             'vat' => $calc->getVatTotal(), 'materials' => $this->materials($quote, $ids)];
     }
